@@ -65,6 +65,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
@@ -85,6 +86,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [cs, s, docs] = await Promise.all([
         dbListClients(),
@@ -136,6 +138,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           }))
         );
       }
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -146,35 +153,42 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   }, [refresh, type]);
 
   const openNewEditor = async () => {
-    const s =
-      settings ??
-      (await dbGetSettings()) ??
-      ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
+    try {
+      const s =
+        settings ??
+        (await dbGetSettings()) ??
+        ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
 
-    setSettings(s);
+      setSettings(s);
 
-    // reset view flags
-    setEditorReadOnly(false);
-    setEditorStartInPrint(false);
-    setEditorInitial(null);
+      // reset view flags
+      setEditorReadOnly(false);
+      setEditorStartInPrint(false);
+      setEditorInitial(null);
 
-    const num = await dbNextNumber(type);
+      const num = await dbNextNumber(type);
 
-    const seed: EditorSeed = {
-      id: newId(),
-      number: String(num),
-      date: todayISO(),
-      dueDate: isInvoice ? addDaysISO(Number(s.defaultPaymentTerms ?? 14)) : undefined,
-      validUntil: !isInvoice ? addDaysISO(14) : undefined,
-      vatRate: Number(s.defaultVatRate ?? 0),
-      introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
-      footerText: isInvoice
-        ? `Zahlbar innerhalb von ${Number(s.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
-        : "Ich freue mich auf Ihre Rückmeldung.",
-    };
+      const seed: EditorSeed = {
+        id: newId(),
+        number: String(num),
+        date: todayISO(),
+        dueDate: isInvoice ? addDaysISO(Number(s.defaultPaymentTerms ?? 14)) : undefined,
+        validUntil: !isInvoice ? addDaysISO(14) : undefined,
+        vatRate: Number(s.defaultVatRate ?? 0),
+        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
+        footerText: isInvoice
+          ? `Zahlbar innerhalb von ${Number(s.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
+          : "Ich freue mich auf Ihre Rückmeldung.",
+      };
 
-    setEditorSeed(seed);
-    setEditorOpen(true);
+      setEditorSeed(seed);
+      setEditorOpen(true);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      alert(msg);
+    }
   };
 
   // ✅ VIEW: immer “full doc” nachladen (nicht Listendaten benutzen)
@@ -222,6 +236,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       });
 
       setEditorOpen(true);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      alert(msg);
     } finally {
       setOpeningId(null);
     }
@@ -229,78 +248,99 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Wirklich löschen?")) return;
-    if (isInvoice) await dbDeleteInvoice(id);
-    else await dbDeleteOffer(id);
-    await refresh();
+    try {
+      if (isInvoice) await dbDeleteInvoice(id);
+      else await dbDeleteOffer(id);
+      await refresh();
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      alert(msg);
+    }
   };
 
   // ✅ Convert: “full offer” laden, damit positions/texte garantiert da sind
   const handleConvertToInvoice = async (offerId: string) => {
     if (!confirm("Angebot in Rechnung umwandeln?")) return;
 
-    const s =
-      settings ??
-      (await dbGetSettings()) ??
-      ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
+    try {
+      const s =
+        settings ??
+        (await dbGetSettings()) ??
+        ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
 
-    setSettings(s);
+      setSettings(s);
 
-    const offer = await dbGetOffer(offerId);
-    if (!offer) {
-      alert("Angebot nicht gefunden.");
-      return;
+      const offer = await dbGetOffer(offerId);
+      if (!offer) {
+        alert("Angebot nicht gefunden.");
+        return;
+      }
+
+      const invoiceNumber = await dbNextNumber("invoice");
+
+      await dbUpsertInvoice({
+        id: newId(),
+        number: String(invoiceNumber),
+        offerId: offer.id,
+        clientId: offer.clientId,
+        projectId: offer.projectId,
+        date: todayISO(),
+        dueDate: addDaysISO(Number(s.defaultPaymentTerms ?? 14)),
+        positions: offer.positions ?? [],
+        vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
+        status: InvoiceStatus.SENT,
+        paymentDate: undefined,
+        introText: offer.introText ?? "",
+        footerText: offer.footerText ?? "",
+      });
+
+      await dbUpsertOffer({
+        ...offer,
+        status: OfferStatus.INVOICED,
+      });
+
+      alert("Rechnung erstellt!");
+      await refresh();
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      alert(msg);
     }
-
-    const invoiceNumber = await dbNextNumber("invoice");
-
-    await dbUpsertInvoice({
-      id: newId(),
-      number: String(invoiceNumber),
-      offerId: offer.id,
-      clientId: offer.clientId,
-      projectId: offer.projectId,
-      date: todayISO(),
-      dueDate: addDaysISO(Number(s.defaultPaymentTerms ?? 14)),
-      positions: offer.positions ?? [],
-      vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
-      status: InvoiceStatus.SENT,
-      paymentDate: undefined,
-      introText: offer.introText ?? "",
-      footerText: offer.footerText ?? "",
-    });
-
-    await dbUpsertOffer({
-      ...offer,
-      status: OfferStatus.INVOICED,
-    });
-
-    alert("Rechnung erstellt!");
-    await refresh();
   };
 
   const handleMarkPaid = async (invId: string) => {
     if (!confirm("Als bezahlt markieren?")) return;
 
-    const inv = await dbGetInvoice(invId);
-    if (!inv) {
-      alert("Rechnung nicht gefunden.");
-      return;
+    try {
+      const inv = await dbGetInvoice(invId);
+      if (!inv) {
+        alert("Rechnung nicht gefunden.");
+        return;
+      }
+
+      if (!inv.dueDate) {
+        alert("Fehler: Rechnung hat kein Fälligkeitsdatum (dueDate).");
+        return;
+      }
+
+      const paidAt = new Date().toISOString();
+
+      await dbUpsertInvoice({
+        ...inv,
+        status: InvoiceStatus.PAID,
+        paymentDate: paidAt,
+      });
+
+      await refresh();
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      alert(msg);
     }
-
-    if (!inv.dueDate) {
-      alert("Fehler: Rechnung hat kein Fälligkeitsdatum (dueDate).");
-      return;
-    }
-
-    const paidAt = new Date().toISOString();
-
-    await dbUpsertInvoice({
-      ...inv,
-      status: InvoiceStatus.PAID,
-      paymentDate: paidAt,
-    });
-
-    await refresh();
   };
 
   return (
@@ -315,6 +355,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           Erstellen
         </Button>
       </div>
+
+      {error && (
+        <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3 text-sm">
+          {error}
+        </div>
+      )}
 
       {editorOpen && editorSeed && settings && (
         <DocumentEditor
