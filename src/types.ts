@@ -79,6 +79,11 @@ export interface Offer {
   introText: string;
   footerText: string;
   status: OfferStatus;
+  sentAt?: string | null;
+  lastSentAt?: string | null;
+  sentCount?: number;
+  sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
+  invoiceId?: string | null;
 }
 
 export enum InvoiceStatus {
@@ -102,18 +107,28 @@ export interface Invoice {
   footerText: string;
   status: InvoiceStatus;
   paymentDate?: string;
+  isLocked?: boolean;
+  finalizedAt?: string | null;
+  sentAt?: string | null;
+  lastSentAt?: string | null;
+  sentCount?: number;
+  sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
 }
 
 export type DocumentType = "offer" | "invoice";
 
-export const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("de-DE", {
+export const formatCurrency = (
+  amount: number,
+  locale = "de-DE",
+  currency = "EUR"
+) => {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "EUR",
+    currency,
   }).format(amount);
 };
 
-export const formatDate = (dateStr: string) => {
+export const formatDate = (dateStr: string, locale = "de-DE") => {
   if (!dateStr) return "";
-  return new Date(dateStr).toLocaleDateString("de-DE");
+  return new Date(dateStr).toLocaleDateString(locale);
 };

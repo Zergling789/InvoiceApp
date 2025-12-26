@@ -5,6 +5,7 @@ import { Plus, Save, X, RefreshCcw } from "lucide-react";
 import type { Client, Project } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { useToast } from "@/ui/FeedbackProvider";
 import { useClients } from "@/app/clients/clientQueries";
 import { useProjects } from "@/app/projects/projectQueries";
 import * as projectService from "@/app/projects/projectService";
@@ -51,6 +52,7 @@ export default function Projects() {
   const [draft, setDraft] = useState<DraftProject>(emptyDraft());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const loading = projectsLoading || clientsLoading;
 
@@ -69,8 +71,14 @@ export default function Projects() {
     setError(null);
 
     const name = draft.name.trim();
-    if (!name) return alert("Projektname fehlt.");
-    if (!draft.clientId) return alert("Bitte Kunde wählen.");
+    if (!name) {
+      toast.error("Projektname fehlt.");
+      return;
+    }
+    if (!draft.clientId) {
+      toast.error("Bitte Kunde waehlen.");
+      return;
+    }
 
     const project: Project = {
       id: draft.id ?? newId(),
@@ -91,7 +99,7 @@ export default function Projects() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

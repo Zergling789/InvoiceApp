@@ -3,6 +3,7 @@ import { LogOut, Settings } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/supabaseClient";
+import { useToast } from "@/ui/FeedbackProvider";
 
 type TopbarProps = {
   brand?: string;
@@ -11,6 +12,7 @@ type TopbarProps = {
 
 export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings" }: TopbarProps) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [signingOut, setSigningOut] = useState(false);
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
@@ -23,7 +25,7 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
     const { error } = await supabase.auth.signOut();
     setSigningOut(false);
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
     navigate("/login", { replace: true });

@@ -6,7 +6,7 @@ export function isOfferOpen(status: OfferStatus): boolean {
 }
 
 export function canConvertToInvoice(offer: Offer): boolean {
-  return offer.status !== OfferStatus.INVOICED && offer.status !== OfferStatus.REJECTED;
+  return !offer.invoiceId && offer.status !== OfferStatus.REJECTED;
 }
 
 export function defaultOfferTexts(settings: UserSettings): {

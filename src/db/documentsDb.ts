@@ -10,7 +10,7 @@ async function requireUserId(): Promise<string> {
 export async function dbNextNumber(type: "offer" | "invoice"): Promise<number> {
   await requireUserId();
 
-  const { data, error } = await supabase.rpc("next_document_number", { doc_type: type });
+  const { data, error } = await supabase.rpc("next_document_number", { doc_type_param: type });
   if (error) throw new Error(error.message);
   const next = Number(data ?? 0);
   if (!Number.isFinite(next) || next <= 0) throw new Error("Konnte naechste Nummer nicht bestimmen.");

@@ -14,6 +14,11 @@ export function createEmptyOffer(id: string, clientId = ""): Offer {
     introText: "",
     footerText: "",
     status: OfferStatus.DRAFT,
+    sentAt: null,
+    lastSentAt: null,
+    sentCount: 0,
+    sentVia: null,
+    invoiceId: null,
   };
 }
 
@@ -27,5 +32,10 @@ export function normalizeOffer(offer: Offer): Offer {
     introText: offer.introText ?? "",
     footerText: offer.footerText ?? "",
     status: offer.status ?? OfferStatus.DRAFT,
+    sentAt: offer.sentAt ?? null,
+    lastSentAt: offer.lastSentAt ?? null,
+    sentCount: offer.sentCount ?? 0,
+    sentVia: offer.sentVia ?? null,
+    invoiceId: offer.invoiceId ?? null,
   };
 }

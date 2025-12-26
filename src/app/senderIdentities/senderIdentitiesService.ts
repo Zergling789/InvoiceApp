@@ -1,5 +1,6 @@
 import type { SenderIdentity } from "@/types";
-import { requireAccessToken } from "@/lib/auth";
+import { readApiError } from "@/app/api/apiError";
+import { apiFetch } from "@/app/api/apiClient";
 
 type SenderIdentityRow = {
   id: string;
@@ -21,19 +22,12 @@ function mapSenderIdentity(row: SenderIdentityRow): SenderIdentity {
   };
 }
 
-async function authedFetch(input: RequestInfo, init?: RequestInit) {
-  const token = await requireAccessToken();
-  const headers = new Headers(init?.headers ?? {});
-  headers.set("Authorization", `Bearer ${token}`);
-  if (!headers.has("Content-Type") && init?.body) {
-    headers.set("Content-Type", "application/json");
-  }
-  return fetch(input, { ...init, headers });
-}
-
 export async function listSenderIdentities(): Promise<SenderIdentity[]> {
-  const res = await authedFetch("/api/sender-identities");
-  if (!res.ok) throw new Error(await res.text());
+  const res = await apiFetch("/api/sender-identities", undefined, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "Request failed.");
+  }
   const data = await res.json();
   return (data.items ?? []).map(mapSenderIdentity);
 }
@@ -42,37 +36,52 @@ export async function createSenderIdentity(payload: {
   email: string;
   displayName?: string;
 }): Promise<SenderIdentity> {
-  const res = await authedFetch("/api/sender-identities", {
+  const res = await apiFetch("/api/sender-identities", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(await res.text());
+  }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "Request failed.");
+  }
   const data = await res.json();
   return mapSenderIdentity(data);
 }
 
 export async function resendSenderIdentity(id: string): Promise<void> {
-  const res = await authedFetch(`/api/sender-identities/${id}/resend`, { method: "POST" });
-  if (!res.ok) throw new Error(await res.text());
+  const res = await apiFetch(`/api/sender-identities/${id}/resend`, { method: "POST" }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "Request failed.");
+  }
 }
 
 export async function disableSenderIdentity(id: string): Promise<void> {
-  const res = await authedFetch(`/api/sender-identities/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(await res.text());
+  const res = await apiFetch(`/api/sender-identities/${id}`, { method: "DELETE" }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "Request failed.");
+  }
 }
 
 export async function setDefaultSenderIdentity(senderIdentityId: string | null): Promise<void> {
-  const res = await authedFetch("/api/settings/default_sender_identity", {
+  const res = await apiFetch("/api/settings/default_sender_identity", {
     method: "PATCH",
     body: JSON.stringify({ senderIdentityId }),
-  });
-  if (!res.ok) throw new Error(await res.text());
+  }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "Request failed.");
+  }
 }
 
 export async function sendTestEmail(senderIdentityId: string): Promise<void> {
-  const res = await authedFetch("/api/test-email", {
+  const res = await apiFetch("/api/test-email", {
     method: "POST",
     body: JSON.stringify({ senderIdentityId }),
-  });
-  if (!res.ok) throw new Error(await res.text());
+  }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "Request failed.");
+  }
 }

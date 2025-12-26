@@ -9,14 +9,17 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const formatCurrency = (amount) =>
-  new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(amount ?? 0));
+const formatCurrency = (amount, options = {}) => {
+  const locale = options.locale || "de-DE";
+  const currency = options.currency || "EUR";
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(Number(amount ?? 0));
+};
 
-const formatDate = (date) => {
+const formatDate = (date, locale = "de-DE") => {
   if (!date) return "";
   try {
     const d = new Date(date);
-    return new Intl.DateTimeFormat("de-DE").format(d);
+    return new Intl.DateTimeFormat(locale).format(d);
   } catch {
     return String(date);
   }
@@ -43,7 +46,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
 
   return `
 <!DOCTYPE html>
-<html lang="de">
+<html lang="${escapeHtml(settings.locale ?? "de-DE")}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -151,9 +154,9 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
         <div class="doc-meta">
           <div class="doc-title">${isInvoice ? "RECHNUNG" : "ANGEBOT"}</div>
           <div class="meta-line">Nr: ${escapeHtml(doc.number ?? "")}</div>
-          <div class="meta-line">Datum: ${escapeHtml(formatDate(doc.date))}</div>
-          ${isInvoice && doc.dueDate ? `<div class="meta-line">Fällig: ${escapeHtml(formatDate(doc.dueDate))}</div>` : ""}
-          ${!isInvoice && doc.validUntil ? `<div class="meta-line">Gültig bis: ${escapeHtml(formatDate(doc.validUntil))}</div>` : ""}
+          <div class="meta-line">Datum: ${escapeHtml(formatDate(doc.date, settings.locale ?? "de-DE"))}</div>
+          ${isInvoice && doc.dueDate ? `<div class="meta-line">Fällig: ${escapeHtml(formatDate(doc.dueDate, settings.locale ?? "de-DE"))}</div>` : ""}
+          ${!isInvoice && doc.validUntil ? `<div class="meta-line">Gültig bis: ${escapeHtml(formatDate(doc.validUntil, settings.locale ?? "de-DE"))}</div>` : ""}
         </div>
       </div>
 
@@ -188,8 +191,8 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
                       return `<tr>
                         <td>${escapeHtml(pos.description ?? "")}</td>
                         <td class="text-right">${escapeHtml(pos.quantity ?? "")} ${escapeHtml(pos.unit ?? "")}</td>
-                        <td class="text-right">${formatCurrency(pos.price)}</td>
-                        <td class="text-right">${formatCurrency(totalPos)}</td>
+                        <td class="text-right">${formatCurrency(pos.price, { locale: settings.locale, currency: settings.currency })}</td>
+                        <td class="text-right">${formatCurrency(totalPos, { locale: settings.locale, currency: settings.currency })}</td>
                       </tr>`;
                     })
                     .join("")
@@ -201,15 +204,15 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
         <div class="totals page-break">
           <div class="totals-row">
             <span>Netto:</span>
-            <span>${formatCurrency(net)}</span>
+            <span>${formatCurrency(net, { locale: settings.locale, currency: settings.currency })}</span>
           </div>
           <div class="totals-row" style="color: var(--muted);">
             <span>MwSt (${vatRate}%):</span>
-            <span>${formatCurrency(vat)}</span>
+            <span>${formatCurrency(vat, { locale: settings.locale, currency: settings.currency })}</span>
           </div>
           <div class="totals-row total">
             <span>Gesamt:</span>
-            <span>${formatCurrency(total)}</span>
+            <span>${formatCurrency(total, { locale: settings.locale, currency: settings.currency })}</span>
           </div>
         </div>
       </div>

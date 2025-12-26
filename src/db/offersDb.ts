@@ -68,6 +68,11 @@ export async function dbListOffers(): Promise<Offer[]> {
     footerText: r.footer_text ?? "",
     vatRate: Number(r.vat_rate ?? 0),
     status: fromDbOfferStatus(r.status),
+    sentAt: r.sent_at ?? null,
+    lastSentAt: r.last_sent_at ?? null,
+    sentCount: Number(r.sent_count ?? 0),
+    sentVia: r.sent_via ?? null,
+    invoiceId: r.invoice_id ?? null,
   }));
 }
 
@@ -96,6 +101,11 @@ export async function dbGetOffer(id: string): Promise<Offer> {
     footerText: data.footer_text ?? "",
     vatRate: Number(data.vat_rate ?? 0),
     status: fromDbOfferStatus(data.status),
+    sentAt: data.sent_at ?? null,
+    lastSentAt: data.last_sent_at ?? null,
+    sentCount: Number(data.sent_count ?? 0),
+    sentVia: data.sent_via ?? null,
+    invoiceId: data.invoice_id ?? null,
   };
 }
 
@@ -120,6 +130,11 @@ export async function dbUpsertOffer(o: Offer): Promise<void> {
 
     vat_rate: Number((o as any).vatRate ?? 0),
     status: toDbOfferStatus(o.status ?? OfferStatus.DRAFT),
+    sent_at: o.sentAt ?? null,
+    last_sent_at: o.lastSentAt ?? null,
+    sent_count: Number(o.sentCount ?? 0),
+    sent_via: o.sentVia ?? null,
+    invoice_id: o.invoiceId ?? null,
 
     updated_at: new Date().toISOString(),
   };

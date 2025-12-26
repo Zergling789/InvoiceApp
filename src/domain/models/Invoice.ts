@@ -16,6 +16,12 @@ export function createEmptyInvoice(id: string, clientId = ""): Invoice {
     footerText: "",
     status: InvoiceStatus.DRAFT,
     paymentDate: undefined,
+    isLocked: false,
+    finalizedAt: null,
+    sentAt: null,
+    lastSentAt: null,
+    sentCount: 0,
+    sentVia: null,
   };
 }
 
@@ -29,5 +35,11 @@ export function normalizeInvoice(invoice: Invoice): Invoice {
     introText: invoice.introText ?? "",
     footerText: invoice.footerText ?? "",
     status: invoice.status ?? InvoiceStatus.DRAFT,
+    isLocked: invoice.isLocked ?? false,
+    finalizedAt: invoice.finalizedAt ?? null,
+    sentAt: invoice.sentAt ?? null,
+    lastSentAt: invoice.lastSentAt ?? null,
+    sentCount: invoice.sentCount ?? 0,
+    sentVia: invoice.sentVia ?? null,
   };
 }

@@ -5,6 +5,7 @@ import { Plus, Save, Trash2, X } from "lucide-react";
 import type { Client } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { createEmptyClient } from "@/app/clients/clientService";
 import { useClients, useDeleteClient, useSaveClient } from "@/app/clients/clientQueries";
 
@@ -15,6 +16,8 @@ const newId = () =>
 
 export default function Clients() {
   const { clients, loading, error, refresh } = useClients();
+  const { confirm } = useConfirm();
+  const toast = useToast();
   const { save, saving } = useSaveClient(refresh);
   const { remove, deleting } = useDeleteClient(refresh);
 
@@ -28,7 +31,10 @@ export default function Clients() {
   const saveClient = async () => {
     if (!editing) return;
     const name = editing.companyName.trim();
-    if (!name) return alert("Firmenname fehlt.");
+    if (!name) {
+      toast.error("Firmenname fehlt.");
+      return;
+    }
 
     await save({
       ...editing,
@@ -43,7 +49,11 @@ export default function Clients() {
   };
 
   const deleteClient = async (id: string) => {
-    if (!confirm("Wirklich löschen?")) return;
+    const ok = await confirm({
+      title: "Kunde loeschen",
+      message: "Wirklich loeschen?",
+    });
+    if (!ok) return;
     await remove(id);
     await refresh();
   };

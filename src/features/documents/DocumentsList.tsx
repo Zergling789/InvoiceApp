@@ -1,9 +1,11 @@
 // src/features/documents/DocumentsList.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, ReceiptEuro, Check, Eye } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { AppButton as Button } from "@/ui/AppButton";
 import { AppBadge as Badge } from "@/ui/AppBadge";
+import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 
 import type { Client, UserSettings, Position, Invoice, Offer } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -45,11 +47,24 @@ type DocListItem = {
   paymentDate?: string;
   introText: string;
   footerText: string;
+  isLocked?: boolean;
+  finalizedAt?: string | null;
+  sentAt?: string | null;
+  lastSentAt?: string | null;
+  sentCount?: number;
+  sentVia?: string | null;
+  invoiceId?: string | null;
 };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const addDaysISO = (days: number) =>
-  new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+const toLocalISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const todayISO = () => toLocalISODate(new Date());
+const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
 
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -60,6 +75,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const isInvoice = type === "invoice";
 
   const [items, setItems] = useState<DocListItem[]>([]);
+  const { confirm } = useConfirm();
+  const toast = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,6 +130,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             paymentDate: inv.paymentDate,
             introText: inv.introText ?? "",
             footerText: inv.footerText ?? "",
+            isLocked: inv.isLocked ?? false,
+            finalizedAt: inv.finalizedAt ?? null,
           }))
         );
       } else {
@@ -133,6 +152,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             paymentDate: undefined,
             introText: o.introText ?? "",
             footerText: o.footerText ?? "",
+            sentAt: o.sentAt ?? null,
+            lastSentAt: o.lastSentAt ?? null,
+            sentCount: o.sentCount ?? 0,
+            sentVia: o.sentVia ?? null,
+            invoiceId: o.invoiceId ?? null,
           }))
         );
       }
@@ -140,7 +164,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -185,7 +209,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     }
   };
 
@@ -198,7 +222,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       const doc = isInvoice ? await invoiceService.getInvoice(id) : await offerService.getOffer(id);
 
       if (!doc) {
-        alert("Dokument nicht gefunden (oder keine Berechtigung).");
+        toast.error("Dokument nicht gefunden (oder keine Berechtigung).");
         return;
       }
 
@@ -231,6 +255,13 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         introText: (doc as any).introText ?? "",
         footerText: (doc as any).footerText ?? "",
         paymentDate: (doc as any).paymentDate ?? undefined,
+        isLocked: (doc as any).isLocked ?? false,
+        finalizedAt: (doc as any).finalizedAt ?? null,
+        sentAt: (doc as any).sentAt ?? null,
+        lastSentAt: (doc as any).lastSentAt ?? null,
+        sentCount: (doc as any).sentCount ?? 0,
+        sentVia: (doc as any).sentVia ?? null,
+        invoiceId: (doc as any).invoiceId ?? null,
       });
 
       setEditorOpen(true);
@@ -238,14 +269,15 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     } finally {
       setOpeningId(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Wirklich löschen?")) return;
+    const ok = await confirm({ title: "Dokument loeschen", message: "Wirklich loeschen?" });
+    if (!ok) return;
     try {
       if (isInvoice) await invoiceService.deleteInvoice(id);
       else await offerService.deleteOffer(id);
@@ -254,13 +286,14 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     }
   };
 
   // Convert: immer vollständiges Angebot laden
   const handleConvertToInvoice = async (offerId: string) => {
-    if (!confirm("Angebot in Rechnung umwandeln?")) return;
+    const ok = await confirm({ title: "Angebot umwandeln", message: "Angebot in Rechnung umwandeln?" });
+    if (!ok) return;
 
     try {
       const s =
@@ -272,19 +305,20 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       const offer = await offerService.getOffer(offerId);
       if (!offer) {
-        alert("Angebot nicht gefunden.");
+        toast.error("Angebot nicht gefunden.");
         return;
       }
 
       if (!canConvertToInvoice(offer)) {
-        alert("Dieses Angebot kann nicht mehr umgewandelt werden.");
+        toast.error("Dieses Angebot kann nicht mehr umgewandelt werden.");
         return;
       }
 
       const invoiceNumber = await getNextDocumentNumber("invoice", s);
+      const invoiceId = newId();
 
       await invoiceService.saveInvoice({
-        id: newId(),
+        id: invoiceId,
         number: String(invoiceNumber),
         offerId: offer.id,
         clientId: offer.clientId,
@@ -293,7 +327,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         dueDate: invoiceService.buildDueDate(todayISO(), Number(s.defaultPaymentTerms ?? 14)),
         positions: offer.positions ?? [],
         vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
-        status: InvoiceStatus.SENT,
+        status: InvoiceStatus.DRAFT,
         paymentDate: undefined,
         introText: offer.introText ?? "",
         footerText: offer.footerText ?? "",
@@ -301,31 +335,33 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       await offerService.saveOffer({
         ...offer,
-        status: OfferStatus.INVOICED,
+        status: offer.status === OfferStatus.INVOICED ? OfferStatus.SENT : offer.status,
+        invoiceId: invoiceId,
       });
 
-      alert("Rechnung erstellt!");
+      toast.success("Rechnung erstellt!");
       await refresh();
     } catch (e) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     }
   };
 
   const handleMarkPaid = async (invId: string) => {
-    if (!confirm("Als bezahlt markieren?")) return;
+    const ok = await confirm({ title: "Rechnung bezahlt", message: "Als bezahlt markieren?" });
+    if (!ok) return;
 
     try {
       const inv = await invoiceService.getInvoice(invId);
       if (!inv) {
-        alert("Rechnung nicht gefunden.");
+        toast.error("Rechnung nicht gefunden.");
         return;
       }
 
       if (!inv.dueDate) {
-        alert("Fehler: Rechnung hat kein Fälligkeitsdatum (dueDate).");
+        toast.error("Fehler: Rechnung hat kein Fälligkeitsdatum (dueDate).");
         return;
       }
 
@@ -342,7 +378,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      alert(msg);
+      toast.error(msg);
     }
   };
 
@@ -408,30 +444,46 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="p-4 font-medium">{item.number}</td>
                   <td className="p-4">{getClientName(item.clientId)}</td>
-                  <td className="p-4 text-sm text-gray-500">{item.date ? formatDate(item.date) : "—"}</td>
-                  <td className="p-4 font-mono">{formatCurrency(total)}</td>
+                  <td className="p-4 text-sm text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</td>
+                  <td className="p-4 font-mono">{formatCurrency(total, settings?.locale, settings?.currency)}</td>
 
                   <td className="p-4">
-                    {overdue && <Badge color="red">Überfällig</Badge>}
+                    {overdue && <Badge color="red">Overdue</Badge>}
                     {!overdue && (
-                      <Badge
-                        color={
-                          item.status === InvoiceStatus.PAID ||
-                          item.status === OfferStatus.ACCEPTED ||
-                          item.status === OfferStatus.INVOICED
-                            ? "green"
-                            : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
-                            ? "blue"
-                            : item.status === OfferStatus.REJECTED
-                            ? "red"
-                            : "gray"
-                        }
-                      >
-                        {item.status}
-                      </Badge>
+                      <div className="space-y-1">
+                        <Badge
+                          color={
+                            item.status === InvoiceStatus.PAID ||
+                            item.status === OfferStatus.ACCEPTED ||
+                            item.status === OfferStatus.INVOICED
+                              ? "green"
+                              : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
+                              ? "blue"
+                              : item.status === OfferStatus.REJECTED
+                              ? "red"
+                              : "gray"
+                          }
+                        >
+                          {item.status}
+                        </Badge>
+
+                        {!isInvoice && item.invoiceId && (
+                          <div className="text-xs text-gray-600">
+                            <Link to="/app/invoices" className="underline">Invoice created</Link>{" "}
+                            <span className="text-gray-400">- {item.invoiceId}</span>
+                          </div>
+                        )}
+
+                        {!isInvoice && (
+                          <div className="text-xs text-gray-500">
+                            {item.sentCount && item.lastSentAt
+                              ? `Sent ${item.sentCount}x - zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
+                              : "Not sent yet"}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </td>
-
                   <td className="p-4 text-right flex gap-2 justify-end">
                     {!isInvoice && (
                       <button
@@ -443,7 +495,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                       </button>
                     )}
 
-                    {isInvoice && item.status !== InvoiceStatus.PAID && (
+                    {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
                       <button
                         onClick={() => void handleMarkPaid(item.id)}
                         title="Als bezahlt markieren"

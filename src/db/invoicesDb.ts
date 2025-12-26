@@ -66,6 +66,12 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     footerText: r.footer_text ?? "",
     vatRate: Number(r.vat_rate ?? 0),
     status: fromDbInvoiceStatus(r.status),
+    isLocked: Boolean(r.is_locked ?? false),
+    finalizedAt: r.finalized_at ?? null,
+    sentAt: r.sent_at ?? null,
+    lastSentAt: r.last_sent_at ?? null,
+    sentCount: Number(r.sent_count ?? 0),
+    sentVia: r.sent_via ?? null,
   }));
 }
 
@@ -96,6 +102,12 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     footerText: data.footer_text ?? "",
     vatRate: Number(data.vat_rate ?? 0),
     status: fromDbInvoiceStatus(data.status),
+    isLocked: Boolean(data.is_locked ?? false),
+    finalizedAt: data.finalized_at ?? null,
+    sentAt: data.sent_at ?? null,
+    lastSentAt: data.last_sent_at ?? null,
+    sentCount: Number(data.sent_count ?? 0),
+    sentVia: data.sent_via ?? null,
   };
 }
 
@@ -124,6 +136,10 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
 
     vat_rate: Number(inv.vatRate ?? 0),
     status: toDbInvoiceStatus(inv.status ?? InvoiceStatus.DRAFT),
+    sent_at: inv.sentAt ?? null,
+    last_sent_at: inv.lastSentAt ?? null,
+    sent_count: Number(inv.sentCount ?? 0),
+    sent_via: inv.sentVia ?? null,
 
     updated_at: new Date().toISOString(),
   };

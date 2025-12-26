@@ -3,6 +3,7 @@ import type { SenderIdentity, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { AppBadge } from "@/ui/AppBadge";
+import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 
 import { fetchSettings, saveSettings } from "@/app/settings/settingsService";
 import {
@@ -47,6 +48,8 @@ function toNumberOrFallback(v: unknown, fallback: number) {
 
 export default function SettingsView() {
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
+  const { confirm } = useConfirm();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "documents" | "branding" | "bank" | "email">("profile");
@@ -78,7 +81,7 @@ export default function SettingsView() {
         setSettings({ ...defaultSettings, ...(s ?? {}) });
       } catch (e) {
         console.error("Failed to load settings:", e);
-        alert(e instanceof Error ? e.message : "Fehler beim Laden der Einstellungen.");
+        toast.error(e instanceof Error ? e.message : "Fehler beim Laden der Einstellungen.");
         setSettings(defaultSettings);
       } finally {
         setLoading(false);
@@ -123,7 +126,7 @@ export default function SettingsView() {
   const handleCreateSenderIdentity = async () => {
     const email = senderEmail.trim();
     if (!email) {
-      alert("Bitte eine E-Mail-Adresse eingeben.");
+      toast.error("Bitte eine E-Mail-Adresse eingeben.");
       return;
     }
     trackEvent("sender_identity_add_started");
@@ -134,10 +137,10 @@ export default function SettingsView() {
       setSenderEmail("");
       setSenderDisplayName("");
       await reloadSenderIdentities();
-      alert("Bestaetigungslink wurde gesendet.");
+      toast.success("Bestaetigungslink wurde gesendet.");
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Versand fehlgeschlagen.");
+      toast.error(e instanceof Error ? e.message : "Versand fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
     }
@@ -149,24 +152,28 @@ export default function SettingsView() {
       await resendSenderIdentity(id);
       trackEvent("sender_identity_verification_sent");
       await reloadSenderIdentities();
-      alert("Bestaetigungslink erneut gesendet.");
+      toast.success("Bestaetigungslink erneut gesendet.");
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Resend fehlgeschlagen.");
+      toast.error(e instanceof Error ? e.message : "Resend fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
     }
   };
 
   const handleDisable = async (id: string) => {
-    if (!confirm("Absenderadresse wirklich deaktivieren?")) return;
+    const ok = await confirm({
+      title: "Absenderadresse deaktivieren",
+      message: "Absenderadresse wirklich deaktivieren?",
+    });
+    if (!ok) return;
     setSenderBusyId(id);
     try {
       await disableSenderIdentity(id);
       await reloadSenderIdentities();
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Deaktivieren fehlgeschlagen.");
+      toast.error(e instanceof Error ? e.message : "Deaktivieren fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
     }
@@ -177,10 +184,10 @@ export default function SettingsView() {
     try {
       await sendTestEmail(id);
       trackEvent("sender_identity_test_email_sent");
-      alert("Testmail wurde gesendet.");
+      toast.success("Testmail wurde gesendet.");
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Testmail fehlgeschlagen.");
+      toast.error(e instanceof Error ? e.message : "Testmail fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
     }
@@ -194,7 +201,7 @@ export default function SettingsView() {
       trackEvent("default_sender_identity_updated");
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Konnte Standard nicht setzen.");
+      toast.error(e instanceof Error ? e.message : "Konnte Standard nicht setzen.");
     }
   };
 
@@ -218,10 +225,10 @@ export default function SettingsView() {
 
       await saveSettings(payload);
       setSettings(payload);
-      alert("Einstellungen gespeichert!");
+      toast.success("Einstellungen gespeichert!");
     } catch (e) {
       console.error("Failed to save settings:", e);
-      alert(e instanceof Error ? e.message : "Fehler beim Speichern der Einstellungen.");
+      toast.error(e instanceof Error ? e.message : "Fehler beim Speichern der Einstellungen.");
     } finally {
       setSaving(false);
     }

@@ -3,6 +3,7 @@ import "dotenv/config";
 import crypto from "crypto";
 import express from "express";
 import nodemailer from "nodemailer";
+import { createClient as createRedisClient } from "redis";
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
@@ -10,7 +11,11 @@ import { renderDocumentHtml } from "./renderDocumentHtml.js";
 const PORT = process.env.PORT || 4000;
 const app = express();
 
-app.use(express.json({ limit: "10mb" }));
+const jsonParser = express.json({ limit: "10mb" });
+app.use((req, res, next) => {
+  if (req.path === "/api/email") return next();
+  return jsonParser(req, res, next);
+});
 const TRUST_PROXY = Number(process.env.TRUST_PROXY ?? 1);
 app.set("trust proxy", Number.isFinite(TRUST_PROXY) ? TRUST_PROXY : 1);
 
@@ -96,25 +101,268 @@ const checkRateLimit = (key, limit, windowMs = RATE_LIMIT_WINDOW_MS) => {
   rateLimitBuckets.set(key, filtered);
 };
 
+const EMAIL_RATE_LIMIT = Number.isFinite(Number(process.env.EMAIL_RATE_LIMIT))
+  ? Number(process.env.EMAIL_RATE_LIMIT)
+  : 10;
+const EMAIL_RATE_WINDOW_MS = Number.isFinite(Number(process.env.EMAIL_RATE_WINDOW_MS))
+  ? Number(process.env.EMAIL_RATE_WINDOW_MS)
+  : 10 * 60 * 1000;
+const EMAIL_SUBJECT_MAX = 200;
+const EMAIL_MESSAGE_MAX = 5000;
+
+const EMAIL_RATE_WINDOW_BUFFER_SEC = 30;
+const EMAIL_FALLBACK_SWEEP_MS = 60 * 1000;
+const EMAIL_FALLBACK_MAX_KEYS = 50_000;
+const EMAIL_FALLBACK_BUFFER_MS = 30 * 1000;
+const REDIS_RETRY_COOLDOWN_MS = 30 * 1000;
+const REDIS_URL = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || "";
+
+let redisClient;
+let lastRedisErrorAt = 0;
+let fallbackLastSweep = 0;
+const fallbackStore = new Map();
+
+const getRedisClient = async () => {
+  if (!REDIS_URL) return null;
+  const now = Date.now();
+  if (now - lastRedisErrorAt < REDIS_RETRY_COOLDOWN_MS) return null;
+
+  if (!redisClient) {
+    redisClient = createRedisClient({
+      url: REDIS_URL,
+      socket: { reconnectStrategy: false },
+    });
+    redisClient.on("error", (err) => {
+      lastRedisErrorAt = Date.now();
+      console.error("Redis error", err);
+    });
+  }
+
+  if (!redisClient.isOpen) {
+    try {
+      await redisClient.connect();
+    } catch (err) {
+      lastRedisErrorAt = Date.now();
+      return null;
+    }
+  }
+
+  return redisClient;
+};
+
+const buildEmailRateKey = (scope, id, windowStartEpoch) =>
+  `rl:email:${scope}:${id}:${windowStartEpoch}`;
+
+const getWindowStartEpochSec = (nowSec, windowSec) =>
+  Math.floor(nowSec / windowSec) * windowSec;
+
+const sweepFallbackStore = (now) => {
+  if (now - fallbackLastSweep < EMAIL_FALLBACK_SWEEP_MS) return;
+  for (const [key, entry] of fallbackStore.entries()) {
+    if (entry.expiresAt <= now) {
+      fallbackStore.delete(key);
+    }
+  }
+  while (fallbackStore.size > EMAIL_FALLBACK_MAX_KEYS) {
+    const oldestKey = fallbackStore.keys().next().value;
+    if (!oldestKey) break;
+    fallbackStore.delete(oldestKey);
+  }
+  fallbackLastSweep = now;
+};
+
+const checkEmailRateLimitInMemory = (scope, id, limit, windowMs) => {
+  const now = Date.now();
+  sweepFallbackStore(now);
+
+  const windowStartMs = Math.floor(now / windowMs) * windowMs;
+  const windowEndMs = windowStartMs + windowMs;
+  const windowStartEpoch = Math.floor(windowStartMs / 1000);
+  const key = buildEmailRateKey(scope, id, windowStartEpoch);
+  const expiresAt = windowEndMs + EMAIL_FALLBACK_BUFFER_MS;
+
+  const entry = fallbackStore.get(key);
+  const retryAfterSeconds = Math.max(1, Math.ceil((windowEndMs - now) / 1000));
+
+  if (!entry || entry.expiresAt <= now) {
+    fallbackStore.set(key, { count: 1, expiresAt });
+    return { allowed: true, retryAfterSeconds };
+  }
+
+  if (entry.count >= limit) {
+    return { allowed: false, retryAfterSeconds };
+  }
+
+  entry.count += 1;
+  return { allowed: true, retryAfterSeconds };
+};
+
+const checkEmailRateLimitRedis = async (client, scope, id, limit, windowMs) => {
+  const windowSec = Math.max(1, Math.floor(windowMs / 1000));
+  const nowSec = Math.floor(Date.now() / 1000);
+  const windowStart = getWindowStartEpochSec(nowSec, windowSec);
+  const windowEnd = windowStart + windowSec;
+  const key = buildEmailRateKey(scope, id, windowStart);
+  const ttl = windowSec + EMAIL_RATE_WINDOW_BUFFER_SEC;
+
+  const result = await client.multi().incr(key).expire(key, ttl).exec();
+  const rawCount = result?.[0];
+  const count = Number(Array.isArray(rawCount) ? rawCount[1] : rawCount ?? 0);
+  const retryAfterSeconds = Math.max(1, windowEnd - nowSec);
+
+  return { allowed: count <= limit, retryAfterSeconds };
+};
+
+const checkEmailRateLimit = async (scope, id) => {
+  const client = await getRedisClient();
+  if (client) {
+    try {
+      return await checkEmailRateLimitRedis(client, scope, id, EMAIL_RATE_LIMIT, EMAIL_RATE_WINDOW_MS);
+    } catch (err) {
+      lastRedisErrorAt = Date.now();
+    }
+  }
+
+  return checkEmailRateLimitInMemory(scope, id, EMAIL_RATE_LIMIT, EMAIL_RATE_WINDOW_MS);
+};
+
+const sendError = (res, status, code, message) =>
+  res.status(status).json({ ok: false, error: { code, message } });
+
+const sendRateLimit = (res, retryAfterSeconds) =>
+  res.status(429).json({
+    ok: false,
+    error: {
+      code: "RATE_LIMIT",
+      message: "Too many requests.",
+      retryAfterSeconds,
+    },
+  });
+
+const isValidEmail = (value = "") => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
+
+const emailJsonParser = express.json({ limit: "9mb" });
+const emailJsonErrorHandler = (err, _req, res, next) => {
+  if (err?.type === "entity.too.large") {
+    return sendError(res, 413, "payload_too_large", "Payload too large.");
+  }
+  if (err?.type === "entity.parse.failed") {
+    return sendError(res, 400, "invalid_json", "Invalid JSON payload.");
+  }
+  return next(err);
+};
+
+const emailRateLimitGuard = async (req, res, next) => {
+  if (req.ip) {
+    const result = await checkEmailRateLimit("ip", req.ip);
+    if (!result.allowed) {
+      return sendRateLimit(res, result.retryAfterSeconds);
+    }
+  }
+  return next();
+};
+
+const emailAuthGuard = async (req, res, next) => {
+  const auth = req.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (token) {
+    try {
+      const supabase = requireSupabase();
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error && data?.user) {
+        req.user = data.user;
+      }
+    } catch (err) {
+      return sendError(res, err?.status || 500, "auth_error", "Auth error.");
+    }
+  }
+
+  if (req.user?.id) {
+    const result = await checkEmailRateLimit("user", req.user.id);
+    if (!result.allowed) {
+      return sendRateLimit(res, result.retryAfterSeconds);
+    }
+  }
+
+  return next();
+};
+
+
 const requireAuth = async (req, res, next) => {
   try {
     const auth = req.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!token) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
+      return sendError(res, 401, "unauthorized", "Unauthorized");
     }
     const supabase = requireSupabase();
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data?.user) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
+      return sendError(res, 401, "unauthorized", "Unauthorized");
     }
     req.user = data.user;
     next();
   } catch (err) {
     console.error("Auth error", err);
-    res.status(500).json({ error: "Auth error" });
+    return sendError(res, 500, "auth_error", "Auth error.");
+  }
+};
+
+const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
+  if (!invoiceId || !userId) return;
+  const db = supabase ?? requireSupabase();
+  const nowIso = new Date().toISOString();
+  const { error } = await db
+    .from("invoices")
+    .update({ is_locked: true, finalized_at: nowIso })
+    .eq("id", invoiceId)
+    .eq("user_id", userId);
+  if (error) {
+    const err = new Error("Failed to lock invoice");
+    err.status = 500;
+    throw err;
+  }
+};
+
+const updateSendMetadata = async ({ type, docId, userId, via }) => {
+  if (!docId || !userId) return;
+  const db = requireSupabase();
+  const nowIso = new Date().toISOString();
+  const table = type === "invoice" ? "invoices" : "offers";
+
+  const { data: row } = await db
+    .from(table)
+    .select("sent_count, sent_at, status")
+    .eq("id", docId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const sentCount = Number(row?.sent_count ?? 0) + 1;
+
+  const updatePayload = {
+    sent_at: row?.sent_count ? row?.sent_at ?? null : nowIso,
+    last_sent_at: nowIso,
+    sent_count: sentCount,
+    sent_via: via ?? "EMAIL",
+  };
+
+  if (type === "invoice" && row?.status === "DRAFT") {
+    updatePayload.status = "SENT";
+  }
+  if (type === "offer" && row?.status === "DRAFT") {
+    updatePayload.status = "SENT";
+  }
+
+  const { error } = await db
+    .from(table)
+    .update(updatePayload)
+    .eq("id", docId)
+    .eq("user_id", userId);
+
+  if (error) {
+    const err = new Error("Failed to update send metadata");
+    err.status = 500;
+    throw err;
   }
 };
 
@@ -141,7 +389,7 @@ const sendVerificationEmail = async ({ to, token, displayName }) => {
     err.status = 500;
     throw err;
   }
-  const verificationUrl = `${APP_BASE_URL.replace(/\/$/, "")}/settings/email/verify?token=${encodeURIComponent(
+  const verificationUrl = `${APP_BASE_URL.replace(/\/$/, "")}/app/settings/email/verify?token=${encodeURIComponent(
     token
   )}`;
   const subject = "Bitte bestaetigen Sie Ihre Absenderadresse";
@@ -185,45 +433,222 @@ const ensureVerifiedIdentity = async ({ userId, senderIdentityId }) => {
   return identity;
 };
 
+const normalizeDocType = (value) => {
+  const type = String(value ?? "").toLowerCase();
+  return type === "invoice" || type === "offer" ? type : null;
+};
+
+const buildPdfFilename = ({ type, doc, client }) => {
+  const prefix = type === "invoice" ? "RE" : "ANG";
+  const clientName = client?.companyName ?? client?.name ?? "";
+  const datePart = doc?.date ?? "";
+  const num = doc?.number ?? "0000";
+  const raw = `${prefix}-${num}_${clientName}_${datePart}.pdf`;
+  return sanitizeFilename(raw);
+};
+
+const mapInvoiceRow = (row = {}) => ({
+  id: row.id,
+  number: row.number,
+  clientId: row.client_id,
+  projectId: row.project_id ?? undefined,
+  date: row.date,
+  dueDate: row.due_date ?? "",
+  positions: row.positions ?? [],
+  introText: row.intro_text ?? "",
+  footerText: row.footer_text ?? "",
+  vatRate: Number(row.vat_rate ?? 0),
+});
+
+const mapOfferRow = (row = {}) => ({
+  id: row.id,
+  number: row.number,
+  clientId: row.client_id,
+  projectId: row.project_id ?? undefined,
+  date: row.date,
+  validUntil: row.valid_until ?? "",
+  positions: row.positions ?? [],
+  introText: row.intro_text ?? "",
+  footerText: row.footer_text ?? "",
+  vatRate: Number(row.vat_rate ?? 0),
+});
+
+const mapSettingsRow = (row = {}) => ({
+  companyName: row.company_name ?? "",
+  address: row.address ?? "",
+  taxId: row.tax_id ?? "",
+  iban: row.iban ?? "",
+  bic: row.bic ?? "",
+  bankName: row.bank_name ?? "",
+  footerText: row.footer_text ?? "",
+});
+
+const mapClientRow = (row = {}) => ({
+  companyName: row.company_name ?? "",
+  name: row.company_name ?? "",
+  contactPerson: row.contact_person ?? "",
+  email: row.email ?? "",
+  address: row.address ?? "",
+});
+
+const stableStringify = (value) => {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => JSON.stringify(k) + ":" + stableStringify(value[k])).join(",")}}`;
+};
+
+const hashPayload = (payload) =>
+  crypto.createHash("sha256").update(stableStringify(payload)).digest("hex");
+
+const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
+  const resolvedType = normalizeDocType(type);
+  if (!resolvedType) {
+    const err = new Error("Invalid document type");
+    err.status = 400;
+    throw err;
+  }
+  if (!docId) {
+    const err = new Error("Missing document id");
+    err.status = 400;
+    throw err;
+  }
+
+  const db = supabase ?? requireSupabase();
+  const table = resolvedType === "invoice" ? "invoices" : "offers";
+
+  if (process.env.DEBUG_EMAIL_DOC === "1") {
+    console.log("[email] loadDocumentPayloadFromDb", { type: resolvedType, docId, userId, table });
+  }
+
+  const selectFields = resolvedType === "invoice"
+    ? "id, user_id, number, client_id, project_id, date, due_date, positions, intro_text, footer_text, vat_rate"
+    : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
+
+  const { data: docRow, error: docError } = await db
+    .from(table)
+    .select(selectFields)
+    .eq("id", docId)
+    .eq("user_id", userId)
+    .single();
+
+  if (docError || !docRow) {
+    if (process.env.DEBUG_EMAIL_DOC === "1") {
+      console.log("[email] document lookup failed", {
+        error: docError?.message ?? docError ?? null,
+        docId,
+        userId,
+        table,
+      });
+    }
+    const err = new Error("Document not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const doc = resolvedType === "invoice" ? mapInvoiceRow(docRow) : mapOfferRow(docRow);
+
+  const { data: settingsRow } = await db
+    .from("user_settings")
+    .select("company_name, address, tax_id, iban, bic, bank_name, footer_text")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const settings = mapSettingsRow(settingsRow ?? {});
+
+  let client = mapClientRow({});
+  if (doc.clientId) {
+    const { data: clientRow } = await db
+      .from("clients")
+      .select("id, company_name, contact_person, email, address")
+      .eq("id", doc.clientId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (clientRow) client = mapClientRow(clientRow);
+  }
+
+  return { doc, settings, client };
+};
+
+const createPdfBufferFromPayload = async (type, payload) => {
+  const html = renderDocumentHtml({
+    type,
+    doc: payload?.doc ?? {},
+    settings: payload?.settings ?? {},
+    client: payload?.client ?? {},
+  });
+
+  if (process.env.PDF_TEST_MODE === "1") {
+    return Buffer.from(html, "utf8");
+  }
+
+  const browser = await getBrowser();
+  const page = await browser.newPage({ viewport: { width: 1200, height: 2000 } });
+  await page.setContent(html, { waitUntil: "networkidle" });
+  const pdfBuffer = await page.pdf({
+    format: "A4",
+    printBackground: true,
+    margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
+  });
+  await page.close();
+  return pdfBuffer;
+};
+
+const createPdfAttachment = async ({ type, payload }) => {
+  const buffer = await createPdfBufferFromPayload(type, payload);
+  const filename = buildPdfFilename({ type, doc: payload.doc, client: payload.client });
+  return { buffer, filename };
+};
+
+const enforceLegacyPayloadMatch = (body, payload) => {
+  if (!body) return;
+  const hasLegacy = body.doc || body.settings || body.client || body.pdfBase64;
+  if (!hasLegacy) return;
+  if (!body.payloadHash) {
+    const err = new Error("Legacy payload hash required");
+    err.status = 400;
+    err.code = "legacy_hash_required";
+    throw err;
+  }
+  const expected = hashPayload(payload);
+  if (String(body.payloadHash) !== expected) {
+    const err = new Error("Legacy payload mismatch");
+    err.status = 409;
+    err.code = "payload_mismatch";
+    throw err;
+  }
+};
+
+
 app.post("/api/pdf", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`pdf_user_${req.user.id}`, 60);
     if (req.ip) checkRateLimit(`pdf_ip_${req.ip}`, 120);
-    const { type, doc, settings, client } = req.body ?? {};
-    if (!type || !doc) {
-      res.status(400).json({ error: "Missing required fields: type, doc" });
-      return;
+
+    const docId = req.body?.docId ?? req.body?.documentId ?? null;
+    const type = normalizeDocType(req.body?.type ?? req.body?.documentType);
+    if (!docId || !type) {
+      return sendError(res, 400, "bad_request", "Missing required fields: docId, type");
     }
 
-    const html = renderDocumentHtml({
+    const payload = await loadDocumentPayloadFromDb({
       type,
-      doc: doc ?? {},
-      settings: settings ?? {},
-      client: client ?? {},
+      docId,
+      userId: req.user.id,
     });
 
-    const browser = await getBrowser();
-    const page = await browser.newPage({ viewport: { width: 1200, height: 2000 } });
-    await page.setContent(html, { waitUntil: "networkidle" });
+    enforceLegacyPayloadMatch(req.body, payload);
 
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
-    });
-    await page.close();
-
-    const clientName = client?.companyName ?? client?.name ?? "";
-    const datePart = doc?.date ?? "";
-    const prefix = type === "invoice" ? "RE" : "ANG";
-    const filename = `${prefix}-${doc?.number ?? "0000"}_${clientName}_${datePart}.pdf`;
+    const { buffer, filename } = await createPdfAttachment({ type, payload });
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(filename)}"`);
-    res.status(200).send(pdfBuffer);
+    res.setHeader("Content-Disposition", `attachment; filename=\"${filename}\"`);
+    res.status(200).send(buffer);
   } catch (err) {
+    const status = err?.status || 500;
+    const code = err?.code || "pdf_generation_failed";
     console.error("PDF generation failed", err);
-    res.status(500).json({ error: "PDF generation failed" });
+    return sendError(res, status, code, "PDF generation failed.");
   }
 });
 
@@ -235,7 +660,7 @@ app.post("/api/sender-identities", requireAuth, async (req, res) => {
     const displayName = String(req.body?.displayName ?? "").trim() || null;
 
     if (!email || !email.includes("@")) {
-      res.status(400).json({ error: "Invalid email" });
+      return sendError(res, 400, "invalid_email", "Invalid email.");
       return;
     }
 
@@ -273,7 +698,7 @@ app.post("/api/sender-identities", requireAuth, async (req, res) => {
       .single();
 
     if (upsertError || !identity) {
-      res.status(500).json({ error: "Failed to create sender identity" });
+      return sendError(res, 500, "sender_identity_create_failed", "Failed to create sender identity.");
       return;
     }
 
@@ -322,7 +747,7 @@ app.post("/api/sender-identities", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Create sender identity failed", err);
-    res.status(err.status || 500).json({ error: "Sender identity create failed" });
+    return sendError(res, err.status || 500, "sender_identity_create_failed", "Sender identity create failed.");
   }
 });
 
@@ -340,15 +765,15 @@ app.post("/api/sender-identities/:id/resend", requireAuth, async (req, res) => {
       .single();
 
     if (error || !identity) {
-      res.status(404).json({ error: "Not found" });
+      return sendError(res, 404, "not_found", "Not found.");
       return;
     }
     if (identity.status === "verified") {
-      res.status(400).json({ error: "Already verified" });
+      return sendError(res, 400, "already_verified", "Already verified.");
       return;
     }
     if (identity.status === "disabled") {
-      res.status(400).json({ error: "Sender identity disabled" });
+      return sendError(res, 400, "sender_identity_disabled", "Sender identity disabled.");
       return;
     }
 
@@ -359,7 +784,7 @@ app.post("/api/sender-identities/:id/resend", requireAuth, async (req, res) => {
     if (identity.last_verification_sent_at) {
       const lastSent = new Date(identity.last_verification_sent_at).getTime();
       if (Date.now() - lastSent < RESEND_COOLDOWN_MS) {
-        res.status(429).json({ error: "Cooldown active" });
+        return sendError(res, 429, "cooldown_active", "Cooldown active.");
         return;
       }
     }
@@ -398,7 +823,15 @@ app.post("/api/sender-identities/:id/resend", requireAuth, async (req, res) => {
     res.json({ ok: true, last_verification_sent_at: nowIso });
   } catch (err) {
     console.error("Resend sender identity failed", err);
-    res.status(err.status || 500).json({ error: "Resend failed" });
+    if (err?.status === 429) {
+      return sendError(
+        res,
+        429,
+        "rate_limited",
+        "Zu viele Verifizierungsanfragen. Bitte kurz warten und erneut versuchen."
+      );
+    }
+    return sendError(res, err?.status || 500, "resend_failed", "Resend failed.");
   }
 });
 
@@ -410,7 +843,7 @@ app.get("/api/sender-identities/verify", async (req, res) => {
 
     const token = String(req.query?.token ?? "");
     if (!token) {
-      res.redirect(`${redirectBase}/settings/email/verify?status=invalid`);
+      res.redirect(`${redirectBase}/app/settings/email/verify?status=invalid`);
       return;
     }
     const tokenHash = hashToken(token);
@@ -421,15 +854,15 @@ app.get("/api/sender-identities/verify", async (req, res) => {
       .single();
 
     if (!tokenRow) {
-      res.redirect(`${redirectBase}/settings/email/verify?status=invalid`);
+      res.redirect(`${redirectBase}/app/settings/email/verify?status=invalid`);
       return;
     }
     if (tokenRow.used_at) {
-      res.redirect(`${redirectBase}/settings/email/verify?status=used`);
+      res.redirect(`${redirectBase}/app/settings/email/verify?status=used`);
       return;
     }
     if (new Date(tokenRow.expires_at) <= new Date()) {
-      res.redirect(`${redirectBase}/settings/email/verify?status=expired`);
+      res.redirect(`${redirectBase}/app/settings/email/verify?status=expired`);
       return;
     }
 
@@ -440,7 +873,7 @@ app.get("/api/sender-identities/verify", async (req, res) => {
       .single();
 
     if (!identity) {
-      res.redirect(`${redirectBase}/settings/email/verify?status=invalid`);
+      res.redirect(`${redirectBase}/app/settings/email/verify?status=invalid`);
       return;
     }
 
@@ -451,7 +884,7 @@ app.get("/api/sender-identities/verify", async (req, res) => {
       .eq("status", "verified");
 
     if ((verifiedCount ?? 0) >= 5 && identity.status !== "verified") {
-      res.redirect(`${redirectBase}/settings/email/verify?status=limit`);
+      res.redirect(`${redirectBase}/app/settings/email/verify?status=limit`);
       return;
     }
 
@@ -474,10 +907,10 @@ app.get("/api/sender-identities/verify", async (req, res) => {
       entityId: identity.id,
     });
 
-    res.redirect(`${redirectBase}/settings/email/verify?status=success`);
+    res.redirect(`${redirectBase}/app/settings/email/verify?status=success`);
   } catch (err) {
     console.error("Verify sender identity failed", err);
-    res.redirect(`${APP_BASE_URL.replace(/\/$/, "")}/settings/email/verify?status=error`);
+    res.redirect(`${APP_BASE_URL.replace(/\/$/, "")}/app/settings/email/verify?status=error`);
   }
 });
 
@@ -491,13 +924,13 @@ app.get("/api/sender-identities", requireAuth, async (req, res) => {
       .order("created_at", { ascending: false });
 
     if (error) {
-      res.status(500).json({ error: "Failed to fetch sender identities" });
+      return sendError(res, 500, "sender_identities_fetch_failed", "Failed to fetch sender identities.");
       return;
     }
     res.json({ items: data ?? [] });
   } catch (err) {
     console.error("List sender identities failed", err);
-    res.status(500).json({ error: "Failed to fetch sender identities" });
+    return sendError(res, 500, "sender_identities_fetch_failed", "Failed to fetch sender identities.");
   }
 });
 
@@ -515,7 +948,7 @@ app.delete("/api/sender-identities/:id", requireAuth, async (req, res) => {
       .single();
 
     if (!identity) {
-      res.status(404).json({ error: "Not found" });
+      return sendError(res, 404, "not_found", "Not found.");
       return;
     }
 
@@ -534,7 +967,7 @@ app.delete("/api/sender-identities/:id", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("Disable sender identity failed", err);
-    res.status(500).json({ error: "Disable failed" });
+    return sendError(res, 500, "disable_failed", "Disable failed.");
   }
 });
 
@@ -564,7 +997,7 @@ app.patch("/api/settings/default_sender_identity", requireAuth, async (req, res)
     res.json({ ok: true });
   } catch (err) {
     console.error("Update default sender identity failed", err);
-    res.status(err.status || 500).json({ error: "Update failed" });
+    return sendError(res, err.status || 500, "update_failed", "Update failed.");
   }
 });
 
@@ -574,14 +1007,14 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
     const userId = req.user.id;
     const senderIdentityId = req.body?.senderIdentityId;
     if (!senderIdentityId) {
-      res.status(400).json({ error: "Missing senderIdentityId" });
+      return sendError(res, 400, "missing_sender_identity_id", "Missing senderIdentityId.");
       return;
     }
     const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
 
     const transporter = await getMailer();
     if (!transporter || !DEFAULT_FROM_EMAIL) {
-      res.status(500).json({ error: "SMTP not configured" });
+      return sendError(res, 500, "smtp_not_configured", "SMTP not configured.");
       return;
     }
 
@@ -608,101 +1041,154 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("Test email failed", err);
-    res.status(err.status || 500).json({ error: "Test email failed" });
+    return sendError(res, err.status || 500, "test_email_failed", "Test email failed.");
   }
 });
 
-app.post("/api/email", async (req, res) => {
-  try {
-    const auth = req.get("authorization") || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (!token) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    const supabase = requireSupabase();
-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData?.user) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    const userId = authData.user.id;
+app.post(
+  "/api/email",
+  emailJsonParser,
+  emailJsonErrorHandler,
+  emailRateLimitGuard,
+  emailAuthGuard,
+  async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return sendError(res, 401, "unauthorized", "Unauthorized");
+      }
+      const userId = req.user.id;
 
-    const { to, subject, message, pdfBase64, filename, senderIdentityId, documentId, documentType } =
-      req.body ?? {};
+      const {
+        to,
+        subject,
+        message,
+        senderIdentityId,
+        documentId,
+        documentType,
+      } = req.body ?? {};
 
-    if (!to || !subject || !pdfBase64 || !filename || !senderIdentityId) {
-      res
-        .status(400)
-        .json({ error: "Missing required fields: to, subject, pdfBase64, filename, senderIdentityId" });
-      return;
-    }
+      const docId = req.body?.docId ?? documentId ?? null;
+      const type = normalizeDocType(req.body?.type ?? documentType);
 
-    const transporter = await getMailer();
-    const resolvedFrom = DEFAULT_FROM_EMAIL;
+      if (!docId || !type || !to || !subject || !senderIdentityId) {
+        return sendError(
+          res,
+          400,
+          "bad_request",
+          "Missing required fields: docId, type, to, subject, senderIdentityId"
+        );
+      }
 
-    if (!transporter || !resolvedFrom) {
-      res.status(500).json({
-        error:
-          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen.",
+      const normalizedTo = normalizeEmail(to);
+      if (!isValidEmail(normalizedTo)) {
+        return sendError(res, 400, "invalid_email", "Invalid recipient email.");
+      }
+
+      const subjectText = String(subject ?? "");
+      if (subjectText.length > EMAIL_SUBJECT_MAX) {
+        return sendError(res, 400, "subject_too_long", "Subject too long.");
+      }
+
+      const messageText = String(message ?? "");
+      if (messageText.length > EMAIL_MESSAGE_MAX) {
+        return sendError(res, 400, "message_too_long", "Message too long.");
+      }
+
+      const payload = await loadDocumentPayloadFromDb({
+        type,
+        docId,
+        userId,
       });
-      return;
+
+      enforceLegacyPayloadMatch(req.body, payload);
+
+      const transporter = await getMailer();
+      const resolvedFrom = DEFAULT_FROM_EMAIL;
+
+      if (!transporter || !resolvedFrom) {
+        return sendError(
+          res,
+          501,
+          "EMAIL_NOT_CONFIGURED",
+          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
+        );
+      }
+
+      const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
+      const { data: settings } = await requireSupabase()
+        .from("user_settings")
+        .select("company_name")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const displayName = identity.display_name || settings?.company_name || "";
+      const replyTo = buildReplyTo(identity.email, displayName);
+      const fromName = displayName || SENDER_DOMAIN_NAME;
+      const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${resolvedFrom}>`;
+
+      const { buffer, filename } = await createPdfAttachment({ type, payload });
+
+      const info = await transporter.sendMail({
+        from,
+        to: normalizedTo,
+        subject: subjectText,
+        text: messageText ?? "",
+        replyTo,
+        sender: `${SENDER_DOMAIN_NAME} <${resolvedFrom}>`,
+        attachments: [
+          {
+            filename,
+            content: buffer,
+            contentType: "application/pdf",
+          },
+        ],
+      });
+
+      await requireSupabase()
+        .from("sender_identities")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", identity.id);
+
+      await audit({
+        userId,
+        action: "invoice_email_sent",
+        entityType: type,
+        entityId: docId ?? null,
+        meta: { to: normalizedTo, sender_identity_id: identity.id, message_id: info?.messageId ?? null },
+      });
+
+      await updateSendMetadata({ type, docId, userId, via: "EMAIL" });
+
+      if (type === "invoice") {
+        await lockInvoiceAfterSend({ invoiceId: docId, userId });
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("Email send failed", err);
+      return sendError(res, 500, "EMAIL_SEND_FAILED", "Email send failed.");
     }
-
-    const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
-    const { data: settings } = await supabase
-      .from("user_settings")
-      .select("company_name")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const displayName = identity.display_name || settings?.company_name || "";
-    const replyTo = buildReplyTo(identity.email, displayName);
-    const fromName = displayName || SENDER_DOMAIN_NAME;
-    const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${resolvedFrom}>`;
-
-    const info = await transporter.sendMail({
-      from,
-      to,
-      subject,
-      text: message ?? "",
-      replyTo,
-      sender: `${SENDER_DOMAIN_NAME} <${resolvedFrom}>`,
-      attachments: [
-        {
-          filename: sanitizeFilename(filename),
-          content: Buffer.from(String(pdfBase64), "base64"),
-          contentType: "application/pdf",
-        },
-      ],
-    });
-
-    await supabase
-      .from("sender_identities")
-      .update({ last_used_at: new Date().toISOString() })
-      .eq("id", identity.id);
-
-    await audit({
-      userId,
-      action: "invoice_email_sent",
-      entityType: documentType || "document",
-      entityId: documentId ?? null,
-      meta: { to, sender_identity_id: identity.id, message_id: info?.messageId ?? null },
-    });
-
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error("Email send failed", err);
-    res.status(500).json({ error: "Email send failed" });
   }
-});
-
+);
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-app.listen(PORT, () => {
-  console.log(`PDF server listening on http://localhost:${PORT}`);
-});
+if (process.env.SERVER_TEST_MODE !== "1") {
+  app.listen(PORT, () => {
+    console.log(`PDF server listening on http://localhost:${PORT}`);
+  });
+}
 
+
+export {
+  app,
+  loadDocumentPayloadFromDb,
+  createPdfBufferFromPayload,
+  createPdfAttachment,
+  hashPayload,
+  buildPdfFilename,
+  lockInvoiceAfterSend,
+  updateSendMetadata,
+};
 const closeBrowser = async () => {
   if (browserPromise) {
     const browser = await browserPromise;

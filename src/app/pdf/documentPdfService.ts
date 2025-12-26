@@ -1,44 +1,32 @@
-import { requireAccessToken } from "@/lib/auth";
+import { readApiError } from "@/app/api/apiError";
+import { apiFetch } from "@/app/api/apiClient";
 
 type PdfPayload = {
   type: "offer" | "invoice";
-  doc: any;
-  settings: any;
-  client: any;
+  docId: string;
 };
 
-const sanitizeFilename = (value: string) =>
-  (value || "")
-    .normalize("NFKD")
-    .replace(/[^\w.-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 120);
-
-const buildFilename = (payload: PdfPayload) => {
-  const prefix = payload.type === "invoice" ? "RE" : "ANG";
-  const clientName = payload.client?.companyName ?? payload.client?.name ?? "";
-  const datePart = payload.doc?.date ?? "";
-  const num = payload.doc?.number ?? "0001";
-  const raw = `${prefix}-${num}_${clientName}_${datePart}.pdf`;
-  return sanitizeFilename(raw) || `${prefix}-${num}.pdf`;
+const filenameFromHeader = (header: string | null) => {
+  if (!header) return null;
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match?.[1] ?? null;
 };
 
 export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blob; filename: string }> {
-  const token = await requireAccessToken();
-  const res = await fetch("/api/pdf", {
+  const res = await apiFetch("/api/pdf", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
-  });
+  }, { auth: true });
 
   if (!res.ok) {
-    const msg = await res.text();
-    throw new Error(msg || "PDF konnte nicht erstellt werden.");
+    const err = await readApiError(res);
+    throw new Error(err.message || "PDF konnte nicht erstellt werden.");
   }
 
   const blob = await res.blob();
-  return { blob, filename: buildFilename(payload) };
+  const filename =
+    filenameFromHeader(res.headers.get("content-disposition")) || `${payload.type}-${payload.docId}.pdf`;
+  return { blob, filename };
 }
 
 export async function downloadDocumentPdf(payload: PdfPayload) {

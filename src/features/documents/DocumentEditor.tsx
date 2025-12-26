@@ -6,12 +6,15 @@ import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
 
 import { AppButton } from "@/ui/AppButton";
+import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
-import { downloadDocumentPdf, fetchDocumentPdf } from "@/app/pdf/documentPdfService";
+import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
+import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { sendDocumentEmail } from "@/app/email/emailService";
+import { canConvertToInvoice } from "@/domain/rules/offerRules";
 
 export type EditorSeed = {
   id: string;
@@ -39,6 +42,20 @@ type FormData = {
   paymentDate?: string;
   offerId?: string;
   projectId?: string;
+  isLocked?: boolean;
+  finalizedAt?: string | null;
+  sentAt?: string | null;
+  lastSentAt?: string | null;
+  sentCount?: number;
+  sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
+  invoiceId?: string | null;
+};
+
+const toLocalISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 function toNumberOrZero(v: unknown): number {
@@ -76,6 +93,13 @@ function buildFormData(
     paymentDate: undefined,
     offerId: undefined,
     projectId: undefined,
+    isLocked: false,
+    finalizedAt: null,
+    sentAt: null,
+    lastSentAt: null,
+    sentCount: 0,
+    sentVia: null,
+    invoiceId: null,
   };
 
   const merged = { ...base, ...(initial ?? {}) };
@@ -114,6 +138,8 @@ export function DocumentEditor({
   const isInvoice = type === "invoice";
 
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const [showPrint, setShowPrint] = useState(startInPrint);
 
   const [formData, setFormData] = useState<FormData>(() =>
@@ -135,10 +161,12 @@ export function DocumentEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  const disabled = readOnly || saving;
+  const locked = Boolean(formData.isLocked);
+  const disabled = readOnly || locked || saving;
+
 
   const addPosition = () => {
-    if (readOnly) return;
+    if (readOnly || locked) return;
     setFormData((prev) => ({
       ...prev,
       positions: [
@@ -149,7 +177,7 @@ export function DocumentEditor({
   };
 
   const updatePosition = (index: number, field: keyof Position, value: any) => {
-    if (readOnly) return;
+    if (readOnly || locked) return;
     setFormData((prev) => {
       const positions = [...(prev.positions ?? [])];
       positions[index] = { ...positions[index], [field]: value };
@@ -158,7 +186,7 @@ export function DocumentEditor({
   };
 
   const removePosition = (index: number) => {
-    if (readOnly) return;
+    if (readOnly || locked) return;
     setFormData((prev) => ({
       ...prev,
       positions: (prev.positions ?? []).filter((_, i) => i !== index),
@@ -171,21 +199,22 @@ export function DocumentEditor({
     return { subtotal, tax, total: calcGross(subtotal, tax) };
   }, [formData.positions, formData.vatRate]);
 
-  const handleSave = async (opts?: { closeAfterSave?: boolean }): Promise<boolean> => {
-    if (readOnly) return false;
+  const handleSave = async (opts?: { closeAfterSave?: boolean; data?: FormData }): Promise<boolean> => {
+    if (readOnly || locked) return false;
 
     const closeAfterSave = opts?.closeAfterSave ?? true;
+    const data = opts?.data ?? formData;
 
-    if (!formData.clientId) {
-      alert("Bitte Kunde wählen");
+    if (!data.clientId) {
+      toast.error("Bitte Kunde wählen");
       return false;
     }
-    if (isInvoice && !formData.dueDate) {
-      alert("Bitte Fälligkeitsdatum setzen");
+    if (isInvoice && !data.dueDate) {
+      toast.error("Bitte Fälligkeitsdatum setzen");
       return false;
     }
-    if (!isInvoice && !formData.validUntil) {
-      alert("Bitte Gültig-bis Datum setzen");
+    if (!isInvoice && !data.validUntil) {
+      toast.error("Bitte Gültig-bis Datum setzen");
       return false;
     }
 
@@ -193,33 +222,44 @@ export function DocumentEditor({
     try {
       if (isInvoice) {
         await invoiceService.saveInvoice({
-          id: formData.id,
-          number: formData.number,
-          offerId: formData.offerId,
-          clientId: formData.clientId,
-          projectId: formData.projectId,
-          date: formData.date,
-          dueDate: formData.dueDate!,
-          positions: formData.positions ?? [],
-          vatRate: toNumberOrZero(formData.vatRate),
-          status: (formData.status as InvoiceStatus) ?? InvoiceStatus.DRAFT,
-          paymentDate: formData.paymentDate,
-          introText: formData.introText ?? "",
-          footerText: formData.footerText ?? "",
+          id: data.id,
+          number: data.number,
+          offerId: data.offerId,
+          clientId: data.clientId,
+          projectId: data.projectId,
+          date: data.date,
+          dueDate: data.dueDate!,
+          positions: data.positions ?? [],
+          vatRate: toNumberOrZero(data.vatRate),
+          status: (data.status as InvoiceStatus) ?? InvoiceStatus.DRAFT,
+          paymentDate: data.paymentDate,
+          introText: data.introText ?? "",
+          footerText: data.footerText ?? "",
+          isLocked: data.isLocked ?? false,
+          finalizedAt: data.finalizedAt ?? null,
+          sentAt: data.sentAt ?? null,
+          lastSentAt: data.lastSentAt ?? null,
+          sentCount: data.sentCount ?? 0,
+          sentVia: data.sentVia ?? null,
         });
       } else {
         await offerService.saveOffer({
-          id: formData.id,
-          number: formData.number,
-          clientId: formData.clientId,
-          projectId: formData.projectId,
-          date: formData.date,
-          validUntil: formData.validUntil!,
-          positions: formData.positions ?? [],
-          vatRate: toNumberOrZero(formData.vatRate),
-          introText: formData.introText ?? "",
-          footerText: formData.footerText ?? "",
-          status: (formData.status as OfferStatus) ?? OfferStatus.DRAFT,
+          id: data.id,
+          number: data.number,
+          clientId: data.clientId,
+          projectId: data.projectId,
+          date: data.date,
+          validUntil: data.validUntil!,
+          positions: data.positions ?? [],
+          vatRate: toNumberOrZero(data.vatRate),
+          introText: data.introText ?? "",
+          footerText: data.footerText ?? "",
+          status: (data.status as OfferStatus) ?? OfferStatus.DRAFT,
+          sentAt: data.sentAt ?? null,
+          lastSentAt: data.lastSentAt ?? null,
+          sentCount: data.sentCount ?? 0,
+          sentVia: data.sentVia ?? null,
+          invoiceId: data.invoiceId ?? null,
         });
       }
 
@@ -233,12 +273,9 @@ export function DocumentEditor({
   };
 
   const handleDownloadPdf = async () => {
-    const client = clients.find((c) => c.id === formData.clientId);
     await downloadDocumentPdf({
       type: isInvoice ? "invoice" : "offer",
-      doc: formData as any,
-      settings,
-      client: client ?? {},
+      docId: formData.id,
     });
   };
 
@@ -260,77 +297,131 @@ export function DocumentEditor({
 
     const to = client?.email?.trim() || "";
     if (!to) {
-      alert("Bitte beim Kunden eine E-Mail-Adresse hinterlegen.");
+      toast.error("Bitte beim Kunden eine E-Mail-Adresse hinterlegen.");
       return;
     }
     const senderIdentityId = settings.defaultSenderIdentityId ?? "";
     if (!senderIdentityId) {
-      alert("Bitte in den Einstellungen eine verifizierte Reply-To Adresse setzen.");
+      toast.error("Bitte in den Einstellungen eine verifizierte Reply-To Adresse setzen.");
       return;
     }
 
     const subject = defaultSubject.trim() || `${isInvoice ? "Rechnung" : "Angebot"} ${formData.number}`;
     const message = defaultMessage.trim() || "Bitte im Anhang finden Sie das Dokument.";
 
-    const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(message)}`;
-    const mailLink = document.createElement("a");
-    mailLink.href = mailtoUrl;
-    mailLink.style.display = "none";
-    document.body.appendChild(mailLink);
-    mailLink.click();
-    mailLink.remove();
-
-    const { blob, filename } = await fetchDocumentPdf({
-      type: isInvoice ? "invoice" : "offer",
-      doc: formData as any,
-      settings,
-      client: client ?? {},
-    });
-    const base64 = await blobToBase64(blob);
-
     try {
-      await sendDocumentEmail({
+      const result = await sendDocumentEmail({
         documentId: formData.id,
         documentType: isInvoice ? "invoice" : "offer",
         to,
         subject,
         message,
-        pdfBase64: base64.replace(/^data:application\/pdf;base64,/, ""),
-        filename,
         senderIdentityId,
       });
+
+      if (!result.ok) {
+        if (result.code === "EMAIL_NOT_CONFIGURED") {
+          toast.error("E-Mail Versand ist nicht konfiguriert.");
+        }
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const nextData = {
+        ...formData,
+        status:
+          formData.status === (isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT)
+            ? isInvoice
+              ? InvoiceStatus.SENT
+              : OfferStatus.SENT
+            : formData.status,
+        sentAt: formData.sentAt ?? nowIso,
+        lastSentAt: nowIso,
+        sentCount: (formData.sentCount ?? 0) + 1,
+        sentVia: "EMAIL",
+        ...(isInvoice
+          ? { isLocked: true, finalizedAt: nowIso }
+          : {}),
+      };
+
+      setFormData(nextData);
+      await onSaved();
+      setShowPrint(false);
+      onClose();
+      toast.success("E-Mail wurde erfolgreich versendet.");
     } catch (err) {
       console.error(err);
-      alert(
+      toast.error(
         err instanceof Error
           ? err.message
           : "E-Mail konnte nicht automatisch gesendet werden."
       );
     }
-
-    if (!readOnly && formData.status === (isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT)) {
-      // mark as sent locally
-      setFormData((prev) => ({
-        ...prev,
-        status: isInvoice ? InvoiceStatus.SENT : OfferStatus.SENT,
-      }));
-      await handleSave({ closeAfterSave: false });
-    }
-
-    if (!readOnly) {
-      alert("E-Mail wurde vorbereitet. Falls SMTP konfiguriert ist, wurde sie auch versendet.");
-    }
   };
 
-  const blobToBase64 = (blob: Blob) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+  const applyOfferUpdate = async (patch: Partial<FormData>) => {
+    if (readOnly || locked) return;
+    const nextData = { ...formData, ...patch };
+    setFormData(nextData);
+    const ok = await handleSave({ closeAfterSave: false, data: nextData });
+    if (ok) await onSaved();
+  };
+
+  const handleMarkOfferSentManual = async () => {
+    const nowIso = new Date().toISOString();
+    await applyOfferUpdate({
+      status: OfferStatus.SENT,
+      sentAt: formData.sentAt ?? nowIso,
+      lastSentAt: nowIso,
+      sentCount: (formData.sentCount ?? 0) + 1,
+      sentVia: "MANUAL",
     });
+  };
+
+  const handleMarkOfferAccepted = async () => {
+    await applyOfferUpdate({ status: OfferStatus.ACCEPTED });
+  };
+
+  const handleMarkOfferDeclined = async () => {
+    await applyOfferUpdate({ status: OfferStatus.REJECTED });
+  };
+
+  const handleCreateInvoiceFromOffer = async () => {
+    if (!canConvertToInvoice(formData as any)) {
+      toast.error("Dieses Angebot kann nicht mehr umgewandelt werden.");
+      return;
+    }
+    const ok = await confirm({
+      title: "Rechnung erstellen",
+      message: "Angebot in Rechnung umwandeln?",
+    });
+    if (!ok) return;
+
+    const invoiceNumber = await getNextDocumentNumber("invoice", settings);
+    const invoiceId = newId();
+    const today = toLocalISODate(new Date());
+
+    await invoiceService.saveInvoice({
+      id: invoiceId,
+      number: String(invoiceNumber),
+      offerId: formData.id,
+      clientId: formData.clientId,
+      projectId: formData.projectId,
+      date: today,
+      dueDate: invoiceService.buildDueDate(today, Number(settings.defaultPaymentTerms ?? 14)),
+      positions: formData.positions ?? [],
+      vatRate: Number(formData.vatRate ?? settings.defaultVatRate ?? 0),
+      status: InvoiceStatus.DRAFT,
+      paymentDate: undefined,
+      introText: formData.introText ?? "",
+      footerText: formData.footerText ?? "",
+    });
+
+    await applyOfferUpdate({
+      invoiceId,
+      status: formData.status === OfferStatus.INVOICED ? OfferStatus.SENT : formData.status,
+    });
+  };
 
   // ---------- Print Overlay ----------
   if (showPrint) {
@@ -371,12 +462,12 @@ export function DocumentEditor({
                 {isInvoice ? "RECHNUNG" : "ANGEBOT"}
               </h2>
               <p className="text-gray-500">Nr: {formData.number}</p>
-              <p className="text-gray-500">Datum: {formatDate(formData.date)}</p>
+              <p className="text-gray-500">Datum: {formatDate(formData.date, settings.locale ?? "de-DE")}</p>
               {isInvoice && formData.dueDate && (
-                <p className="text-gray-500">Fällig: {formatDate(formData.dueDate)}</p>
+                <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, settings.locale ?? "de-DE")}</p>
               )}
               {!isInvoice && formData.validUntil && (
-                <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil)}</p>
+                <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil, settings.locale ?? "de-DE")}</p>
               )}
             </div>
           </div>
@@ -429,9 +520,9 @@ export function DocumentEditor({
                     <td className="py-3 text-right">
                       {toNumberOrZero(pos.quantity)} {pos.unit}
                     </td>
-                    <td className="py-3 text-right">{formatCurrency(toNumberOrZero(pos.price))}</td>
+                    <td className="py-3 text-right">{formatCurrency(toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
                     <td className="py-3 text-right font-medium">
-                      {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price))}
+                      {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}
                     </td>
                   </tr>
                 ))}
@@ -449,19 +540,19 @@ export function DocumentEditor({
                   <td colSpan={3} className="pt-4 text-right">
                     Zwischensumme:
                   </td>
-                  <td className="pt-4 text-right">{formatCurrency(totals.subtotal)}</td>
+                  <td className="pt-4 text-right">{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
                 </tr>
                 <tr>
                   <td colSpan={3} className="text-right text-gray-500">
                     Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
                   </td>
-                  <td className="text-right text-gray-500">{formatCurrency(totals.tax)}</td>
+                  <td className="text-right text-gray-500">{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
                 </tr>
                 <tr>
                   <td colSpan={3} className="pt-2 text-right font-bold text-lg">
                     Gesamtsumme:
                   </td>
-                  <td className="pt-2 text-right font-bold text-lg">{formatCurrency(totals.total)}</td>
+                  <td className="pt-2 text-right font-bold text-lg">{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
                 </tr>
               </tfoot>
             </table>
@@ -606,6 +697,74 @@ export function DocumentEditor({
             </div>
           )}
 
+
+          {!isInvoice && (
+            <div className="rounded-lg border bg-gray-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Communication
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <span
+                  className={`px-2 py-1 rounded border ${
+                    formData.status === OfferStatus.DRAFT
+                      ? "bg-white border-gray-400 text-gray-700"
+                      : "bg-gray-100 border-gray-200 text-gray-500"
+                  }`}
+                >
+                  Draft
+                </span>
+                <span className="text-gray-400">-&gt;</span>
+                <span
+                  className={`px-2 py-1 rounded border ${
+                    formData.status === OfferStatus.SENT ||
+                    formData.status === OfferStatus.ACCEPTED ||
+                    formData.status === OfferStatus.REJECTED
+                      ? "bg-blue-50 border-blue-200 text-blue-700"
+                      : "bg-gray-100 border-gray-200 text-gray-500"
+                  }`}
+                >
+                  Sent
+                </span>
+                <span className="text-gray-400">-&gt;</span>
+                <span
+                  className={`px-2 py-1 rounded border ${
+                    formData.status === OfferStatus.ACCEPTED
+                      ? "bg-green-50 border-green-200 text-green-700"
+                      : "bg-gray-100 border-gray-200 text-gray-500"
+                  }`}
+                >
+                  Accepted
+                </span>
+              </div>
+
+              <div className="mt-4 border-t pt-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Next steps / Result
+                </div>
+                <div className="mt-2 text-sm text-gray-700 space-y-1">
+                  {formData.status === OfferStatus.REJECTED && (
+                    <div className="text-red-600">Offer declined</div>
+                  )}
+                  {formData.status === OfferStatus.ACCEPTED && (
+                    <div className="text-green-700">Offer accepted</div>
+                  )}
+                  {formData.invoiceId && (
+                    <div>
+                      Invoice created: <span className="text-gray-500">{formData.invoiceId}</span>
+                    </div>
+                  )}
+                  {formData.sentCount && formData.lastSentAt ? (
+                    <div className="text-gray-500">
+                      Sent {formData.sentCount}x - zuletzt {formatDate(formData.lastSentAt, settings.locale ?? "de-DE")}
+                    </div>
+                  ) : (
+                    <div className="text-gray-500">Not sent yet</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Einleitungstext</label>
             <textarea
@@ -694,14 +853,14 @@ export function DocumentEditor({
           <div className="flex justify-end pt-4 border-t">
             <div className="w-64 space-y-2 text-right">
               <div className="flex justify-between">
-                <span>Netto:</span> <span>{formatCurrency(totals.subtotal)}</span>
+                <span>Netto:</span> <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
-                <span>{formatCurrency(totals.tax)}</span>
+                <span>{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
               </div>
               <div className="flex justify-between font-bold text-lg">
-                <span>Gesamt:</span> <span>{formatCurrency(totals.total)}</span>
+                <span>Gesamt:</span> <span>{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
               </div>
             </div>
           </div>
@@ -723,7 +882,7 @@ export function DocumentEditor({
             Schließen
           </AppButton>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap justify-end">
             <AppButton
               variant="secondary"
               disabled={saving}
@@ -748,9 +907,59 @@ export function DocumentEditor({
               </AppButton>
             )}
 
-            <AppButton onClick={() => void handleSendEmail()}>
-              <Mail size={16} /> Per E-Mail senden
-            </AppButton>
+            {!readOnly && !isInvoice && formData.status === OfferStatus.DRAFT && (
+              <AppButton onClick={() => void handleSendEmail()}>
+                <Mail size={16} /> Send offer
+              </AppButton>
+            )}
+
+            {!readOnly && !isInvoice && formData.status !== OfferStatus.DRAFT && (
+              <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
+                <Mail size={16} /> Resend
+              </AppButton>
+            )}
+
+            {!readOnly && !isInvoice && (
+              <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
+                Mark as sent
+              </AppButton>
+            )}
+
+            {!readOnly && !isInvoice && (
+              <AppButton
+                variant="secondary"
+                onClick={() => void handleMarkOfferAccepted()}
+                disabled={formData.status === OfferStatus.ACCEPTED}
+              >
+                Mark as accepted
+              </AppButton>
+            )}
+
+            {!readOnly && !isInvoice && (
+              <AppButton
+                variant="secondary"
+                onClick={() => void handleMarkOfferDeclined()}
+                disabled={formData.status === OfferStatus.REJECTED}
+              >
+                Mark as declined
+              </AppButton>
+            )}
+
+            {!readOnly && !isInvoice && (
+              <AppButton
+                variant="secondary"
+                onClick={() => void handleCreateInvoiceFromOffer()}
+                disabled={!canConvertToInvoice(formData as any) || Boolean(formData.invoiceId)}
+              >
+                Create invoice
+              </AppButton>
+            )}
+
+            {isInvoice && (
+              <AppButton onClick={() => void handleSendEmail()}>
+                <Mail size={16} /> Per E-Mail senden
+              </AppButton>
+            )}
           </div>
         </div>
       </div>
