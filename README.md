@@ -12,6 +12,10 @@ Leichte Angebots- und Rechnungs-App für Freelancer im DACH-Raum.
    VITE_SUPABASE_URL=<your-project-url>
    VITE_SUPABASE_ANON_KEY=<your-anon-key>
    ```
+   Optional für lokale API-Calls (Proxy in `vite.config.ts`):
+   ```
+   VITE_API_PROXY=http://localhost:4000
+   ```
 3. Entwicklung starten:
    ```bash
    npm run dev
@@ -37,9 +41,42 @@ SMTP_USER=<smtp-user>
 SMTP_PASS=<smtp-pass>
 SMTP_FROM=billing@lightningbold.com
 SENDER_DOMAIN_NAME=Lightning Bold
+REDIS_URL=<optional-rate-limit-redis>
 ```
 
 Deliverability Checklist:
 - SPF Record fuer die Versanddomain konfigurieren (provider-spezifisch)
 - DKIM aktivieren und public keys eintragen
 - DMARC Record setzen (Start: p=none, spaeter p=quarantine/reject)
+
+### PDF-Generierung (Serverless)
+Die PDF-Erstellung nutzt Playwright + Chromium. In Serverless (z. B. Vercel)
+wird `@sparticuz/chromium` verwendet.
+
+Benötigte Dependencies:
+```
+playwright-core
+@sparticuz/chromium
+```
+
+### Vercel Deployment
+1. Projekt importieren (Vercel Dashboard).
+2. Build Command: `npm run build`
+3. Output Directory: `dist`
+4. Environment Variablen setzen:
+   - **Client (VITE_*)**
+     - `VITE_SUPABASE_URL`
+     - `VITE_SUPABASE_ANON_KEY`
+   - **Server**
+     - `SUPABASE_URL`
+     - `SUPABASE_SERVICE_ROLE`
+     - `APP_BASE_URL` (deployed URL)
+     - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+     - `SENDER_DOMAIN_NAME` (optional)
+     - `REDIS_URL` (optional, für Rate-Limiting)
+5. Deploy auslösen.
+
+Troubleshooting:
+- **PDF-Generierung fehlschlägt:** Stelle sicher, dass `@sparticuz/chromium`
+  installiert ist und keine Edge Runtime verwendet wird.
+- **E-Mail fehlschlägt:** Prüfe SMTP-Creds + ob `SMTP_FROM` gesetzt ist.

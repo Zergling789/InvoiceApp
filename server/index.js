@@ -4,7 +4,6 @@ import crypto from "crypto";
 import express from "express";
 import nodemailer from "nodemailer";
 import { createClient as createRedisClient } from "redis";
-import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
 
@@ -24,14 +23,23 @@ const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 const APP_BASE_URL = process.env.APP_BASE_URL || "http://localhost:5173";
 const DEFAULT_FROM_EMAIL = process.env.SMTP_FROM || process.env.SMTP_USER;
 const SENDER_DOMAIN_NAME = process.env.SENDER_DOMAIN_NAME || "Lightning Bold";
+const IS_VERCEL = Boolean(process.env.VERCEL);
 
 const supabaseAdmin =
   SUPABASE_URL && SUPABASE_SERVICE_ROLE
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
     : null;
 
+let supabaseConfigLogged = false;
 const requireSupabase = () => {
   if (!supabaseAdmin) {
+    if (!supabaseConfigLogged) {
+      console.warn("[config] Missing Supabase admin config.", {
+        hasUrl: Boolean(SUPABASE_URL),
+        hasServiceRole: Boolean(SUPABASE_SERVICE_ROLE),
+      });
+      supabaseConfigLogged = true;
+    }
     const err = new Error("Supabase service role not configured.");
     err.status = 500;
     throw err;
@@ -48,18 +56,84 @@ const sanitizeFilename = (name = "") =>
     .slice(0, 120) || "document";
 
 let browserPromise = null;
+let playwrightPromise = null;
+
+const loadPlaywright = async () => {
+  if (!playwrightPromise) {
+    playwrightPromise = (async () => {
+      try {
+        return await import("playwright");
+      } catch (error) {
+        return await import("playwright-core");
+      }
+    })();
+  }
+  return playwrightPromise;
+};
+
+const resolveChromiumLauncher = async () => {
+  const playwrightModule = await loadPlaywright();
+  return playwrightModule.chromium ?? playwrightModule.default?.chromium;
+};
+
+const getChromiumLaunchOptions = async () => {
+  if (!IS_VERCEL) {
+    return { headless: true };
+  }
+  let chromiumModule;
+  try {
+    chromiumModule = await import("@sparticuz/chromium");
+  } catch (error) {
+    console.error("[pdf] Missing @sparticuz/chromium dependency for Vercel runtime.");
+    throw error;
+  }
+  const chromium = chromiumModule.default ?? chromiumModule;
+  return {
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  };
+};
+
 const getBrowser = async () => {
   if (!browserPromise) {
-    browserPromise = chromium.launch({ headless: true });
+    const chromiumLauncher = await resolveChromiumLauncher();
+    if (!chromiumLauncher) {
+      throw new Error("Chromium launcher is not available.");
+    }
+    const launchOptions = await getChromiumLaunchOptions();
+    browserPromise = chromiumLauncher.launch(launchOptions);
   }
   return browserPromise;
 };
 
 let mailerPromise = null;
+let smtpConfigLogged = false;
+
+const logMissingEnv = (scope, missing = []) => {
+  if (missing.length === 0) return;
+  console.warn(`[config] Missing ${scope} env vars`, missing);
+};
+
+const validateSmtpEnv = () => {
+  const missing = [];
+  if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
+  if (!DEFAULT_FROM_EMAIL) missing.push("SMTP_FROM");
+  if (process.env.SMTP_USER && !process.env.SMTP_PASS) missing.push("SMTP_PASS");
+  return { ok: missing.length === 0, missing };
+};
+
 const getMailer = async () => {
   if (!mailerPromise) {
+    const validation = validateSmtpEnv();
+    if (!validation.ok) {
+      if (!smtpConfigLogged) {
+        logMissingEnv("smtp", validation.missing);
+        smtpConfigLogged = true;
+      }
+      return null;
+    }
     const host = process.env.SMTP_HOST;
-    if (!host) return null;
     const port = Number(process.env.SMTP_PORT ?? 587);
     const secure = String(process.env.SMTP_SECURE ?? "").toLowerCase() === "true";
     mailerPromise = nodemailer.createTransport({
@@ -1014,7 +1088,7 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
 
     const transporter = await getMailer();
     if (!transporter || !DEFAULT_FROM_EMAIL) {
-      return sendError(res, 500, "smtp_not_configured", "SMTP not configured.");
+      return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
       return;
     }
 
