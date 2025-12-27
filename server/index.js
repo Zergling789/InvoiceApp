@@ -1175,12 +1175,13 @@ app.post(
 );
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-if (process.env.SERVER_TEST_MODE !== "1") {
+if (process.env.SERVER_TEST_MODE !== "1" && !process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`PDF server listening on http://localhost:${PORT}`);
   });
 }
 
+export default app;
 
 export {
   app,
