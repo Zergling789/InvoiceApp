@@ -30,8 +30,25 @@ export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blo
 }
 
 export async function downloadDocumentPdf(payload: PdfPayload) {
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const supportsDownload = "download" in HTMLAnchorElement.prototype;
+  const needsFallback = !supportsDownload || isIOS;
+  const fallbackWindow = needsFallback ? window.open("", "_blank", "noopener,noreferrer") : null;
+
   const { blob, filename } = await fetchDocumentPdf(payload);
   const url = URL.createObjectURL(blob);
+
+  if (fallbackWindow) {
+    if (fallbackWindow.closed) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      fallbackWindow.location.href = url;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  }
 
   const anchor = document.createElement("a");
   anchor.href = url;
