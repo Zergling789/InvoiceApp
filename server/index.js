@@ -1166,7 +1166,10 @@ app.post(
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("Email send failed", err);
-      return sendError(res, 500, "EMAIL_SEND_FAILED", "Email send failed.");
+      const message = typeof err?.message === "string" && err.message.trim().length > 0
+        ? err.message
+        : "Email send failed.";
+      return sendError(res, 500, "EMAIL_SEND_FAILED", message);
     }
   }
 );
