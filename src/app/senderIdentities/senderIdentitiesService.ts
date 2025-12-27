@@ -1,6 +1,6 @@
 import type { SenderIdentity } from "@/types";
 import { readApiError } from "@/app/api/apiError";
-import { apiFetch } from "@/app/api/apiClient";
+import { apiFetch, readJsonResponse } from "@/app/api/apiClient";
 
 type SenderIdentityRow = {
   id: string;
@@ -28,7 +28,7 @@ export async function listSenderIdentities(): Promise<SenderIdentity[]> {
     const err = await readApiError(res);
     throw new Error(err.message || "Request failed.");
   }
-  const data = await res.json();
+  const data = await readJsonResponse<{ items?: SenderIdentityRow[] }>(res);
   return (data.items ?? []).map(mapSenderIdentity);
 }
 
@@ -44,7 +44,7 @@ export async function createSenderIdentity(payload: {
     const err = await readApiError(res);
     throw new Error(err.message || "Request failed.");
   }
-  const data = await res.json();
+  const data = await readJsonResponse<SenderIdentityRow>(res);
   return mapSenderIdentity(data);
 }
 

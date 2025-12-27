@@ -4,6 +4,24 @@ type ApiFetchOptions = {
   auth?: boolean;
 };
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ?? import.meta.env.VITE_API_PROXY
+  ?? "";
+
+const resolveApiUrl = (input: RequestInfo): RequestInfo => {
+  if (typeof input !== "string") {
+    return input;
+  }
+
+  if (!API_BASE_URL || /^https?:\/\//i.test(input)) {
+    return input;
+  }
+
+  const base = API_BASE_URL.replace(/\/$/, "");
+  const path = input.startsWith("/") ? input : `/${input}`;
+  return `${base}${path}`;
+};
+
 export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: ApiFetchOptions) {
   const headers = new Headers(init?.headers ?? {});
 
@@ -16,5 +34,28 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: Ap
     headers.set("Content-Type", "application/json");
   }
 
-  return fetch(input, { ...init, headers });
+  return fetch(resolveApiUrl(input), { ...init, headers });
+}
+
+export async function readJsonResponse<T>(res: Response): Promise<T> {
+  const raw = await res.text().catch(() => "");
+  if (!raw) {
+    throw new Error("Unexpected empty response. Expected JSON.");
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    const contentType = res.headers.get("content-type") ?? "";
+    const preview = raw.trim().slice(0, 200);
+    const message = preview
+      ? `Unexpected response format. Expected JSON. Response starts with: ${preview}`
+      : "Unexpected response format. Expected JSON.";
+    const error = new Error(message);
+    (error as Error & { cause?: unknown }).cause = {
+      contentType,
+      originalError: err,
+    };
+    throw error;
+  }
 }
