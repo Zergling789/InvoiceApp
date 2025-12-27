@@ -1173,6 +1173,9 @@ app.post(
     }
   }
 );
+app.use("/api", (_req, res) => {
+  sendError(res, 404, "not_found", "Not found.");
+});
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 if (process.env.SERVER_TEST_MODE !== "1" && !process.env.VERCEL) {
