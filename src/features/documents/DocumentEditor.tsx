@@ -345,7 +345,7 @@ export function DocumentEditor({
       };
 
       setFormData(nextData);
-      await onSaved();
+      await handleSave({ closeAfterSave: false, data: nextData });
       setShowPrint(false);
       onClose();
       toast.success("E-Mail wurde erfolgreich versendet.");
@@ -607,8 +607,14 @@ export function DocumentEditor({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kunde</label>
+              <label
+                className="block text-sm font-medium text-gray-700 mb-1"
+                htmlFor="document-client"
+              >
+                Kunde
+              </label>
               <select
+                id="document-client"
                 className="w-full border rounded p-2"
                 value={formData.clientId}
                 disabled={disabled}
@@ -624,8 +630,14 @@ export function DocumentEditor({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nummer</label>
+              <label
+                className="block text-sm font-medium text-gray-700 mb-1"
+                htmlFor="document-number"
+              >
+                Nummer
+              </label>
               <input
+                id="document-number"
                 className="w-full border rounded p-2"
                 value={formData.number}
                 disabled={disabled}
@@ -634,8 +646,14 @@ export function DocumentEditor({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Datum</label>
+              <label
+                className="block text-sm font-medium text-gray-700 mb-1"
+                htmlFor="document-date"
+              >
+                Datum
+              </label>
               <input
+                id="document-date"
                 type="date"
                 className="w-full border rounded p-2"
                 value={formData.date}
@@ -648,8 +666,14 @@ export function DocumentEditor({
           {isInvoice ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fällig am</label>
+                <label
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                  htmlFor="document-due-date"
+                >
+                  Fällig am
+                </label>
                 <input
+                  id="document-due-date"
                   type="date"
                   className="w-full border rounded p-2"
                   value={formData.dueDate ?? ""}
@@ -658,8 +682,14 @@ export function DocumentEditor({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">MwSt (%)</label>
+                <label
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                  htmlFor="document-vat"
+                >
+                  MwSt (%)
+                </label>
                 <input
+                  id="document-vat"
                   type="number"
                   className="w-full border rounded p-2"
                   value={formData.vatRate ?? 0}
@@ -673,8 +703,14 @@ export function DocumentEditor({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gültig bis</label>
+                <label
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                  htmlFor="document-valid-until"
+                >
+                  Gültig bis
+                </label>
                 <input
+                  id="document-valid-until"
                   type="date"
                   className="w-full border rounded p-2"
                   value={formData.validUntil ?? ""}
@@ -683,8 +719,14 @@ export function DocumentEditor({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">MwSt (%)</label>
+                <label
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                  htmlFor="document-vat"
+                >
+                  MwSt (%)
+                </label>
                 <input
+                  id="document-vat"
                   type="number"
                   className="w-full border rounded p-2"
                   value={formData.vatRate ?? 0}
@@ -766,8 +808,14 @@ export function DocumentEditor({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Einleitungstext</label>
+            <label
+              className="block text-sm font-medium text-gray-700 mb-1"
+              htmlFor="document-intro"
+            >
+              Einleitungstext
+            </label>
             <textarea
+              id="document-intro"
               className="w-full border rounded p-2"
               rows={2}
               value={formData.introText ?? ""}
@@ -866,8 +914,14 @@ export function DocumentEditor({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Fußtext</label>
+            <label
+              className="block text-sm font-medium text-gray-700 mb-1"
+              htmlFor="document-footer"
+            >
+              Fußtext
+            </label>
             <textarea
+              id="document-footer"
               className="w-full border rounded p-2"
               rows={2}
               value={formData.footerText ?? ""}
