@@ -1,5 +1,20 @@
-{ "buildCommand": "npm run build", 
+{
+  "$schema": "https://vercel.com/schema.json",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/[...path].js": 
-    { "runtime": "vercel/nodejs20.x", "maxDuration": 60 } }, "routes": [ { "handle": "filesystem" }, { "src": "/api/(.*)", "dest": "/api/$1" }, { "src": "/(.*)", "dest": "/index.html" } ] }
+    "api/[...path].js": {
+    "api/**/*.js": {
+      "runtime": "nodejs@20.x",
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
