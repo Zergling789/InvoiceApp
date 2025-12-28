@@ -9,6 +9,7 @@ import { renderDocumentHtml } from "./renderDocumentHtml.js";
 
 const PORT = process.env.PORT || 4000;
 const app = express();
+app.disable("x-powered-by");
 
 const jsonParser = express.json({ limit: "10mb" });
 app.use((req, res, next) => {
@@ -42,6 +43,7 @@ const requireSupabase = () => {
     }
     const err = new Error("Supabase service role not configured.");
     err.status = 500;
+    err.code = "SUPABASE_NOT_CONFIGURED";
     throw err;
   }
   return supabaseAdmin;
@@ -61,6 +63,9 @@ let playwrightPromise = null;
 const loadPlaywright = async () => {
   if (!playwrightPromise) {
     playwrightPromise = (async () => {
+      if (IS_VERCEL) {
+        return await import("playwright-core");
+      }
       try {
         return await import("playwright");
       } catch (error) {
@@ -85,7 +90,10 @@ const getChromiumLaunchOptions = async () => {
     chromiumModule = await import("@sparticuz/chromium");
   } catch (error) {
     console.error("[pdf] Missing @sparticuz/chromium dependency for Vercel runtime.");
-    throw error;
+    const err = new Error("Chromium dependency missing.");
+    err.status = 500;
+    err.code = "CHROMIUM_MISSING";
+    throw err;
   }
   const chromium = chromiumModule.default ?? chromiumModule;
   return {
@@ -97,12 +105,17 @@ const getChromiumLaunchOptions = async () => {
 
 const getBrowser = async () => {
   if (!browserPromise) {
-    const chromiumLauncher = await resolveChromiumLauncher();
-    if (!chromiumLauncher) {
-      throw new Error("Chromium launcher is not available.");
+    try {
+      const chromiumLauncher = await resolveChromiumLauncher();
+      if (!chromiumLauncher) {
+        throw new Error("Chromium launcher is not available.");
+      }
+      const launchOptions = await getChromiumLaunchOptions();
+      browserPromise = chromiumLauncher.launch(launchOptions);
+    } catch (error) {
+      browserPromise = null;
+      throw error;
     }
-    const launchOptions = await getChromiumLaunchOptions();
-    browserPromise = chromiumLauncher.launch(launchOptions);
   }
   return browserPromise;
 };
@@ -115,12 +128,36 @@ const logMissingEnv = (scope, missing = []) => {
   console.warn(`[config] Missing ${scope} env vars`, missing);
 };
 
+const logServerConfigOnce = () => {
+  if (process.env.LOG_SERVER_CONFIG !== "1") return;
+  console.info("[config] runtime", {
+    isVercel: IS_VERCEL,
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabaseServiceRole: Boolean(SUPABASE_SERVICE_ROLE),
+    hasSmtpHost: Boolean(process.env.SMTP_HOST),
+    hasSmtpUser: Boolean(process.env.SMTP_USER),
+    hasSmtpFrom: Boolean(DEFAULT_FROM_EMAIL),
+    hasRedis: Boolean(REDIS_URL),
+  });
+};
+
 const validateSmtpEnv = () => {
   const missing = [];
   if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
   if (!DEFAULT_FROM_EMAIL) missing.push("SMTP_FROM");
   if (process.env.SMTP_USER && !process.env.SMTP_PASS) missing.push("SMTP_PASS");
   return { ok: missing.length === 0, missing };
+};
+
+const ensureMailer = async () => {
+  const transporter = await getMailer();
+  if (!transporter || !DEFAULT_FROM_EMAIL) {
+    const err = new Error("SMTP not configured");
+    err.status = 501;
+    err.code = "SMTP_NOT_CONFIGURED";
+    throw err;
+  }
+  return transporter;
 };
 
 const getMailer = async () => {
@@ -190,6 +227,8 @@ const EMAIL_FALLBACK_MAX_KEYS = 50_000;
 const EMAIL_FALLBACK_BUFFER_MS = 30 * 1000;
 const REDIS_RETRY_COOLDOWN_MS = 30 * 1000;
 const REDIS_URL = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || "";
+
+logServerConfigOnce();
 
 let redisClient;
 let lastRedisErrorAt = 0;
@@ -457,12 +496,7 @@ const buildReplyTo = (identityEmail, displayName) => {
 };
 
 const sendVerificationEmail = async ({ to, token, displayName }) => {
-  const transporter = await getMailer();
-  if (!transporter || !DEFAULT_FROM_EMAIL) {
-    const err = new Error("SMTP not configured");
-    err.status = 500;
-    throw err;
-  }
+  const transporter = await ensureMailer();
   const verificationUrl = `${APP_BASE_URL.replace(/\/$/, "")}/app/settings/email/verify?token=${encodeURIComponent(
     token
   )}`;
@@ -821,6 +855,9 @@ app.post("/api/sender-identities", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Create sender identity failed", err);
+    if (err?.code === "SMTP_NOT_CONFIGURED") {
+      return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
+    }
     return sendError(res, err.status || 500, "sender_identity_create_failed", "Sender identity create failed.");
   }
 });
@@ -904,6 +941,9 @@ app.post("/api/sender-identities/:id/resend", requireAuth, async (req, res) => {
         "rate_limited",
         "Zu viele Verifizierungsanfragen. Bitte kurz warten und erneut versuchen."
       );
+    }
+    if (err?.code === "SMTP_NOT_CONFIGURED") {
+      return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
     }
     return sendError(res, err?.status || 500, "resend_failed", "Resend failed.");
   }
@@ -1086,11 +1126,7 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
     }
     const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
 
-    const transporter = await getMailer();
-    if (!transporter || !DEFAULT_FROM_EMAIL) {
-      return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
-      return;
-    }
+    const transporter = await ensureMailer();
 
     const replyTo = buildReplyTo(identity.email, identity.display_name);
     const fromName = identity.display_name || SENDER_DOMAIN_NAME;
@@ -1115,6 +1151,9 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("Test email failed", err);
+    if (err?.code === "SMTP_NOT_CONFIGURED") {
+      return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
+    }
     return sendError(res, err.status || 500, "test_email_failed", "Test email failed.");
   }
 });
@@ -1176,16 +1215,11 @@ app.post(
 
       enforceLegacyPayloadMatch(req.body, payload);
 
-      const transporter = await getMailer();
+      const transporter = await ensureMailer();
       const resolvedFrom = DEFAULT_FROM_EMAIL;
 
-      if (!transporter || !resolvedFrom) {
-        return sendError(
-          res,
-          501,
-          "EMAIL_NOT_CONFIGURED",
-          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
-        );
+      if (!resolvedFrom) {
+        return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.");
       }
 
       const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
@@ -1240,6 +1274,17 @@ app.post(
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("Email send failed", err);
+      if (err?.code === "SUPABASE_NOT_CONFIGURED") {
+        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
+      }
+      if (err?.code === "SMTP_NOT_CONFIGURED") {
+        return sendError(
+          res,
+          501,
+          "EMAIL_NOT_CONFIGURED",
+          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
+        );
+      }
       const message = typeof err?.message === "string" && err.message.trim().length > 0
         ? err.message
         : "Email send failed.";
