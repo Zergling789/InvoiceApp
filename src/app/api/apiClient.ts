@@ -38,14 +38,23 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: Ap
 }
 
 export async function readJsonResponse<T>(res: Response): Promise<T> {
-  const contentType = res.headers.get("content-type") ?? "";
+  const contentType = res.headers.get("content-type") ?? "unknown";
+  const raw = await res.text().catch(() => "");
+  const preview = raw.trim().slice(0, 200);
+
   if (!contentType.includes("application/json")) {
-    const raw = await res.text().catch(() => "");
-    const preview = raw.trim().slice(0, 200);
     const message = preview
-      ? `Unexpected response format. Expected JSON. Response starts with: ${preview}`
-      : "Unexpected response format. Expected JSON.";
+      ? `Unexpected response format. Expected JSON. Status: ${res.status}. Content-Type: ${contentType}. Body starts with: ${preview}`
+      : `Unexpected response format. Expected JSON. Status: ${res.status}. Content-Type: ${contentType}.`;
     throw new Error(message);
   }
-  return res.json() as Promise<T>;
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const message = preview
+      ? `Failed to parse JSON response. Status: ${res.status}. Content-Type: ${contentType}. Body starts with: ${preview}`
+      : `Failed to parse JSON response. Status: ${res.status}. Content-Type: ${contentType}.`;
+    throw new Error(message);
+  }
 }
