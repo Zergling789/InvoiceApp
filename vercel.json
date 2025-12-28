@@ -1,15 +1,16 @@
 {
+  "$schema": "https://vercel.com/schema.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/[...path].js": {
+    "api/**/*.js": {
       "runtime": "nodejs20.x",
       "maxDuration": 60
     }
   },
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
+
