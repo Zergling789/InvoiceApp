@@ -42,6 +42,7 @@ SMTP_PASS=<smtp-pass>
 SMTP_FROM=billing@lightningbold.com
 SENDER_DOMAIN_NAME=Lightning Bold
 REDIS_URL=<optional-rate-limit-redis>
+LOG_SERVER_CONFIG=1
 ```
 
 Deliverability Checklist:
@@ -59,6 +60,11 @@ playwright-core
 @sparticuz/chromium
 ```
 
+Optional (Vercel empfohlen):
+```
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+```
+
 ### Vercel Deployment
 1. Projekt importieren (Vercel Dashboard).
 2. Build Command: `npm run build`
@@ -67,6 +73,7 @@ playwright-core
    - **Client (VITE_*)**
      - `VITE_SUPABASE_URL`
      - `VITE_SUPABASE_ANON_KEY`
+     - optional: `VITE_API_BASE_URL` (wenn API nicht gleicher Origin)
    - **Server**
      - `SUPABASE_URL`
      - `SUPABASE_SERVICE_ROLE`
@@ -74,9 +81,17 @@ playwright-core
      - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
      - `SENDER_DOMAIN_NAME` (optional)
      - `REDIS_URL` (optional, für Rate-Limiting)
+     - `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` (optional)
+     - `LOG_SERVER_CONFIG=1` (optional, Startup-Config-Log in Vercel)
 5. Deploy auslösen.
 
 Troubleshooting:
 - **PDF-Generierung fehlschlägt:** Stelle sicher, dass `@sparticuz/chromium`
   installiert ist und keine Edge Runtime verwendet wird.
 - **E-Mail fehlschlägt:** Prüfe SMTP-Creds + ob `SMTP_FROM` gesetzt ist.
+
+### Lokale Tests/Checks (optional)
+```bash
+npm run build
+npm run test:ui
+```
