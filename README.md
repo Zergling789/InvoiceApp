@@ -57,13 +57,17 @@ wird `@sparticuz/chromium` verwendet.
 Benötigte Dependencies:
 ```
 playwright-core
-@sparticuz/chromium
+@sparticuz/chromium (optional, für Vercel PDF-Rendering)
 ```
 
 Optional (Vercel empfohlen):
 ```
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ```
+
+Hinweis: Falls du PDF-Rendering auf Vercel benötigst, füge `@sparticuz/chromium`
+als Dependency hinzu (oder installiere es separat im Deployment), da es nicht
+standardmäßig im `package.json` enthalten ist.
 
 ### Vercel Deployment
 1. Projekt importieren (Vercel Dashboard).
@@ -73,11 +77,11 @@ PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
    - **Client (VITE_*)**
      - `VITE_SUPABASE_URL`
      - `VITE_SUPABASE_ANON_KEY`
-     - optional: `VITE_API_BASE_URL` (wenn API nicht gleicher Origin)
+     - optional: `VITE_API_BASE_URL` (API-Base, wenn API nicht gleicher Origin)
    - **Server**
      - `SUPABASE_URL`
      - `SUPABASE_SERVICE_ROLE`
-     - `APP_BASE_URL` (deployed URL)
+     - `APP_BASE_URL` (Frontend-Base-URL für Links/Redirects)
      - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
      - `SENDER_DOMAIN_NAME` (optional)
      - `REDIS_URL` (optional, für Rate-Limiting)
@@ -89,6 +93,7 @@ Troubleshooting:
 - **PDF-Generierung fehlschlägt:** Stelle sicher, dass `@sparticuz/chromium`
   installiert ist und keine Edge Runtime verwendet wird.
 - **E-Mail fehlschlägt:** Prüfe SMTP-Creds + ob `SMTP_FROM` gesetzt ist.
+- **API liefert HTML statt JSON:** Prüfe `VITE_API_BASE_URL` (falls genutzt) und Vercel-Routing, damit `/api/*` nicht vom SPA-Fallback abgefangen wird.
 
 ### Lokale Tests/Checks (optional)
 ```bash
