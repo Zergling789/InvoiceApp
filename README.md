@@ -57,13 +57,17 @@ wird `@sparticuz/chromium` verwendet.
 Benötigte Dependencies:
 ```
 playwright-core
-@sparticuz/chromium
+@sparticuz/chromium (optional, für Vercel PDF-Rendering)
 ```
 
 Optional (Vercel empfohlen):
 ```
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ```
+
+Hinweis: Falls du PDF-Rendering auf Vercel benötigst, füge `@sparticuz/chromium`
+als Dependency hinzu (oder installiere es separat im Deployment), da es nicht
+standardmäßig im `package.json` enthalten ist.
 
 ### Vercel Deployment
 1. Projekt importieren (Vercel Dashboard).
