@@ -109,7 +109,7 @@ const getChromiumLaunchOptions = async () => {
   return {
     args: chromium.args,
     executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
+
   };
 };
 
