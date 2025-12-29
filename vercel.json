@@ -5,9 +5,8 @@
   "functions": {
     "api/[...path].js": { "runtime": "nodejs", "maxDuration": 60 }
   },
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "^/api/(.*)$", "dest": "/api/[...path].js" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/[...path].js" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
