@@ -13,15 +13,25 @@ app.disable("x-powered-by");
 
 const jsonParser = express.json({ limit: "10mb" });
 app.use((req, res, next) => {
+  // nur Requests mit Body parsen (GET/HEAD brauchen das nicht)
+  if (req.method === "GET" || req.method === "HEAD") return next();
+  // /api/email hat seinen eigenen Parser weiter unten
   if (req.path === "/api/email") return next();
   return jsonParser(req, res, next);
 });
+
 const TRUST_PROXY = Number(process.env.TRUST_PROXY ?? 1);
 app.set("trust proxy", Number.isFinite(TRUST_PROXY) ? TRUST_PROXY : 1);
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-const APP_BASE_URL = process.env.APP_BASE_URL || "http://localhost:5173";
+
+// robustes Base-URL handling: ENV > Vercel URL > localhost
+const RAW_APP_BASE_URL =
+  process.env.APP_BASE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${PORT}`);
+const APP_BASE_URL = String(RAW_APP_BASE_URL).trim().replace(/\/+$/, "");
+
 const DEFAULT_FROM_EMAIL = process.env.SMTP_FROM || process.env.SMTP_USER;
 const SENDER_DOMAIN_NAME = process.env.SENDER_DOMAIN_NAME || "Lightning Bold";
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -137,7 +147,7 @@ const logServerConfigOnce = () => {
     hasSmtpHost: Boolean(process.env.SMTP_HOST),
     hasSmtpUser: Boolean(process.env.SMTP_USER),
     hasSmtpFrom: Boolean(DEFAULT_FROM_EMAIL),
-    hasRedis: Boolean(REDIS_URL),
+    hasRedis: Boolean(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL),
   });
 };
 
@@ -400,7 +410,6 @@ const emailAuthGuard = async (req, res, next) => {
   return next();
 };
 
-
 const requireAuth = async (req, res, next) => {
   try {
     const auth = req.get("authorization") || "";
@@ -497,9 +506,10 @@ const buildReplyTo = (identityEmail, displayName) => {
 
 const sendVerificationEmail = async ({ to, token, displayName }) => {
   const transporter = await ensureMailer();
-  const verificationUrl = `${APP_BASE_URL.replace(/\/$/, "")}/app/settings/email/verify?token=${encodeURIComponent(
-    token
-  )}`;
+
+  // Mail-Link direkt auf den API-Verify Endpoint (der redirectet dann zurück ins Frontend)
+  const verificationUrl = `${APP_BASE_URL}/api/sender-identities/verify?token=${encodeURIComponent(token)}`;
+
   const subject = "Bitte bestaetigen Sie Ihre Absenderadresse";
   const text = [
     `Hallo${displayName ? ` ${displayName}` : ""},`,
@@ -726,7 +736,6 @@ const enforceLegacyPayloadMatch = (body, payload) => {
     throw err;
   }
 };
-
 
 app.post("/api/pdf", requireAuth, async (req, res) => {
   try {
@@ -1292,6 +1301,9 @@ app.post(
     }
   }
 );
+
+// health endpoints (API + optional legacy)
+app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 if (process.env.SERVER_TEST_MODE !== "1" && !process.env.VERCEL) {
