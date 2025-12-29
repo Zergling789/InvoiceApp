@@ -107,10 +107,11 @@ const getChromiumLaunchOptions = async () => {
   }
   const chromium = chromiumModule.default ?? chromiumModule;
   return {
-    args: chromium.args,
-    executablePath: await chromium.executablePath(),
+  args: chromium.args,
+  executablePath: await chromium.executablePath(),
 
-  };
+};
+
 };
 
 const getBrowser = async () => {
@@ -701,15 +702,21 @@ const createPdfBufferFromPayload = async (type, payload) => {
   }
 
   const browser = await getBrowser();
-  const page = await browser.newPage({ viewport: { width: 1200, height: 2000 } });
-  await page.setContent(html, { waitUntil: "networkidle" });
-  const pdfBuffer = await page.pdf({
-    format: "A4",
-    printBackground: true,
-    margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
-  });
-  await page.close();
-  return pdfBuffer;
+const context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
+const page = await context.newPage();
+
+await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
+
+const pdfBuffer = await page.pdf({
+  format: "A4",
+  printBackground: true,
+  margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
+});
+
+await page.close();
+await context.close();
+return pdfBuffer;
+
 };
 
 const createPdfAttachment = async ({ type, payload }) => {
