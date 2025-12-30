@@ -2,5 +2,5 @@ import { test, expect } from "playwright/test";
 
 test("landing page loads", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("FreelanceFlow")).toBeVisible();
+  await expect(page.getByText("FreelanceFlow", { exact: true })).toBeVisible();
 });
