@@ -110,15 +110,20 @@ export default function Projects() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <h1 className="text-2xl font-bold text-gray-900">Projekte</h1>
 
-        <div className="flex gap-2">
-          <AppButton variant="secondary" onClick={() => void refresh()} disabled={loading || saving}>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <AppButton
+            variant="secondary"
+            onClick={() => void refresh()}
+            disabled={loading || saving}
+            className="w-full sm:w-auto justify-center"
+          >
             <RefreshCcw size={16} /> Neu laden
           </AppButton>
 
-          <AppButton onClick={() => setAdding(true)} disabled={saving}>
+          <AppButton onClick={() => setAdding(true)} disabled={saving} className="w-full sm:w-auto justify-center">
             <Plus size={16} /> Neues Projekt
           </AppButton>
         </div>
@@ -137,18 +142,20 @@ export default function Projects() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
               <input
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                autoComplete="off"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Kunde *</label>
               <select
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={draft.clientId}
                 onChange={(e) => setDraft({ ...draft, clientId: e.target.value })}
+                autoComplete="organization"
               >
                 <option value="">Wählen...</option>
                 {clients.map((c) => (
@@ -165,7 +172,7 @@ export default function Projects() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Budget-Typ</label>
               <select
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={draft.budgetType}
                 onChange={(e) => setDraft({ ...draft, budgetType: e.target.value as Project["budgetType"] })}
               >
@@ -179,10 +186,12 @@ export default function Projects() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Stundensatz</label>
                 <input
                   type="number"
-                  className="w-full border rounded p-2"
+                  className="w-full border rounded p-3 text-base"
                   value={String(draft.hourlyRate)}
                   onChange={(e) => setDraft({ ...draft, hourlyRate: toNumber(e.target.value, 0) })}
                   disabled={draft.budgetType !== "hourly"}
+                  inputMode="decimal"
+                  step="0.01"
                 />
                 {draft.budgetType !== "hourly" && (
                   <div className="text-xs text-gray-500 mt-1">Nicht relevant bei Festpreis.</div>
@@ -193,9 +202,11 @@ export default function Projects() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{budgetLabel}</label>
                 <input
                   type="number"
-                  className="w-full border rounded p-2"
+                  className="w-full border rounded p-3 text-base"
                   value={String(draft.budgetTotal)}
                   onChange={(e) => setDraft({ ...draft, budgetTotal: toNumber(e.target.value, 0) })}
+                  inputMode="decimal"
+                  step="0.01"
                 />
                 <div className="text-xs text-gray-500 mt-1">{budgetHint}</div>
               </div>
@@ -204,7 +215,7 @@ export default function Projects() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={draft.status}
                 onChange={(e) => setDraft({ ...draft, status: e.target.value as Project["status"] })}
               >
@@ -215,7 +226,7 @@ export default function Projects() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 mt-4">
             <AppButton
               variant="ghost"
               disabled={saving}
@@ -242,8 +253,8 @@ export default function Projects() {
         ) : (
           <div className="divide-y">
             {projects.map((p) => (
-              <div key={p.id} className="py-4 flex items-start justify-between gap-4">
-                <div>
+              <div key={p.id} className="py-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
                   <div className="font-semibold text-gray-900">{p.name}</div>
                   <div className="text-sm text-gray-600">
                     {clientName(p.clientId)} · {p.budgetType} · Status: {p.status}

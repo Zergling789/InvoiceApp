@@ -384,10 +384,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <h1 className="text-2xl font-bold text-gray-900">{isInvoice ? "Rechnungen" : "Angebote"}</h1>
 
-        <Button onClick={openNewEditor} disabled={loading}>
+        <Button onClick={openNewEditor} disabled={loading} className="w-full sm:w-auto justify-center">
           <Plus size={16} />
           Erstellen
         </Button>
@@ -416,7 +416,127 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         />
       )}
 
-      <div className="bg-white rounded-lg shadow border overflow-hidden">
+      <div className="space-y-3 md:hidden">
+        {items.map((item) => {
+          const net = calcNet(item.positions ?? []);
+          const vat = calcVat(net, item.vatRate);
+          const total = calcGross(net, vat);
+
+          const overdue =
+            isInvoice &&
+            item.status !== InvoiceStatus.PAID &&
+            isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+
+          return (
+            <div key={item.id} className="bg-white rounded-lg border p-4 shadow-sm space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm text-gray-500">#{item.number}</div>
+                  <div className="font-semibold text-gray-900">{getClientName(item.clientId)}</div>
+                  <div className="text-sm text-gray-600">
+                    {item.date ? formatDate(item.date, settings?.locale) : "—"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-sm">{formatCurrency(total, settings?.locale, settings?.currency)}</div>
+                  <div className="mt-1">
+                    {overdue && <Badge color="red">Overdue</Badge>}
+                    {!overdue && (
+                      <Badge
+                        color={
+                          item.status === InvoiceStatus.PAID ||
+                          item.status === OfferStatus.ACCEPTED ||
+                          item.status === OfferStatus.INVOICED
+                            ? "green"
+                            : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
+                            ? "blue"
+                            : item.status === OfferStatus.REJECTED
+                            ? "red"
+                            : "gray"
+                        }
+                      >
+                        {item.status}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {!isInvoice && (
+                <div className="text-xs text-gray-500 space-y-1">
+                  {item.invoiceId && (
+                    <div>
+                      <Link to="/app/invoices" className="underline">
+                        Invoice created
+                      </Link>{" "}
+                      <span className="text-gray-400">- {item.invoiceId}</span>
+                    </div>
+                  )}
+                  <div>
+                    {item.sentCount && item.lastSentAt
+                      ? `Sent ${item.sentCount}x - zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
+                      : "Not sent yet"}
+                  </div>
+                </div>
+              )}
+
+              <details className="rounded-lg border bg-gray-50">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700">
+                  Aktionen
+                </summary>
+                <div className="flex flex-col gap-2 p-3">
+                  {!isInvoice && (
+                    <button
+                      onClick={() => void handleConvertToInvoice(item.id)}
+                      className="min-h-11 rounded-md border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 px-3 py-2 text-sm font-medium"
+                    >
+                      In Rechnung wandeln
+                    </button>
+                  )}
+
+                  {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
+                    <button
+                      onClick={() => void handleMarkPaid(item.id)}
+                      className="min-h-11 rounded-md border border-green-200 text-green-700 bg-white hover:bg-green-50 px-3 py-2 text-sm font-medium"
+                    >
+                      Als bezahlt markieren
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => void openView(item.id)}
+                    className="min-h-11 rounded-md border border-gray-200 text-gray-700 bg-white hover:bg-gray-100 px-3 py-2 text-sm font-medium"
+                    disabled={openingId === item.id}
+                  >
+                    {isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
+                  </button>
+
+                  <button
+                    onClick={() => void handleDelete(item.id)}
+                    className="min-h-11 rounded-md border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-2 text-sm font-medium"
+                  >
+                    Löschen
+                  </button>
+                </div>
+              </details>
+            </div>
+          );
+        })}
+
+        {items.length === 0 && !loading && (
+          <div className="bg-white rounded-lg border p-6 text-center text-gray-500">
+            Keine Dokumente gefunden.
+          </div>
+        )}
+
+        {loading && (
+          <div className="bg-white rounded-lg border p-6 text-center text-gray-500">
+            Lade...
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow border overflow-hidden hidden md:block">
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b">
             <tr>
@@ -489,7 +609,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                       <button
                         onClick={() => void handleConvertToInvoice(item.id)}
                         title="In Rechnung wandeln"
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"
+                        className="p-2 min-h-11 min-w-11 text-indigo-600 hover:bg-indigo-50 rounded"
                       >
                         <ReceiptEuro size={18} />
                       </button>
@@ -499,7 +619,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                       <button
                         onClick={() => void handleMarkPaid(item.id)}
                         title="Als bezahlt markieren"
-                        className="p-2 text-green-600 hover:bg-green-50 rounded"
+                        className="p-2 min-h-11 min-w-11 text-green-600 hover:bg-green-50 rounded"
                       >
                         <Check size={18} />
                       </button>
@@ -508,7 +628,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                     <button
                       onClick={() => void openView(item.id)}
                       title={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded"
+                      className="p-2 min-h-11 min-w-11 text-gray-600 hover:bg-gray-100 rounded"
                       disabled={openingId === item.id}
                     >
                       <Eye size={18} />
@@ -516,7 +636,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
                     <button
                       onClick={() => void handleDelete(item.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 rounded"
+                      className="p-2 min-h-11 min-w-11 text-gray-400 hover:text-red-500 rounded"
                       title="Löschen"
                     >
                       <Trash2 size={18} />
