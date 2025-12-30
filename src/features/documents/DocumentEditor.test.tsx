@@ -24,7 +24,8 @@ vi.mock("@/app/email/emailService", () => ({
 }));
 
 vi.mock("@/app/pdf/documentPdfService", () => ({
-  downloadDocumentPdf: vi.fn(),
+  getPdfBlob: vi.fn(),
+  triggerPdfDownload: vi.fn(() => ({ usedFallback: false })),
 }));
 
 const seed = {
