@@ -1,6 +1,6 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
-import { X, Trash2, Plus, FileDown, Mail } from "lucide-react";
+import { X, Trash2, Plus, FileDown, Mail, Eye } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -20,6 +20,7 @@ import {
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { sendDocumentEmail } from "@/app/email/emailService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
+import { PdfPreviewModal } from "@/features/documents/PdfPreviewModal";
 
 export type EditorSeed = {
   id: string;
@@ -146,6 +147,10 @@ export function DocumentEditor({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [showPrint, setShowPrint] = useState(startInPrint);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<{ blob: Blob; filename: string } | null>(null);
 
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice)
@@ -307,6 +312,43 @@ export function DocumentEditor({
         error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
       toast.error(message);
     }
+  };
+
+  const handleOpenPreview = async () => {
+    if (previewLoading) return;
+    setShowPreview(true);
+    setPreviewError(null);
+    setPreviewData(null);
+    setPreviewLoading(true);
+
+    if (!readOnly) {
+      const ok = await handleSave({ closeAfterSave: false });
+      if (!ok) {
+        setShowPreview(false);
+        setPreviewLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const result = await getPdfBlob({
+        type: isInvoice ? "invoice" : "offer",
+        docId: formData.id,
+      });
+      setPreviewData(result);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
+      setPreviewError(message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setShowPreview(false);
+    setPreviewError(null);
+    setPreviewData(null);
   };
 
   const handleSendEmail = async () => {
@@ -617,8 +659,9 @@ export function DocumentEditor({
 
   // ---------- Normal Editor ----------
   return (
-    <div className="fixed inset-0 bg-gray-900/50 flex items-stretch md:items-center justify-center p-0 md:p-4 z-40">
-      <div className="bg-white rounded-none md:rounded-xl shadow-xl w-full max-w-4xl h-full md:h-[90vh] flex flex-col">
+    <>
+      <div className="fixed inset-0 bg-gray-900/50 flex items-stretch md:items-center justify-center p-0 md:p-4 z-40">
+        <div className="bg-white rounded-none md:rounded-xl shadow-xl w-full max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 sm:p-6 border-b">
           <h2 className="text-xl font-bold">
             {readOnly
@@ -1010,6 +1053,10 @@ export function DocumentEditor({
                 Weitere Aktionen
               </summary>
               <div className="mt-3 flex flex-col gap-2">
+                <AppButton variant="secondary" onClick={() => void handleOpenPreview()}>
+                  <Eye size={16} /> PDF Vorschau
+                </AppButton>
+
                 <AppButton
                   variant="secondary"
                   disabled={saving}
@@ -1089,6 +1136,10 @@ export function DocumentEditor({
           </AppButton>
 
           <div className="flex gap-2 flex-wrap justify-end">
+            <AppButton variant="secondary" onClick={() => void handleOpenPreview()}>
+              <Eye size={16} /> PDF Vorschau
+            </AppButton>
+
             <AppButton
               variant="secondary"
               disabled={saving}
@@ -1190,17 +1241,10 @@ export function DocumentEditor({
             <AppButton
               variant="secondary"
               disabled={saving}
-              onClick={async () => {
-                if (readOnly) {
-                  setShowPrint(true);
-                  return;
-                }
-                const ok = await handleSave({ closeAfterSave: false });
-                if (ok) setShowPrint(true);
-              }}
+              onClick={() => void handleOpenPreview()}
               className="w-full justify-center"
             >
-              PDF / Teilen
+              PDF Vorschau
             </AppButton>
 
             {!readOnly && (
@@ -1210,7 +1254,17 @@ export function DocumentEditor({
             )}
           </div>
         </div>
+        </div>
       </div>
-    </div>
+
+      <PdfPreviewModal
+        isOpen={showPreview}
+        onClose={handleClosePreview}
+        blob={previewData?.blob ?? null}
+        filename={previewData?.filename ?? ""}
+        loading={previewLoading}
+        error={previewError}
+      />
+    </>
   );
 }
