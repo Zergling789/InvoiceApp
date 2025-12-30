@@ -62,9 +62,9 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <h1 className="text-2xl font-bold text-gray-900">Kunden</h1>
-        <AppButton onClick={startNew}>
+        <AppButton onClick={startNew} className="w-full sm:w-auto justify-center">
           <Plus size={16} /> Neuer Kunde
         </AppButton>
       </div>
@@ -79,44 +79,49 @@ export default function Clients() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Firma *</label>
               <input
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={editing.companyName}
                 onChange={(e) => setEditing({ ...editing, companyName: e.target.value })}
+                autoComplete="organization"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Kontaktperson</label>
               <input
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={editing.contactPerson}
                 onChange={(e) => setEditing({ ...editing, contactPerson: e.target.value })}
+                autoComplete="name"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
               <input
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
+                type="email"
                 value={editing.email}
                 onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                autoComplete="email"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
               <textarea
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 rows={3}
                 value={editing.address}
                 onChange={(e) => setEditing({ ...editing, address: e.target.value })}
+                autoComplete="street-address"
               />
             </div>
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Notizen</label>
               <textarea
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 rows={2}
                 value={editing.notes}
                 onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
@@ -124,7 +129,7 @@ export default function Clients() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 mt-4">
             <AppButton variant="ghost" onClick={cancel} disabled={isBusy}>
               <X size={16} /> Abbrechen
             </AppButton>
@@ -143,8 +148,8 @@ export default function Clients() {
         ) : (
           <div className="divide-y">
             {clients.map((c) => (
-              <div key={c.id} className="py-4 flex items-start justify-between gap-4">
-                <div>
+              <div key={c.id} className="py-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
                   <div className="font-semibold text-gray-900">{c.companyName}</div>
                   <div className="text-sm text-gray-600">
                     {c.contactPerson ? `${c.contactPerson} · ` : ""}
@@ -153,11 +158,16 @@ export default function Clients() {
                   {c.address && <div className="text-sm text-gray-500 whitespace-pre-line">{c.address}</div>}
                 </div>
 
-                <div className="flex gap-2">
-                  <AppButton variant="secondary" onClick={() => startEdit(c)}>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <AppButton variant="secondary" onClick={() => startEdit(c)} className="w-full sm:w-auto justify-center">
                     Bearbeiten
                   </AppButton>
-                  <AppButton variant="danger" onClick={() => deleteClient(c.id)} disabled={isBusy}>
+                  <AppButton
+                    variant="danger"
+                    onClick={() => deleteClient(c.id)}
+                    disabled={isBusy}
+                    className="w-full sm:w-auto justify-center"
+                  >
                     <Trash2 size={16} /> Löschen
                   </AppButton>
                 </div>

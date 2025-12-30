@@ -430,6 +430,16 @@
     box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
   }
 
+  .mobile-preview {
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    border-left: 1px solid rgba(148, 163, 184, 0.4);
+    border-right: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.12);
+    background: #f8fafc;
+  }
+
   @media (max-width: 720px) {
     .landing__cta {
       flex-direction: column;

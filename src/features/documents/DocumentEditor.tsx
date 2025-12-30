@@ -617,9 +617,9 @@ export function DocumentEditor({
 
   // ---------- Normal Editor ----------
   return (
-    <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center p-4 z-40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center p-6 border-b">
+    <div className="fixed inset-0 bg-gray-900/50 flex items-stretch md:items-center justify-center p-0 md:p-4 z-40">
+      <div className="bg-white rounded-none md:rounded-xl shadow-xl w-full max-w-4xl h-full md:h-[90vh] flex flex-col">
+        <div className="flex justify-between items-center p-4 sm:p-6 border-b">
           <h2 className="text-xl font-bold">
             {readOnly
               ? isInvoice
@@ -634,7 +634,7 @@ export function DocumentEditor({
           </AppButton>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 pb-28 md:pb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
               <label
@@ -645,10 +645,11 @@ export function DocumentEditor({
               </label>
               <select
                 id="document-client"
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={formData.clientId}
                 disabled={disabled}
                 onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                autoComplete="organization"
               >
                 <option value="">Wählen...</option>
                 {clients.map((c) => (
@@ -668,10 +669,11 @@ export function DocumentEditor({
               </label>
               <input
                 id="document-number"
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={formData.number}
                 disabled={disabled}
                 onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                autoComplete="off"
               />
             </div>
 
@@ -685,10 +687,11 @@ export function DocumentEditor({
               <input
                 id="document-date"
                 type="date"
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-3 text-base"
                 value={formData.date}
                 disabled={disabled}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                autoComplete="off"
               />
             </div>
           </div>
@@ -705,10 +708,11 @@ export function DocumentEditor({
                 <input
                   id="document-due-date"
                   type="date"
-                  className="w-full border rounded p-2"
+                  className="w-full border rounded p-3 text-base"
                   value={formData.dueDate ?? ""}
                   disabled={disabled}
                   onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -721,12 +725,14 @@ export function DocumentEditor({
                 <input
                   id="document-vat"
                   type="number"
-                  className="w-full border rounded p-2"
+                  className="w-full border rounded p-3 text-base"
                   value={formData.vatRate ?? 0}
                   disabled={disabled}
                   onChange={(e) =>
                     setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
                   }
+                  inputMode="decimal"
+                  step="0.01"
                 />
               </div>
             </div>
@@ -742,10 +748,11 @@ export function DocumentEditor({
                 <input
                   id="document-valid-until"
                   type="date"
-                  className="w-full border rounded p-2"
+                  className="w-full border rounded p-3 text-base"
                   value={formData.validUntil ?? ""}
                   disabled={disabled}
                   onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -758,12 +765,14 @@ export function DocumentEditor({
                 <input
                   id="document-vat"
                   type="number"
-                  className="w-full border rounded p-2"
+                  className="w-full border rounded p-3 text-base"
                   value={formData.vatRate ?? 0}
                   disabled={disabled}
                   onChange={(e) =>
                     setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
                   }
+                  inputMode="decimal"
+                  step="0.01"
                 />
               </div>
             </div>
@@ -846,7 +855,7 @@ export function DocumentEditor({
             </label>
             <textarea
               id="document-intro"
-              className="w-full border rounded p-2"
+              className="w-full border rounded p-3 text-base"
               rows={2}
               value={formData.introText ?? ""}
               disabled={disabled}
@@ -861,53 +870,64 @@ export function DocumentEditor({
 
             <div className="space-y-2">
               {(formData.positions ?? []).map((pos, idx) => (
-                <div key={pos.id ?? idx} className="flex gap-2 items-start">
-                  <div className="flex-[3]">
+                <div
+                  key={pos.id ?? idx}
+                  className="grid grid-cols-1 sm:grid-cols-[2fr_0.7fr_0.7fr_0.9fr_auto] gap-2 items-start"
+                >
+                  <div>
                     <input
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-3 text-base"
                       placeholder="Beschreibung"
                       value={pos.description ?? ""}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "description", e.target.value)}
+                      aria-label={`Positionsbeschreibung ${idx + 1}`}
                     />
                   </div>
 
-                  <div className="w-20">
+                  <div>
                     <input
                       type="number"
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-3 text-base"
                       placeholder="Menge"
                       value={pos.quantity ?? 0}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "quantity", toNumberOrZero(e.target.value))}
+                      inputMode="numeric"
+                      step="1"
+                      aria-label={`Menge Position ${idx + 1}`}
                     />
                   </div>
 
-                  <div className="w-20">
+                  <div>
                     <input
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-3 text-base"
                       placeholder="Einh."
                       value={pos.unit ?? ""}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "unit", e.target.value)}
+                      aria-label={`Einheit Position ${idx + 1}`}
                     />
                   </div>
 
-                  <div className="w-24">
+                  <div>
                     <input
                       type="number"
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-3 text-base"
                       placeholder="Preis"
                       value={pos.price ?? 0}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
+                      inputMode="decimal"
+                      step="0.01"
+                      aria-label={`Preis Position ${idx + 1}`}
                     />
                   </div>
 
                   {!readOnly && (
                     <button
                       onClick={() => removePosition(idx)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded"
+                      className="p-2 min-h-11 min-w-11 text-red-500 hover:bg-red-50 rounded"
                       title="Position löschen"
                     >
                       <Trash2 size={16} />
@@ -928,17 +948,41 @@ export function DocumentEditor({
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t">
-            <div className="w-64 space-y-2 text-right">
-              <div className="flex justify-between">
-                <span>Netto:</span> <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+          <div className="pt-4 border-t space-y-3">
+            <details className="md:hidden rounded-lg border bg-gray-50 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                Summen & Steuern
+              </summary>
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Netto:</span>{" "}
+                  <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
+                  <span>{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-base">
+                  <span>Gesamt:</span>{" "}
+                  <span>{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-gray-500">
-                <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
-                <span>{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg">
-                <span>Gesamt:</span> <span>{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+            </details>
+
+            <div className="hidden md:flex justify-end">
+              <div className="w-64 space-y-2 text-right">
+                <div className="flex justify-between">
+                  <span>Netto:</span>{" "}
+                  <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
+                  <span>{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg">
+                  <span>Gesamt:</span>{" "}
+                  <span>{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -952,16 +996,94 @@ export function DocumentEditor({
             </label>
             <textarea
               id="document-footer"
-              className="w-full border rounded p-2"
+              className="w-full border rounded p-3 text-base"
               rows={2}
               value={formData.footerText ?? ""}
               disabled={disabled}
               onChange={(e) => setFormData({ ...formData, footerText: e.target.value })}
             />
           </div>
+
+          <div className="md:hidden">
+            <details className="rounded-lg border bg-gray-50 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                Weitere Aktionen
+              </summary>
+              <div className="mt-3 flex flex-col gap-2">
+                <AppButton
+                  variant="secondary"
+                  disabled={saving}
+                  onClick={async () => {
+                    if (readOnly) {
+                      setShowPrint(true);
+                      return;
+                    }
+                    const ok = await handleSave({ closeAfterSave: false });
+                    if (ok) setShowPrint(true);
+                  }}
+                >
+                  Vorschau & Drucken
+                </AppButton>
+
+                {!readOnly && !isInvoice && formData.status === OfferStatus.DRAFT && (
+                  <AppButton onClick={() => void handleSendEmail()}>
+                    <Mail size={16} /> Send offer
+                  </AppButton>
+                )}
+
+                {!readOnly && !isInvoice && formData.status !== OfferStatus.DRAFT && (
+                  <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
+                    <Mail size={16} /> Resend
+                  </AppButton>
+                )}
+
+                {!readOnly && !isInvoice && (
+                  <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
+                    Mark as sent
+                  </AppButton>
+                )}
+
+                {!readOnly && !isInvoice && (
+                  <AppButton
+                    variant="secondary"
+                    onClick={() => void handleMarkOfferAccepted()}
+                    disabled={formData.status === OfferStatus.ACCEPTED}
+                  >
+                    Mark as accepted
+                  </AppButton>
+                )}
+
+                {!readOnly && !isInvoice && (
+                  <AppButton
+                    variant="secondary"
+                    onClick={() => void handleMarkOfferDeclined()}
+                    disabled={formData.status === OfferStatus.REJECTED}
+                  >
+                    Mark as declined
+                  </AppButton>
+                )}
+
+                {!readOnly && !isInvoice && (
+                  <AppButton
+                    variant="secondary"
+                    onClick={() => void handleCreateInvoiceFromOffer()}
+                    disabled={!canConvertToInvoice(formData as any) || Boolean(formData.invoiceId)}
+                  >
+                    Create invoice
+                  </AppButton>
+                )}
+
+                {isInvoice && (
+                  <AppButton onClick={() => void handleSendEmail()}>
+                    <Mail size={16} /> Per E-Mail senden
+                  </AppButton>
+                )}
+              </div>
+            </details>
+          </div>
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
+        <div className="hidden md:flex p-6 border-t bg-gray-50 justify-between items-center rounded-b-xl">
           <AppButton variant="ghost" onClick={onClose}>
             Schließen
           </AppButton>
@@ -1042,6 +1164,48 @@ export function DocumentEditor({
             {isInvoice && (
               <AppButton onClick={() => void handleSendEmail()}>
                 <Mail size={16} /> Per E-Mail senden
+              </AppButton>
+            )}
+          </div>
+        </div>
+
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+16px)]">
+          <div className="grid grid-cols-1 gap-2">
+            {!readOnly && (
+              <AppButton
+                disabled={saving || !formData.clientId}
+                onClick={() => void handleSave({ closeAfterSave: true })}
+                className="w-full justify-center"
+              >
+                {saving ? "Speichere..." : "Speichern"}
+              </AppButton>
+            )}
+
+            {readOnly && (
+              <AppButton onClick={onClose} className="w-full justify-center">
+                Schließen
+              </AppButton>
+            )}
+
+            <AppButton
+              variant="secondary"
+              disabled={saving}
+              onClick={async () => {
+                if (readOnly) {
+                  setShowPrint(true);
+                  return;
+                }
+                const ok = await handleSave({ closeAfterSave: false });
+                if (ok) setShowPrint(true);
+              }}
+              className="w-full justify-center"
+            >
+              PDF / Teilen
+            </AppButton>
+
+            {!readOnly && (
+              <AppButton variant="ghost" onClick={onClose} className="w-full justify-center">
+                Zurück
               </AppButton>
             )}
           </div>
