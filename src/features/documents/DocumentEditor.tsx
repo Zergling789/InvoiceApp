@@ -273,10 +273,16 @@ export function DocumentEditor({
   };
 
   const handleDownloadPdf = async () => {
-    await downloadDocumentPdf({
-      type: isInvoice ? "invoice" : "offer",
-      docId: formData.id,
-    });
+    try {
+      await downloadDocumentPdf({
+        type: isInvoice ? "invoice" : "offer",
+        docId: formData.id,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
+      toast.error(message);
+    }
   };
 
   const handleSendEmail = async () => {

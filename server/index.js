@@ -205,6 +205,11 @@ const generateToken = () => crypto.randomBytes(32).toString("base64url");
 const hashToken = (token) =>
   crypto.createHash("sha256").update(token, "utf8").digest("hex");
 
+const PDF_DOWNLOAD_TOKEN_TTL_MS = Number.isFinite(Number(process.env.PDF_DOWNLOAD_TOKEN_TTL_MS))
+  ? Number(process.env.PDF_DOWNLOAD_TOKEN_TTL_MS)
+  : 3 * 60 * 1000;
+const PDF_DOWNLOAD_TOKEN_SWEEP_MS = 60 * 1000;
+
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const VERIFY_LIMIT_PER_IP_PER_MIN = 60;
@@ -245,6 +250,8 @@ let redisClient;
 let lastRedisErrorAt = 0;
 let fallbackLastSweep = 0;
 const fallbackStore = new Map();
+let pdfTokenLastSweep = 0;
+const pdfDownloadTokenStore = new Map();
 
 const getRedisClient = async () => {
   if (!REDIS_URL) return null;
@@ -293,6 +300,70 @@ const sweepFallbackStore = (now) => {
     fallbackStore.delete(oldestKey);
   }
   fallbackLastSweep = now;
+};
+
+const sweepPdfDownloadTokens = (now) => {
+  if (now - pdfTokenLastSweep < PDF_DOWNLOAD_TOKEN_SWEEP_MS) return;
+  for (const [key, entry] of pdfDownloadTokenStore.entries()) {
+    if (entry.expiresAt <= now) {
+      pdfDownloadTokenStore.delete(key);
+    }
+  }
+  pdfTokenLastSweep = now;
+};
+
+const storePdfDownloadTokenInMemory = (tokenHash, payload, ttlMs) => {
+  const now = Date.now();
+  sweepPdfDownloadTokens(now);
+  pdfDownloadTokenStore.set(tokenHash, { payload, expiresAt: now + ttlMs });
+};
+
+const consumePdfDownloadTokenInMemory = (tokenHash) => {
+  const now = Date.now();
+  sweepPdfDownloadTokens(now);
+  const entry = pdfDownloadTokenStore.get(tokenHash);
+  if (!entry) return null;
+  if (entry.expiresAt <= now) {
+    pdfDownloadTokenStore.delete(tokenHash);
+    return null;
+  }
+  pdfDownloadTokenStore.delete(tokenHash);
+  return entry.payload;
+};
+
+const storePdfDownloadToken = async (tokenHash, payload) => {
+  const ttlMs = Math.max(30 * 1000, PDF_DOWNLOAD_TOKEN_TTL_MS);
+  const client = await getRedisClient();
+  if (client) {
+    try {
+      const ttlSec = Math.max(1, Math.floor(ttlMs / 1000));
+      await client.set(`pdfdl:${tokenHash}`, JSON.stringify(payload), { EX: ttlSec });
+      return;
+    } catch (err) {
+      lastRedisErrorAt = Date.now();
+    }
+  }
+
+  storePdfDownloadTokenInMemory(tokenHash, payload, ttlMs);
+};
+
+const consumePdfDownloadToken = async (token) => {
+  if (!token) return null;
+  const tokenHash = hashToken(token);
+  const client = await getRedisClient();
+  if (client) {
+    try {
+      const key = `pdfdl:${tokenHash}`;
+      const result = await client.multi().get(key).del(key).exec();
+      const rawValue = result?.[0];
+      const value = Array.isArray(rawValue) ? rawValue[1] : rawValue;
+      if (!value) return null;
+      return JSON.parse(value);
+    } catch (err) {
+      lastRedisErrorAt = Date.now();
+    }
+  }
+  return consumePdfDownloadTokenInMemory(tokenHash);
 };
 
 const checkEmailRateLimitInMemory = (scope, id, limit, windowMs) => {
@@ -772,6 +843,65 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
     console.error("PDF generation failed", err);
+    return sendError(res, status, code, "PDF generation failed.");
+  }
+});
+
+app.post("/api/pdf/link", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`pdf_user_${req.user.id}`, 60);
+    if (req.ip) checkRateLimit(`pdf_ip_${req.ip}`, 120);
+
+    const docId = req.body?.docId ?? req.body?.documentId ?? null;
+    const type = normalizeDocType(req.body?.type ?? req.body?.documentType);
+    if (!docId || !type) {
+      return sendError(res, 400, "bad_request", "Missing required fields: docId, type");
+    }
+
+    const token = generateToken();
+    const tokenHash = hashToken(token);
+    await storePdfDownloadToken(tokenHash, { userId: req.user.id, docId, type });
+
+    const url = `${APP_BASE_URL}/api/pdf/download?token=${encodeURIComponent(token)}`;
+    res.json({ ok: true, url });
+  } catch (err) {
+    const status = err?.status || 500;
+    const code = err?.code || "pdf_link_failed";
+    console.error("PDF link generation failed", err);
+    return sendError(res, status, code, "PDF link generation failed.");
+  }
+});
+
+app.get("/api/pdf/download", async (req, res) => {
+  try {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (!token) {
+      return sendError(res, 400, "bad_request", "Missing token.");
+    }
+
+    const tokenPayload = await consumePdfDownloadToken(token);
+    if (!tokenPayload?.userId || !tokenPayload?.docId || !tokenPayload?.type) {
+      return sendError(res, 401, "invalid_token", "Invalid or expired token.");
+    }
+
+    const payload = await loadDocumentPayloadFromDb({
+      type: tokenPayload.type,
+      docId: tokenPayload.docId,
+      userId: tokenPayload.userId,
+    });
+
+    const { buffer, filename } = await createPdfAttachment({
+      type: tokenPayload.type,
+      payload,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=\"${filename}\"`);
+    res.status(200).send(buffer);
+  } catch (err) {
+    const status = err?.status || 500;
+    const code = err?.code || "pdf_generation_failed";
+    console.error("PDF download failed", err);
     return sendError(res, status, code, "PDF generation failed.");
   }
 });
