@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import session from "express-session";
 import RedisStore from "connect-redis";
 import nodemailer from "nodemailer";
+import PDFDocument from "pdfkit";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
@@ -117,70 +118,6 @@ const sanitizeFilename = (name = "") =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 120) || "document";
-
-let browserPromise = null;
-let playwrightPromise = null;
-
-const loadPlaywright = async () => {
-  if (!playwrightPromise) {
-    playwrightPromise = (async () => {
-      if (IS_VERCEL) {
-        return await import("playwright-core");
-      }
-      try {
-        return await import("playwright");
-      } catch (error) {
-        return await import("playwright-core");
-      }
-    })();
-  }
-  return playwrightPromise;
-};
-
-const resolveChromiumLauncher = async () => {
-  const playwrightModule = await loadPlaywright();
-  return playwrightModule.chromium ?? playwrightModule.default?.chromium;
-};
-
-const getChromiumLaunchOptions = async () => {
-  if (!IS_VERCEL) {
-    return { headless: true };
-  }
-  let chromiumModule;
-  try {
-    chromiumModule = await import("@sparticuz/chromium");
-  } catch (error) {
-    console.error("[pdf] Missing @sparticuz/chromium dependency for Vercel runtime.");
-    const err = new Error("Chromium dependency missing.");
-    err.status = 500;
-    err.code = "CHROMIUM_MISSING";
-    throw err;
-  }
-  const chromium = chromiumModule.default ?? chromiumModule;
-  return {
-  args: chromium.args,
-  executablePath: await chromium.executablePath(),
-
-};
-
-};
-
-const getBrowser = async () => {
-  if (!browserPromise) {
-    try {
-      const chromiumLauncher = await resolveChromiumLauncher();
-      if (!chromiumLauncher) {
-        throw new Error("Chromium launcher is not available.");
-      }
-      const launchOptions = await getChromiumLaunchOptions();
-      browserPromise = chromiumLauncher.launch(launchOptions);
-    } catch (error) {
-      browserPromise = null;
-      throw error;
-    }
-  }
-  return browserPromise;
-};
 
 let mailerPromise = null;
 let smtpConfigLogged = false;
@@ -855,6 +792,235 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   return { doc, settings, client };
 };
 
+const formatCurrency = (amount, options = {}) => {
+  const locale = options.locale || "de-DE";
+  const currency = options.currency || "EUR";
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(Number(amount ?? 0));
+};
+
+const formatDate = (date, locale = "de-DE") => {
+  if (!date) return "";
+  try {
+    const d = new Date(date);
+    return new Intl.DateTimeFormat(locale).format(d);
+  } catch {
+    return String(date);
+  }
+};
+
+const buildPdfBufferFromPayload = (type, payload) =>
+  new Promise((resolve, reject) => {
+    const docData = payload?.doc ?? {};
+    const settings = payload?.settings ?? {};
+    const client = payload?.client ?? {};
+    const isInvoice = type === "invoice";
+    const locale = settings.locale ?? "de-DE";
+    const currency = settings.currency ?? "EUR";
+    const vatRate = Number(docData.vatRate ?? 0);
+    const positions = Array.isArray(docData.positions) ? docData.positions : [];
+    const net = positions.reduce((sum, position) => {
+      const quantity = Number(position?.quantity ?? 0);
+      const price = Number(position?.price ?? 0);
+      return sum + quantity * price;
+    }, 0);
+    const vat = net * (vatRate / 100);
+    const total = net + vat;
+
+    const pdf = new PDFDocument({ size: "A4", margin: 48 });
+    pdf.info = {
+      Title: `${isInvoice ? "Rechnung" : "Angebot"} ${docData.number ?? ""}`.trim(),
+      Author: settings.companyName ?? "",
+      Creator: "InvoiceApp",
+    };
+
+    const chunks = [];
+    pdf.on("data", (chunk) => chunks.push(chunk));
+    pdf.on("end", () => resolve(Buffer.concat(chunks)));
+    pdf.on("error", reject);
+
+    const pageWidth = pdf.page.width - pdf.page.margins.left - pdf.page.margins.right;
+    const leftX = pdf.page.margins.left;
+    const rightColumnX = leftX + pageWidth * 0.55;
+
+    const ensureSpace = (height = 0) => {
+      const bottom = pdf.page.height - pdf.page.margins.bottom;
+      if (pdf.y + height > bottom) {
+        pdf.addPage();
+      }
+    };
+
+    const writeSectionTitle = (text) => {
+      ensureSpace(22);
+      pdf.moveDown(0.4);
+      pdf.font("Helvetica-Bold").fontSize(12).text(text);
+      pdf.moveDown(0.2);
+    };
+
+    const companyName = settings.companyName ?? "";
+    const headerTop = pdf.page.margins.top;
+    pdf.font("Helvetica-Bold").fontSize(18).text(companyName || " ", leftX, headerTop, {
+      width: pageWidth * 0.55,
+    });
+    pdf.font("Helvetica").fontSize(10).text(settings.address ?? "", {
+      width: pageWidth * 0.55,
+    });
+    pdf.font("Helvetica-Bold").fontSize(18).text(isInvoice ? "RECHNUNG" : "ANGEBOT", rightColumnX, headerTop, {
+      width: pageWidth * 0.45,
+      align: "right",
+    });
+    pdf.font("Helvetica").fontSize(10).text(`Nr: ${docData.number ?? ""}`, rightColumnX, headerTop + 26, {
+      width: pageWidth * 0.45,
+      align: "right",
+    });
+    pdf.text(`Datum: ${formatDate(docData.date, locale)}`, rightColumnX, headerTop + 40, {
+      width: pageWidth * 0.45,
+      align: "right",
+    });
+    if (isInvoice && docData.dueDate) {
+      pdf.text(`Fällig: ${formatDate(docData.dueDate, locale)}`, rightColumnX, headerTop + 54, {
+        width: pageWidth * 0.45,
+        align: "right",
+      });
+    }
+    if (!isInvoice && docData.validUntil) {
+      pdf.text(`Gültig bis: ${formatDate(docData.validUntil, locale)}`, rightColumnX, headerTop + 54, {
+        width: pageWidth * 0.45,
+        align: "right",
+      });
+    }
+
+    pdf.moveDown(2);
+
+    writeSectionTitle("Empfänger");
+    const clientLines = [
+      client.companyName,
+      client.contactPerson,
+      client.address,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    pdf.font("Helvetica").fontSize(11).text(clientLines || " ", {
+      width: pageWidth,
+    });
+
+    pdf.moveDown(1.2);
+    writeSectionTitle(isInvoice ? `Rechnung ${docData.number ?? ""}` : `Angebot ${docData.number ?? ""}`);
+    if (docData.introText) {
+      pdf.font("Helvetica").fontSize(10).text(docData.introText, {
+        width: pageWidth,
+      });
+      pdf.moveDown(0.8);
+    }
+
+    const tableTop = pdf.y;
+    const colDesc = leftX;
+    const colQty = leftX + pageWidth * 0.6;
+    const colPrice = leftX + pageWidth * 0.72;
+    const colTotal = leftX + pageWidth * 0.86;
+    const descWidth = pageWidth * 0.6 - 8;
+    const qtyWidth = pageWidth * 0.12 - 8;
+    const priceWidth = pageWidth * 0.14 - 8;
+    const totalWidth = pageWidth * 0.14;
+
+    pdf.font("Helvetica-Bold").fontSize(10);
+    pdf.text("Beschreibung", colDesc, tableTop);
+    pdf.text("Menge", colQty, tableTop, { width: qtyWidth, align: "right" });
+    pdf.text("Einzelpreis", colPrice, tableTop, { width: priceWidth, align: "right" });
+    pdf.text("Gesamt", colTotal, tableTop, { width: totalWidth, align: "right" });
+    pdf.moveDown(0.6);
+    pdf.moveTo(leftX, pdf.y).lineTo(leftX + pageWidth, pdf.y).strokeColor("#e5e7eb").stroke();
+    pdf.moveDown(0.4);
+
+    pdf.font("Helvetica").fontSize(10);
+    if (positions.length === 0) {
+      pdf.fillColor("#6b7280").text("Keine Positionen", colDesc, pdf.y, { width: pageWidth });
+      pdf.fillColor("#000000");
+      pdf.moveDown(0.8);
+    } else {
+      positions.forEach((position) => {
+        const qtyText = `${position?.quantity ?? ""} ${position?.unit ?? ""}`.trim();
+        const rowTotal = Number(position?.quantity ?? 0) * Number(position?.price ?? 0);
+        const descText = String(position?.description ?? "");
+        const rowHeight = Math.max(
+          pdf.heightOfString(descText, { width: descWidth }),
+          pdf.heightOfString(qtyText, { width: qtyWidth }),
+          14
+        );
+        ensureSpace(rowHeight + 8);
+        const rowY = pdf.y;
+        pdf.text(descText, colDesc, rowY, { width: descWidth });
+        pdf.text(qtyText, colQty, rowY, { width: qtyWidth, align: "right" });
+        pdf.text(formatCurrency(position?.price ?? 0, { locale, currency }), colPrice, rowY, {
+          width: priceWidth,
+          align: "right",
+        });
+        pdf.text(formatCurrency(rowTotal, { locale, currency }), colTotal, rowY, {
+          width: totalWidth,
+          align: "right",
+        });
+        pdf.y = rowY + rowHeight + 6;
+      });
+    }
+
+    pdf.moveDown(0.6);
+    ensureSpace(60);
+    pdf.font("Helvetica-Bold").fontSize(11).text("Summe", leftX + pageWidth * 0.55, pdf.y, {
+      width: pageWidth * 0.45,
+      align: "right",
+    });
+    pdf.font("Helvetica").fontSize(10);
+    pdf.text(`Netto: ${formatCurrency(net, { locale, currency })}`, leftX + pageWidth * 0.55, pdf.y + 14, {
+      width: pageWidth * 0.45,
+      align: "right",
+    });
+    pdf.text(
+      `MwSt (${vatRate}%): ${formatCurrency(vat, { locale, currency })}`,
+      leftX + pageWidth * 0.55,
+      pdf.y + 28,
+      {
+        width: pageWidth * 0.45,
+        align: "right",
+      }
+    );
+    pdf.font("Helvetica-Bold").fontSize(11).text(`Gesamt: ${formatCurrency(total, { locale, currency })}`, leftX, pdf.y + 44, {
+      width: pageWidth,
+      align: "right",
+    });
+
+    pdf.moveDown(3);
+    if (docData.footerText || settings.footerText) {
+      ensureSpace(40);
+      pdf.font("Helvetica").fontSize(10).text(docData.footerText ?? "", {
+        width: pageWidth,
+      });
+      if (settings.footerText) {
+        pdf.moveDown(0.4);
+        pdf.text(settings.footerText, { width: pageWidth });
+      }
+    }
+
+    if (isInvoice) {
+      ensureSpace(60);
+      pdf.moveDown(0.8);
+      pdf.font("Helvetica-Bold").fontSize(10).text("Bankverbindung", { width: pageWidth });
+      pdf.font("Helvetica").fontSize(10).text(
+        [
+          settings.bankName ? `Bank: ${settings.bankName}` : null,
+          settings.iban ? `IBAN: ${settings.iban}` : null,
+          settings.bic ? `BIC: ${settings.bic}` : null,
+          settings.taxId ? `Steuer-Nr: ${settings.taxId}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        { width: pageWidth }
+      );
+      pdf.moveDown(0.4);
+      pdf.text("Bitte geben Sie bei der Zahlung die Rechnungsnummer an.", { width: pageWidth });
+    }
+
+    pdf.end();
+  });
+
 const createPdfBufferFromPayload = async (type, payload) => {
   const html = renderDocumentHtml({
     type,
@@ -867,22 +1033,7 @@ const createPdfBufferFromPayload = async (type, payload) => {
     return Buffer.from(html, "utf8");
   }
 
-  const browser = await getBrowser();
-const context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
-const page = await context.newPage();
-
-await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
-
-const pdfBuffer = await page.pdf({
-  format: "A4",
-  printBackground: true,
-  margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
-});
-
-await page.close();
-await context.close();
-return pdfBuffer;
-
+  return buildPdfBufferFromPayload(type, payload);
 };
 
 const createPdfAttachment = async ({ type, payload }) => {
@@ -1514,22 +1665,11 @@ app.post(
 
       res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("Email send failed", err);
-      if (err?.code === "SUPABASE_NOT_CONFIGURED") {
-        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
-      }
-      if (err?.code === "SMTP_NOT_CONFIGURED") {
-        return sendError(
-          res,
-          501,
-          "EMAIL_NOT_CONFIGURED",
-          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
-        );
-      }
       const message = typeof err?.message === "string" && err.message.trim().length > 0
         ? err.message
         : "Email send failed.";
-      return sendError(res, 500, "EMAIL_SEND_FAILED", message);
+      console.error("Email send failed", err?.stack ?? err);
+      return sendError(res, err?.status || 500, "EMAIL_SEND_FAILED", message);
     }
   }
 );
@@ -1556,18 +1696,3 @@ export {
   lockInvoiceAfterSend,
   updateSendMetadata,
 };
-const closeBrowser = async () => {
-  if (browserPromise) {
-    const browser = await browserPromise;
-    await browser.close();
-  }
-};
-
-process.on("SIGINT", async () => {
-  await closeBrowser();
-  process.exit(0);
-});
-process.on("SIGTERM", async () => {
-  await closeBrowser();
-  process.exit(0);
-});
