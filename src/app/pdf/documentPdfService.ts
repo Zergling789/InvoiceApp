@@ -12,13 +12,32 @@ const filenameFromHeader = (header: string | null) => {
   return match?.[1] ?? null;
 };
 
-export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blob; filename: string }> {
-  const res = await apiFetch("/api/pdf", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, { auth: true });
+const isIosLikeDevice = () => {
+  if (typeof navigator === "undefined") return false;
+  const platform = navigator.platform ?? "";
+  const maxTouchPoints = navigator.maxTouchPoints ?? 0;
+  const userAgent = navigator.userAgent ?? "";
+  return /iPad|iPhone|iPod/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
+};
+
+const supportsDownloadAttribute = () =>
+  typeof HTMLAnchorElement !== "undefined" && "download" in HTMLAnchorElement.prototype;
+
+export async function getPdfBlob(payload: PdfPayload): Promise<{ blob: Blob; filename: string }> {
+  const res = await apiFetch(
+    "/api/pdf",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      credentials: "include",
+    },
+    { auth: true }
+  );
 
   if (!res.ok) {
+    const responseText = await res.clone().text().catch(() => "");
+    const preview = responseText.trim().slice(0, 200);
+    console.error("PDF download failed", { status: res.status, body: preview });
     const err = await readApiError(res);
     throw new Error(err.message || "PDF konnte nicht erstellt werden.");
   }
@@ -29,21 +48,24 @@ export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blo
   return { blob, filename };
 }
 
-export async function downloadDocumentPdf(payload: PdfPayload) {
-  const res = await apiFetch("/api/pdf/link", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, { auth: true });
+export function triggerPdfDownload(blob: Blob, filename: string): { usedFallback: boolean } {
+  const objectUrl = URL.createObjectURL(blob);
+  const shouldFallback = isIosLikeDevice() || !supportsDownloadAttribute();
 
-  if (!res.ok) {
-    const err = await readApiError(res);
-    throw new Error(err.message || "PDF konnte nicht erstellt werden.");
+  if (shouldFallback) {
+    window.open(objectUrl, "_blank", "noopener");
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    return { usedFallback: true };
   }
 
-  const data = await res.json();
-  if (!data?.url) {
-    throw new Error("PDF konnte nicht erstellt werden.");
-  }
-
-  window.location.href = data.url;
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  return { usedFallback: false };
 }
