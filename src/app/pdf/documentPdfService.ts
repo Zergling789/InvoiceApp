@@ -12,16 +12,13 @@ const filenameFromHeader = (header: string | null) => {
   return match?.[1] ?? null;
 };
 
-const isIosLikeDevice = () => {
+export const isIosLikeDevice = () => {
   if (typeof navigator === "undefined") return false;
   const platform = navigator.platform ?? "";
   const maxTouchPoints = navigator.maxTouchPoints ?? 0;
   const userAgent = navigator.userAgent ?? "";
   return /iPad|iPhone|iPod/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
 };
-
-const supportsDownloadAttribute = () =>
-  typeof HTMLAnchorElement !== "undefined" && "download" in HTMLAnchorElement.prototype;
 
 export async function getPdfBlob(payload: PdfPayload): Promise<{ blob: Blob; filename: string }> {
   const res = await apiFetch(
@@ -43,21 +40,22 @@ export async function getPdfBlob(payload: PdfPayload): Promise<{ blob: Blob; fil
   }
 
   const blob = await res.blob();
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/pdf") && blob.size === 0) {
+    throw new Error("PDF konnte nicht erstellt werden.");
+  }
   const filename =
     filenameFromHeader(res.headers.get("content-disposition")) || `${payload.type}-${payload.docId}.pdf`;
   return { blob, filename };
 }
 
-export function triggerPdfDownload(blob: Blob, filename: string): { usedFallback: boolean } {
-  const objectUrl = URL.createObjectURL(blob);
-  const shouldFallback = isIosLikeDevice() || !supportsDownloadAttribute();
+export function openPdfInViewerIOS(popup: Window | null, objectUrl: string): void {
+  if (!popup) return;
+  popup.location.href = objectUrl;
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 20000);
+}
 
-  if (shouldFallback) {
-    window.open(objectUrl, "_blank", "noopener");
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    return { usedFallback: true };
-  }
-
+export function triggerDownloadNonIOS(objectUrl: string, filename: string): void {
   const link = document.createElement("a");
   link.href = objectUrl;
   link.download = filename;
@@ -67,5 +65,4 @@ export function triggerPdfDownload(blob: Blob, filename: string): { usedFallback
   link.click();
   document.body.removeChild(link);
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-  return { usedFallback: false };
 }

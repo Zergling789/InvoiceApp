@@ -11,7 +11,12 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
-import { getPdfBlob, triggerPdfDownload } from "@/app/pdf/documentPdfService";
+import {
+  getPdfBlob,
+  isIosLikeDevice,
+  openPdfInViewerIOS,
+  triggerDownloadNonIOS,
+} from "@/app/pdf/documentPdfService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { sendDocumentEmail } from "@/app/email/emailService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
@@ -273,16 +278,31 @@ export function DocumentEditor({
   };
 
   const handleDownloadPdf = async () => {
+    const isIos = isIosLikeDevice();
+    const popup = isIos ? window.open("", "_blank", "noopener,noreferrer") : null;
+
+    if (isIos && !popup) {
+      toast.error("Popup blockiert");
+      return;
+    }
+
     try {
       const { blob, filename } = await getPdfBlob({
         type: isInvoice ? "invoice" : "offer",
         docId: formData.id,
       });
-      const { usedFallback } = triggerPdfDownload(blob, filename);
-      if (usedFallback) {
-        toast.info("Teilen \u2192 In Dateien sichern");
+
+      const objectUrl = URL.createObjectURL(blob);
+      if (isIos) {
+        openPdfInViewerIOS(popup, objectUrl);
+        toast.info("Im PDF-Viewer: Teilen \u2192 In Dateien sichern");
+      } else {
+        triggerDownloadNonIOS(objectUrl, filename);
       }
     } catch (error) {
+      if (popup && !popup.closed) {
+        popup.close();
+      }
       const message =
         error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
       toast.error(message);
