@@ -24,6 +24,7 @@ const resolveApiUrl = (input: RequestInfo): RequestInfo => {
 
 export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: ApiFetchOptions) {
   const headers = new Headers(init?.headers ?? {});
+  const credentials = init?.credentials ?? "include";
 
   if (opts?.auth) {
     const token = await requireAccessToken();
@@ -34,7 +35,7 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: Ap
     headers.set("Content-Type", "application/json");
   }
 
-  return fetch(resolveApiUrl(input), { ...init, headers });
+  return fetch(resolveApiUrl(input), { ...init, headers, credentials });
 }
 
 export async function readJsonResponse<T>(res: Response): Promise<T> {

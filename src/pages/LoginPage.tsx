@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
 import { supabase } from "@/supabaseClient";
+import { apiFetch } from "@/app/api/apiClient";
 
 type AuthMode = "login" | "signup" | "magic";
 
@@ -40,6 +41,15 @@ export default function LoginPage() {
         setError(signInError.message);
         setLoading(false);
         return;
+      }
+
+      try {
+        const res = await apiFetch("/api/session", { method: "POST" }, { auth: true });
+        if (!res.ok) {
+          console.warn("Session setup failed", res.status);
+        }
+      } catch (err) {
+        console.warn("Session setup failed", err);
       }
 
       setLoading(false);

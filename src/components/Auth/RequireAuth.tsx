@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 
 import { supabase } from "@/supabaseClient";
+import { apiFetch } from "@/app/api/apiClient";
 
 type RequireAuthProps = {
   children: React.ReactNode;
@@ -20,6 +21,16 @@ export default function RequireAuth({ children }: RequireAuthProps) {
         setAuthed(false);
       } else {
         setAuthed(Boolean(data.session));
+        if (data.session) {
+          try {
+            const res = await apiFetch("/api/session", { method: "POST" }, { auth: true });
+            if (!res.ok) {
+              console.warn("Session setup failed", res.status);
+            }
+          } catch (err) {
+            console.warn("Session setup failed", err);
+          }
+        }
       }
       setChecking(false);
     })();
