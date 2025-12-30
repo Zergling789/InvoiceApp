@@ -150,7 +150,12 @@ export function DocumentEditor({
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewData, setPreviewData] = useState<{ blob: Blob; filename: string } | null>(null);
+  const [previewData, setPreviewData] = useState<{
+    blob: Blob;
+    filename: string;
+    docId: string;
+    type: "offer" | "invoice";
+  } | null>(null);
 
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice)
@@ -292,10 +297,15 @@ export function DocumentEditor({
     }
 
     try {
-      const { blob, filename } = await getPdfBlob({
-        type: isInvoice ? "invoice" : "offer",
-        docId: formData.id,
-      });
+      const docType = isInvoice ? "invoice" : "offer";
+      const cached =
+        previewData?.docId === formData.id && previewData.type === docType ? previewData : null;
+      const { blob, filename } =
+        cached ??
+        (await getPdfBlob({
+          type: docType,
+          docId: formData.id,
+        }));
 
       const objectUrl = URL.createObjectURL(blob);
       if (isIos) {
@@ -331,11 +341,12 @@ export function DocumentEditor({
     }
 
     try {
+      const docType = isInvoice ? "invoice" : "offer";
       const result = await getPdfBlob({
-        type: isInvoice ? "invoice" : "offer",
+        type: docType,
         docId: formData.id,
       });
-      setPreviewData(result);
+      setPreviewData({ ...result, docId: formData.id, type: docType });
     } catch (error) {
       const message =
         error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
