@@ -355,6 +355,36 @@
     font-size: 0.95rem;
   }
 
+  .login__password {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .login__password input {
+    width: 100%;
+    padding-right: 44px;
+  }
+
+  .login__password-toggle {
+    position: absolute;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: #475569;
+    cursor: pointer;
+  }
+
+  .login__password-toggle:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.4);
+    outline-offset: 2px;
+    border-radius: 999px;
+  }
+
   .login__field input:focus {
     outline: 2px solid rgba(59, 130, 246, 0.4);
     border-color: rgba(59, 130, 246, 0.6);
