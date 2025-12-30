@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/supabaseClient";
 import { useToast } from "@/ui/FeedbackProvider";
+import { apiFetch } from "@/app/api/apiClient";
 import type { NavItem } from "./Sidebar";
 
 type TopbarProps = {
@@ -29,6 +30,11 @@ export function Topbar({
 
   const handleSignOut = async () => {
     setSigningOut(true);
+    try {
+      await apiFetch("/api/logout", { method: "POST" });
+    } catch (err) {
+      console.warn("Server logout failed", err);
+    }
     const { error } = await supabase.auth.signOut();
     setSigningOut(false);
     if (error) {

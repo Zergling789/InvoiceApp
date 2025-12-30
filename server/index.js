@@ -2,6 +2,9 @@
 import "dotenv/config";
 import crypto from "crypto";
 import express from "express";
+import cookieParser from "cookie-parser";
+import session from "express-session";
+import RedisStore from "connect-redis";
 import nodemailer from "nodemailer";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
@@ -25,6 +28,10 @@ app.set("trust proxy", Number.isFinite(TRUST_PROXY) ? TRUST_PROXY : 1);
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
+const REDIS_URL = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || "";
+const SESSION_COOKIE_NAME = "invoiceapp.sid";
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_SECRET = process.env.SESSION_SECRET || "dev-session-secret";
 
 // robustes Base-URL handling: ENV > Vercel URL > localhost
 const RAW_APP_BASE_URL =
@@ -35,6 +42,50 @@ const APP_BASE_URL = String(RAW_APP_BASE_URL).trim().replace(/\/+$/, "");
 const DEFAULT_FROM_EMAIL = process.env.SMTP_FROM || process.env.SMTP_USER;
 const SENDER_DOMAIN_NAME = process.env.SENDER_DOMAIN_NAME || "Lightning Bold";
 const IS_VERCEL = Boolean(process.env.VERCEL);
+
+if (!process.env.SESSION_SECRET) {
+  console.warn("[config] Missing SESSION_SECRET. Session cookies will be insecure.");
+}
+
+const sessionRedisClient = REDIS_URL
+  ? createRedisClient({
+      url: REDIS_URL,
+      socket: { reconnectStrategy: false },
+    })
+  : null;
+
+if (sessionRedisClient) {
+  sessionRedisClient.on("error", (err) => {
+    console.error("Session Redis error", err);
+  });
+  sessionRedisClient.connect().catch((err) => {
+    console.error("Session Redis connect failed", err);
+  });
+}
+
+const sessionStore = sessionRedisClient ? new RedisStore({ client: sessionRedisClient }) : undefined;
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  path: "/",
+};
+
+app.use(cookieParser());
+app.use(
+  session({
+    name: SESSION_COOKIE_NAME,
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    store: sessionStore,
+    cookie: {
+      ...SESSION_COOKIE_OPTIONS,
+      maxAge: SESSION_MAX_AGE_MS,
+    },
+  })
+);
 
 const supabaseAdmin =
   SUPABASE_URL && SUPABASE_SERVICE_ROLE
@@ -242,8 +293,6 @@ const EMAIL_FALLBACK_SWEEP_MS = 60 * 1000;
 const EMAIL_FALLBACK_MAX_KEYS = 50_000;
 const EMAIL_FALLBACK_BUFFER_MS = 30 * 1000;
 const REDIS_RETRY_COOLDOWN_MS = 30 * 1000;
-const REDIS_URL = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || "";
-
 logServerConfigOnce();
 
 let redisClient;
@@ -484,6 +533,10 @@ const emailAuthGuard = async (req, res, next) => {
 
 const requireAuth = async (req, res, next) => {
   try {
+    if (req.session?.userId) {
+      req.user = { id: req.session.userId };
+      return next();
+    }
     const auth = req.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!token) {
@@ -495,12 +548,54 @@ const requireAuth = async (req, res, next) => {
       return sendError(res, 401, "unauthorized", "Unauthorized");
     }
     req.user = data.user;
-    next();
+    return next();
   } catch (err) {
     console.error("Auth error", err);
     return sendError(res, 500, "auth_error", "Auth error.");
   }
 };
+
+app.post("/api/session", async (req, res) => {
+  try {
+    const auth = req.get("authorization") || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = requireSupabase();
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    req.session.userId = data.user.id;
+    req.user = data.user;
+    return res.status(204).send();
+  } catch (err) {
+    console.error("Session create error", err);
+    return sendError(res, 500, "auth_error", "Auth error.");
+  }
+});
+
+app.post("/api/logout", (req, res) => {
+  const finish = () => {
+    res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
+    return res.status(204).send();
+  };
+  if (!req.session) {
+    return finish();
+  }
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("Session destroy error", err);
+      return sendError(res, 500, "logout_failed", "Logout failed.");
+    }
+    return finish();
+  });
+});
+
+app.get("/api/me", requireAuth, (req, res) => {
+  res.status(200).json({ ok: true, user: req.user });
+});
 
 const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
   if (!invoiceId || !userId) return;
