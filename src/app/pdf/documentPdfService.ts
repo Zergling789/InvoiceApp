@@ -30,34 +30,20 @@ export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blo
 }
 
 export async function downloadDocumentPdf(payload: PdfPayload) {
-  const isIOS =
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const supportsDownload = "download" in HTMLAnchorElement.prototype;
-  const needsFallback = !supportsDownload || isIOS;
-  const fallbackWindow = needsFallback ? window.open("", "_blank", "noopener,noreferrer") : null;
+  const res = await apiFetch("/api/pdf/link", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }, { auth: true });
 
-  const { blob, filename } = await fetchDocumentPdf(payload);
-  const url = URL.createObjectURL(blob);
-
-  if (fallbackWindow) {
-    if (fallbackWindow.closed) {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } else {
-      fallbackWindow.location.href = url;
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return;
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new Error(err.message || "PDF konnte nicht erstellt werden.");
   }
 
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.style.display = "none";
+  const data = await res.json();
+  if (!data?.url) {
+    throw new Error("PDF konnte nicht erstellt werden.");
+  }
 
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-
-  URL.revokeObjectURL(url);
+  window.location.href = data.url;
 }
