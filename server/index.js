@@ -203,6 +203,16 @@ const logServerConfigOnce = () => {
   });
 };
 
+const getMissingEmailEnv = () => {
+  const missing = [];
+  if (!SUPABASE_URL) missing.push("SUPABASE_URL");
+  if (!SUPABASE_SERVICE_ROLE) missing.push("SUPABASE_SERVICE_ROLE");
+  if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
+  if (!DEFAULT_FROM_EMAIL) missing.push("SMTP_FROM");
+  if (process.env.SMTP_USER && !process.env.SMTP_PASS) missing.push("SMTP_PASS");
+  return missing;
+};
+
 const validateSmtpEnv = () => {
   const missing = [];
   if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
@@ -1411,6 +1421,16 @@ app.post(
         return sendError(res, 401, "unauthorized", "Unauthorized");
       }
       const userId = req.user.id;
+      const missingEnv = getMissingEmailEnv();
+      if (missingEnv.length > 0) {
+        logMissingEnv("email", missingEnv);
+        return sendError(
+          res,
+          500,
+          "missing_env_var",
+          `Missing env var ${missingEnv.join(", ")}`
+        );
+      }
 
       const {
         to,
@@ -1514,7 +1534,7 @@ app.post(
 
       res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("Email send failed", err);
+      console.error("Email send failed", err?.stack || err);
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
         return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
       }
@@ -1526,10 +1546,14 @@ app.post(
           "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
         );
       }
-      const message = typeof err?.message === "string" && err.message.trim().length > 0
-        ? err.message
-        : "Email send failed.";
-      return sendError(res, 500, "EMAIL_SEND_FAILED", message);
+      if (err?.code === "legacy_hash_required") {
+        return sendError(res, err?.status || 400, "legacy_hash_required", "Legacy payload hash required.");
+      }
+      if (err?.code === "payload_mismatch") {
+        return sendError(res, err?.status || 409, "payload_mismatch", "Legacy payload mismatch.");
+      }
+      const status = err?.status || 500;
+      return sendError(res, status, "EMAIL_SEND_FAILED", "Email send failed.");
     }
   }
 );

@@ -45,6 +45,21 @@ REDIS_URL=<optional-rate-limit-redis>
 LOG_SERVER_CONFIG=1
 ```
 
+Minimaler lokaler Test (curl):
+```bash
+curl -X POST http://localhost:4000/api/email \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access-token>" \
+  -d '{
+    "docId": "<invoice-or-offer-id>",
+    "type": "invoice",
+    "to": "client@example.com",
+    "subject": "Ihre Rechnung",
+    "message": "Bitte im Anhang finden Sie die Rechnung.",
+    "senderIdentityId": "<verified-sender-identity-id>"
+  }'
+```
+
 Deliverability Checklist:
 - SPF Record fuer die Versanddomain konfigurieren (provider-spezifisch)
 - DKIM aktivieren und public keys eintragen
