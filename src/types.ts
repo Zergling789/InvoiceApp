@@ -115,6 +115,17 @@ export interface Invoice {
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
 }
 
+export interface InvoicePayment {
+  id: string;
+  invoiceId: string;
+  amountCents: number;
+  currency: string;
+  paidAt: string;
+  method?: string | null;
+  note?: string | null;
+  createdAt?: string | null;
+}
+
 export type DocumentType = "offer" | "invoice";
 
 export const formatCurrency = (
