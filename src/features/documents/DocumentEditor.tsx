@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Trash2, Plus, FileDown, Mail } from "lucide-react";
 
-import type { Client, UserSettings, Position } from "@/types";
+import type { Client, UserSettings, Position, InvoicePayment } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
 
 import { AppButton } from "@/ui/AppButton";
@@ -10,6 +10,7 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
+import * as invoicePaymentsService from "@/app/invoices/invoicePaymentsService";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
@@ -49,6 +50,13 @@ type FormData = {
   sentCount?: number;
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
   invoiceId?: string | null;
+};
+
+type PaymentFormState = {
+  amount: string;
+  paidAt: string;
+  method: string;
+  note: string;
 };
 
 const toLocalISODate = (d: Date) => {
@@ -141,6 +149,14 @@ export function DocumentEditor({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [showPrint, setShowPrint] = useState(startInPrint);
+  const [payments, setPayments] = useState<InvoicePayment[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(() => ({
+    amount: "",
+    paidAt: toLocalISODate(new Date()),
+    method: "",
+    note: "",
+  }));
 
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice)
@@ -163,6 +179,7 @@ export function DocumentEditor({
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+  const paymentDisabled = readOnly || saving;
 
 
   const addPosition = () => {
@@ -198,6 +215,25 @@ export function DocumentEditor({
     const tax = calcVat(subtotal, toNumberOrZero(formData.vatRate));
     return { subtotal, tax, total: calcGross(subtotal, tax) };
   }, [formData.positions, formData.vatRate]);
+
+  const loadPayments = async (invoiceId: string) => {
+    if (!invoiceId) return;
+    setPaymentsLoading(true);
+    try {
+      const data = await invoicePaymentsService.listInvoicePayments(invoiceId);
+      setPayments(data);
+    } catch (err: any) {
+      toast.error(err?.message || "Zahlungen konnten nicht geladen werden.");
+    } finally {
+      setPaymentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isInvoice) return;
+    void loadPayments(formData.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInvoice, formData.id]);
 
   const handleSave = async (opts?: { closeAfterSave?: boolean; data?: FormData }): Promise<boolean> => {
     if (readOnly || locked) return false;
@@ -269,6 +305,60 @@ export function DocumentEditor({
       return true;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddPayment = async () => {
+    if (!isInvoice) return;
+    if (!paymentForm.amount || Number.isNaN(toNumberOrZero(paymentForm.amount))) {
+      toast.error("Bitte einen gültigen Betrag eingeben");
+      return;
+    }
+    if (!paymentForm.paidAt) {
+      toast.error("Bitte ein Zahlungsdatum wählen");
+      return;
+    }
+
+    const amount = toNumberOrZero(paymentForm.amount);
+    if (amount <= 0) {
+      toast.error("Betrag muss größer als 0 sein");
+      return;
+    }
+
+    try {
+      await invoicePaymentsService.addInvoicePayment({
+        id: "",
+        invoiceId: formData.id,
+        amountCents: Math.round(amount * 100),
+        currency: settings.currency ?? "EUR",
+        paidAt: new Date(paymentForm.paidAt).toISOString(),
+        method: paymentForm.method?.trim() || null,
+        note: paymentForm.note?.trim() || null,
+      });
+      setPaymentForm({
+        amount: "",
+        paidAt: toLocalISODate(new Date()),
+        method: "",
+        note: "",
+      });
+      await loadPayments(formData.id);
+      toast.success("Zahlung hinzugefügt");
+    } catch (err: any) {
+      toast.error(err?.message || "Zahlung konnte nicht hinzugefügt werden.");
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!isInvoice) return;
+    const ok = await confirm("Zahlung wirklich löschen?");
+    if (!ok) return;
+
+    try {
+      await invoicePaymentsService.deleteInvoicePayment(paymentId, formData.id);
+      await loadPayments(formData.id);
+      toast.success("Zahlung gelöscht");
+    } catch (err: any) {
+      toast.error(err?.message || "Zahlung konnte nicht gelöscht werden.");
     }
   };
 
@@ -918,6 +1008,124 @@ export function DocumentEditor({
               </div>
             </div>
           </div>
+
+          {isInvoice && (
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-800">Zahlungen</h3>
+                {paymentsLoading && (
+                  <span className="text-xs text-gray-500">Lade...</span>
+                )}
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {payments.length === 0 && !paymentsLoading && (
+                  <div className="text-sm text-gray-500">Noch keine Zahlungen erfasst.</div>
+                )}
+                {payments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex flex-col gap-1 rounded-md border border-gray-200 bg-white p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium text-gray-800">
+                        {formatCurrency(
+                          Number(payment.amountCents ?? 0) / 100,
+                          settings.locale ?? "de-DE",
+                          settings.currency ?? "EUR"
+                        )}
+                      </span>
+                      <span className="text-gray-500">
+                        {formatDate(payment.paidAt, settings.locale ?? "de-DE")}
+                      </span>
+                    </div>
+                    {(payment.method || payment.note) && (
+                      <div className="text-xs text-gray-500">
+                        {payment.method && <span>{payment.method}</span>}
+                        {payment.method && payment.note && <span> · </span>}
+                        {payment.note && <span>{payment.note}</span>}
+                      </div>
+                    )}
+                    {!readOnly && !locked && (
+                      <div>
+                        <button
+                          type="button"
+                          className="text-xs text-red-600 hover:underline"
+                          onClick={() => void handleDeletePayment(payment.id)}
+                        >
+                          Zahlung löschen
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {!readOnly && (
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Betrag
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full border rounded p-2 text-sm"
+                      value={paymentForm.amount}
+                      disabled={paymentDisabled}
+                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Zahlungsdatum
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border rounded p-2 text-sm"
+                      value={paymentForm.paidAt}
+                      disabled={paymentDisabled}
+                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, paidAt: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Methode
+                    </label>
+                    <input
+                      className="w-full border rounded p-2 text-sm"
+                      value={paymentForm.method}
+                      disabled={paymentDisabled}
+                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, method: e.target.value }))}
+                      placeholder="Überweisung, Karte, ..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Notiz
+                    </label>
+                    <input
+                      className="w-full border rounded p-2 text-sm"
+                      value={paymentForm.note}
+                      disabled={paymentDisabled}
+                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, note: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div className="md:col-span-4">
+                    <AppButton
+                      variant="secondary"
+                      onClick={() => void handleAddPayment()}
+                      disabled={paymentDisabled}
+                    >
+                      Zahlung hinzufügen
+                    </AppButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label
