@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { LayoutDashboard, Users, FolderKanban, FileText, Receipt } from "lucide-react";
+import { LayoutDashboard, Users, FolderKanban, FileText, Receipt, MessageSquare } from "lucide-react";
 
 import Dashboard from "@/features/dashboard/Dashboard";
 import Clients from "@/features/clients/Clients";
@@ -7,6 +7,7 @@ import Projects from "@/features/projects/Projects";
 import DocumentsPage from "@/features/documents/DocumentsPage";
 import SettingsView from "@/features/settings/SettingsView";
 import VerifyEmailResult from "@/features/settings/VerifyEmailResult";
+import FeedbackPage from "@/features/feedback/FeedbackPage";
 import AppShell from "@/components/Layout/AppShell";
 import type { NavItem } from "@/components/Layout/Sidebar";
 import HomePage from "@/pages/HomePage";
@@ -19,6 +20,7 @@ const navItems: NavItem[] = [
   { to: "/app/projects", label: "Projekte", icon: <FolderKanban size={16} /> },
   { to: "/app/offers", label: "Angebote", icon: <FileText size={16} /> },
   { to: "/app/invoices", label: "Rechnungen", icon: <Receipt size={16} /> },
+  { to: "/app/feedback", label: "Feedback", icon: <MessageSquare size={16} /> },
 ];
 
 export default function App() {
@@ -40,6 +42,7 @@ export default function App() {
         <Route path="projects" element={<Projects />} />
         <Route path="offers" element={<DocumentsPage type="offer" />} />
         <Route path="invoices" element={<DocumentsPage type="invoice" />} />
+        <Route path="feedback" element={<FeedbackPage />} />
         <Route path="settings" element={<SettingsView />} />
         <Route path="settings/email/verify" element={<VerifyEmailResult />} />
 

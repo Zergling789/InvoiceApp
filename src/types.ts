@@ -115,6 +115,14 @@ export interface Invoice {
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
 }
 
+export interface FeedbackEntry {
+  id: string;
+  subject: string;
+  message: string;
+  rating?: number | null;
+  createdAt: string;
+}
+
 export type DocumentType = "offer" | "invoice";
 
 export const formatCurrency = (
