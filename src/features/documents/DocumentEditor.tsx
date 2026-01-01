@@ -436,7 +436,8 @@ export function DocumentEditor({
     return (
       <div className="fixed inset-0 bg-white z-50 overflow-auto">
         <div className="max-w-[210mm] mx-auto p-[10mm] min-h-screen bg-white shadow-none print:shadow-none">
-          <div className="no-print flex justify-between mb-8 p-4 bg-gray-100 rounded-lg">
+          <div className="no-print flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg rounded-lg sm:flex-row sm:items-center sm:justify-between">
+
             <AppButton
               variant="secondary"
               onClick={() => {
@@ -447,7 +448,7 @@ export function DocumentEditor({
               {readOnly ? "Schließen" : "Zurück zum Editor"}
             </AppButton>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 sm:justify-end">
               <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
                 <FileDown size={16} /> PDF herunterladen
               </AppButton>

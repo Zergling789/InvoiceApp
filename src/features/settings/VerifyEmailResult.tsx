@@ -52,8 +52,7 @@ export default function VerifyEmailResult() {
     <div className="space-y-3">
       <h1 className="text-xl font-semibold text-gray-900">E-Mail Verifizierung</h1>
       <p className="text-sm text-gray-600">{message}</p>
-      <div className="flex gap-2">
-        <AppButton variant="secondary" onClick={() => navigate("/app/settings")}>
+      <div className="flex flex-wrap gap-2">        <AppButton variant="secondary" onClick={() => navigate("/app/settings")}>
           Zu den Einstellungen
         </AppButton>
         {(status === "expired" || status === "invalid" || status === "used") && (

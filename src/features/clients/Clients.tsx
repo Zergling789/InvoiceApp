@@ -153,8 +153,7 @@ export default function Clients() {
                   {c.address && <div className="text-sm text-gray-500 whitespace-pre-line">{c.address}</div>}
                 </div>
 
-                <div className="flex gap-2">
-                  <AppButton variant="secondary" onClick={() => startEdit(c)}>
+                <div className="flex flex-wrap gap-2">                  <AppButton variant="secondary" onClick={() => startEdit(c)}>
                     Bearbeiten
                   </AppButton>
                   <AppButton variant="danger" onClick={() => deleteClient(c.id)} disabled={isBusy}>

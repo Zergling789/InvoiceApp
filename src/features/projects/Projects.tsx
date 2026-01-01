@@ -113,8 +113,7 @@ export default function Projects() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Projekte</h1>
 
-        <div className="flex gap-2">
-          <AppButton variant="secondary" onClick={() => void refresh()} disabled={loading || saving}>
+        <div className="flex flex-wrap gap-2">          <AppButton variant="secondary" onClick={() => void refresh()} disabled={loading || saving}>
             <RefreshCcw size={16} /> Neu laden
           </AppButton>
 
