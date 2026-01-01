@@ -56,7 +56,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div className="fixed inset-x-4 safe-bottom-offset z-50 flex flex-col gap-2 sm:inset-x-auto sm:right-4">
         {toasts.map((toast) => (
           <div
             key={toast.id}
@@ -103,8 +103,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={api}>
       {children}
       {dialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/50 p-4">
+          <div className="w-full max-w-md rounded-t-2xl sm:rounded-xl bg-white p-6 shadow-xl safe-bottom">
             <h3 className="text-lg font-semibold text-gray-900">{dialog.title}</h3>
             <p className="mt-2 text-sm text-gray-600">{dialog.message}</p>
             <div className="mt-6 flex justify-end gap-2">

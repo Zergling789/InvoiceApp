@@ -110,10 +110,11 @@ export default function Projects() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Projekte</h1>
 
-        <div className="flex flex-wrap gap-2">          <AppButton variant="secondary" onClick={() => void refresh()} disabled={loading || saving}>
+        <div className="flex flex-wrap gap-2">
+          <AppButton variant="secondary" onClick={() => void refresh()} disabled={loading || saving}>
             <RefreshCcw size={16} /> Neu laden
           </AppButton>
 
@@ -139,6 +140,7 @@ export default function Projects() {
                 className="w-full border rounded p-2"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                autoComplete="off"
               />
             </div>
 
@@ -182,6 +184,7 @@ export default function Projects() {
                   value={String(draft.hourlyRate)}
                   onChange={(e) => setDraft({ ...draft, hourlyRate: toNumber(e.target.value, 0) })}
                   disabled={draft.budgetType !== "hourly"}
+                  inputMode="decimal"
                 />
                 {draft.budgetType !== "hourly" && (
                   <div className="text-xs text-gray-500 mt-1">Nicht relevant bei Festpreis.</div>
@@ -195,6 +198,7 @@ export default function Projects() {
                   className="w-full border rounded p-2"
                   value={String(draft.budgetTotal)}
                   onChange={(e) => setDraft({ ...draft, budgetTotal: toNumber(e.target.value, 0) })}
+                  inputMode="decimal"
                 />
                 <div className="text-xs text-gray-500 mt-1">{budgetHint}</div>
               </div>
@@ -241,7 +245,7 @@ export default function Projects() {
         ) : (
           <div className="divide-y">
             {projects.map((p) => (
-              <div key={p.id} className="py-4 flex items-start justify-between gap-4">
+              <div key={p.id} className="py-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="font-semibold text-gray-900">{p.name}</div>
                   <div className="text-sm text-gray-600">

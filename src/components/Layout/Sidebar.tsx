@@ -11,7 +11,8 @@ export type NavItem = {
 export function Sidebar({ items }: { items: NavItem[] }) {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium",
+      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[44px]",
+      "focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60",
       isActive ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100",
     ].join(" ");
 

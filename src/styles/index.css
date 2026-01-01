@@ -5,12 +5,49 @@
 @layer base {
   :root {
     color-scheme: light;
+    --app-space-1: clamp(0.35rem, 0.3rem + 0.2vw, 0.5rem);
+    --app-space-2: clamp(0.6rem, 0.55rem + 0.3vw, 0.85rem);
+    --app-space-3: clamp(0.9rem, 0.8rem + 0.6vw, 1.4rem);
+    --app-space-4: clamp(1.2rem, 1rem + 1vw, 2rem);
+    --app-radius-lg: 16px;
+    --app-text-base: clamp(0.95rem, 0.9rem + 0.4vw, 1rem);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
     font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background-color: #f3f4f6;
+    font-size: var(--app-text-base);
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+
+  input,
+  select {
+    min-height: 44px;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgba(79, 70, 229, 0.5);
+    outline-offset: 2px;
   }
 
   .print-only {
@@ -30,11 +67,38 @@
       display: block !important;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
+  .app-container {
+    width: 100%;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: var(--app-space-4);
+  }
+
+  .app-card {
+    background: #ffffff;
+    border-radius: var(--app-radius-lg);
+    padding: var(--app-space-3);
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+
   .landing {
     min-height: 100vh;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     gap: 64px;
@@ -287,6 +351,7 @@
 
   .login {
     min-height: 100vh;
+    min-height: 100svh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -343,7 +408,8 @@
     border: none;
     background: transparent;
     font-weight: 600;
-    padding: 8px 12px;
+    padding: 10px 12px;
+    min-height: 44px;
     border-radius: 999px;
     cursor: pointer;
     color: #64748b;
@@ -367,6 +433,7 @@
     border-radius: 14px;
     border: 1px solid rgba(148, 163, 184, 0.6);
     font-size: 0.95rem;
+    min-height: 44px;
   }
 
   .login__field input:focus {
@@ -397,7 +464,7 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 12px 18px;
+    padding: 14px 20px;
     border-radius: 999px;
     border: none;
     background: #0f172a;
@@ -454,5 +521,34 @@
       flex-direction: column;
       gap: 8px;
     }
+  }
+}
+
+@layer utilities {
+  .min-h-screen-safe {
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+
+  .app-shell {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+
+  @media (min-width: 768px) {
+    .app-shell {
+      padding-bottom: 0;
+    }
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-bottom-offset {
+    bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 }
