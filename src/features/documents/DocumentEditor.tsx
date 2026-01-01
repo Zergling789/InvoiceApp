@@ -448,9 +448,11 @@ export function DocumentEditor({
               {readOnly ? "Schließen" : "Zurück zum Editor"}
             </AppButton>
 
-            <div className="flex flex-wrap gap-2 sm:justify-end">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
-                <FileDown size={16} /> PDF herunterladen
+                <FileDown size={16} />
+                <span className="inline sm:hidden">PDF</span>
+                <span className="hidden sm:inline">PDF herunterladen</span>
               </AppButton>
 
               <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
@@ -938,12 +940,12 @@ export function DocumentEditor({
           </div>
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
+        <div className="p-6 border-t bg-gray-50 flex flex-col gap-3 rounded-b-xl sm:flex-row sm:items-center sm:justify-between">
           <AppButton variant="ghost" onClick={onClose}>
             Schließen
           </AppButton>
 
-          <div className="flex gap-2 flex-wrap justify-end">
+          <div className="flex flex-wrap items-center gap-2 justify-end">
             <AppButton
               variant="secondary"
               disabled={saving}
