@@ -13,8 +13,8 @@ export function AppButton({
   ...props
 }: Props) {
   const base =
-    "px-4 py-2 rounded-md font-medium text-sm transition-colors flex items-center gap-2 " +
-    "disabled:opacity-50 disabled:cursor-not-allowed";
+    "min-h-[44px] px-4 py-2.5 rounded-md font-medium text-sm transition-colors flex items-center gap-2 " +
+    "disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60";
 
   const variants: Record<ButtonVariant, string> = {
     primary: "bg-indigo-600 text-white hover:bg-indigo-700",

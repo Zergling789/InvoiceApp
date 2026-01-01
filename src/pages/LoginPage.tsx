@@ -123,6 +123,8 @@ export default function LoginPage() {
               type="email"
               name="email"
               autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
@@ -135,6 +137,7 @@ export default function LoginPage() {
                 type="password"
                 name="password"
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                autoCapitalize="none"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required

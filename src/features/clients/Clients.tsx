@@ -62,9 +62,9 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Kunden</h1>
-        <AppButton onClick={startNew}>
+        <AppButton onClick={startNew} className="w-full sm:w-auto justify-center">
           <Plus size={16} /> Neuer Kunde
         </AppButton>
       </div>
@@ -82,6 +82,7 @@ export default function Clients() {
                 className="w-full border rounded p-2"
                 value={editing.companyName}
                 onChange={(e) => setEditing({ ...editing, companyName: e.target.value })}
+                autoComplete="organization"
               />
             </div>
 
@@ -91,15 +92,19 @@ export default function Clients() {
                 className="w-full border rounded p-2"
                 value={editing.contactPerson}
                 onChange={(e) => setEditing({ ...editing, contactPerson: e.target.value })}
+                autoComplete="name"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
               <input
+                type="email"
                 className="w-full border rounded p-2"
                 value={editing.email}
                 onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                autoComplete="email"
+                inputMode="email"
               />
             </div>
 
@@ -143,7 +148,7 @@ export default function Clients() {
         ) : (
           <div className="divide-y">
             {clients.map((c) => (
-              <div key={c.id} className="py-4 flex items-start justify-between gap-4">
+              <div key={c.id} className="py-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="font-semibold text-gray-900">{c.companyName}</div>
                   <div className="text-sm text-gray-600">
@@ -153,7 +158,8 @@ export default function Clients() {
                   {c.address && <div className="text-sm text-gray-500 whitespace-pre-line">{c.address}</div>}
                 </div>
 
-                <div className="flex flex-wrap gap-2">                  <AppButton variant="secondary" onClick={() => startEdit(c)}>
+                <div className="flex flex-wrap gap-2">
+                  <AppButton variant="secondary" onClick={() => startEdit(c)}>
                     Bearbeiten
                   </AppButton>
                   <AppButton variant="danger" onClick={() => deleteClient(c.id)} disabled={isBusy}>

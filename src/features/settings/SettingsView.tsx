@@ -238,7 +238,7 @@ export default function SettingsView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Einstellungen</h1>
           <p className="text-sm text-gray-600">Branding, Nummernkreise und Firmendaten.</p>
@@ -298,6 +298,7 @@ export default function SettingsView() {
                   className="w-full p-2 border rounded"
                   value={settings.name}
                   onChange={(e) => setSettings({ ...settings, name: e.target.value })}
+                  autoComplete="name"
                 />
               </div>
 
@@ -307,6 +308,7 @@ export default function SettingsView() {
                   className="w-full p-2 border rounded"
                   value={settings.companyName}
                   onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                  autoComplete="organization"
                 />
               </div>
 
@@ -317,6 +319,8 @@ export default function SettingsView() {
                   className="w-full p-2 border rounded"
                   value={settings.email}
                   onChange={(e) => setSettings({ ...settings, email: e.target.value })}
+                  autoComplete="email"
+                  inputMode="email"
                 />
               </div>
 
@@ -364,7 +368,7 @@ export default function SettingsView() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Standard MwSt (%)</label>
                   <input
@@ -374,6 +378,7 @@ export default function SettingsView() {
                     onChange={(e) =>
                       setSettings({ ...settings, defaultVatRate: toNumberOrFallback(e.target.value, 19) })
                     }
+                    inputMode="decimal"
                   />
                 </div>
 
@@ -389,6 +394,7 @@ export default function SettingsView() {
                         defaultPaymentTerms: Math.max(0, Math.trunc(toNumberOrFallback(e.target.value, 14))),
                       })
                     }
+                    inputMode="numeric"
                   />
                 </div>
               </div>
@@ -450,6 +456,7 @@ export default function SettingsView() {
                         numberPadding: Math.max(1, Math.trunc(Number(e.target.value ?? 4))),
                       })
                     }
+                    inputMode="numeric"
                   />
                 </div>
               </div>

@@ -8,7 +8,7 @@ export function AppCard({
   className?: string;
 }) {
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${className}`}>
+    <div className={`app-card ${className}`}>
       {children}
     </div>
   );

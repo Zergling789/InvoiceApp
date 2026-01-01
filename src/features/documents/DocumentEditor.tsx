@@ -511,7 +511,8 @@ export function DocumentEditor({
               <p className="mb-6 whitespace-pre-line text-sm">{formData.introText}</p>
             )}
 
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <table className="w-full min-w-[520px] text-left text-sm">
               <thead>
                 <tr className="border-b-2 border-gray-100">
                   <th className="py-2 w-1/2">Beschreibung</th>
@@ -564,6 +565,7 @@ export function DocumentEditor({
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
 
           <div className="mt-12 pt-8 border-t border-gray-100 text-sm">
@@ -595,8 +597,8 @@ export function DocumentEditor({
 
   // ---------- Normal Editor ----------
   return (
-    <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center p-4 z-40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40">
+      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100svh] sm:h-[90vh] flex flex-col safe-bottom">
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-bold">
             {readOnly
@@ -705,6 +707,7 @@ export function DocumentEditor({
                   onChange={(e) =>
                     setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
                   }
+                  inputMode="decimal"
                 />
               </div>
             </div>
@@ -742,6 +745,7 @@ export function DocumentEditor({
                   onChange={(e) =>
                     setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
                   }
+                  inputMode="decimal"
                 />
               </div>
             </div>
@@ -839,7 +843,7 @@ export function DocumentEditor({
 
             <div className="space-y-2">
               {(formData.positions ?? []).map((pos, idx) => (
-                <div key={pos.id ?? idx} className="flex gap-2 items-start">
+                <div key={pos.id ?? idx} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <div className="flex-[3]">
                     <input
                       className="w-full border rounded p-2"
@@ -850,7 +854,7 @@ export function DocumentEditor({
                     />
                   </div>
 
-                  <div className="w-20">
+                  <div className="w-full sm:w-20">
                     <input
                       type="number"
                       className="w-full border rounded p-2"
@@ -858,10 +862,11 @@ export function DocumentEditor({
                       value={pos.quantity ?? 0}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "quantity", toNumberOrZero(e.target.value))}
+                      inputMode="decimal"
                     />
                   </div>
 
-                  <div className="w-20">
+                  <div className="w-full sm:w-20">
                     <input
                       className="w-full border rounded p-2"
                       placeholder="Einh."
@@ -871,7 +876,7 @@ export function DocumentEditor({
                     />
                   </div>
 
-                  <div className="w-24">
+                  <div className="w-full sm:w-24">
                     <input
                       type="number"
                       className="w-full border rounded p-2"
@@ -879,13 +884,14 @@ export function DocumentEditor({
                       value={pos.price ?? 0}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
+                      inputMode="decimal"
                     />
                   </div>
 
                   {!readOnly && (
                     <button
                       onClick={() => removePosition(idx)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded"
+                      className="h-11 w-11 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded"
                       title="Position löschen"
                     >
                       <Trash2 size={16} />
@@ -907,7 +913,7 @@ export function DocumentEditor({
           </div>
 
           <div className="flex justify-end pt-4 border-t">
-            <div className="w-64 space-y-2 text-right">
+            <div className="w-full sm:w-64 space-y-2 text-right">
               <div className="flex justify-between">
                 <span>Netto:</span> <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
               </div>

@@ -384,10 +384,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{isInvoice ? "Rechnungen" : "Angebote"}</h1>
 
-        <Button onClick={openNewEditor} disabled={loading}>
+        <Button onClick={openNewEditor} disabled={loading} className="w-full sm:w-auto justify-center">
           <Plus size={16} />
           Erstellen
         </Button>
@@ -416,7 +416,98 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         />
       )}
 
-      <div className="bg-white rounded-lg shadow border overflow-hidden">
+      <div className="md:hidden space-y-4">
+        {items.map((item) => {
+          const net = calcNet(item.positions ?? []);
+          const vat = calcVat(net, item.vatRate);
+          const total = calcGross(net, vat);
+          const overdue =
+            isInvoice &&
+            item.status !== InvoiceStatus.PAID &&
+            isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+
+          return (
+            <div key={item.id} className="app-card space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm text-gray-500">{isInvoice ? "Rechnung" : "Angebot"}</div>
+                  <div className="text-lg font-semibold text-gray-900">{item.number}</div>
+                  <div className="text-sm text-gray-600">{getClientName(item.clientId)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</div>
+                  <div className="font-mono text-sm">{formatCurrency(total, settings?.locale, settings?.currency)}</div>
+                </div>
+              </div>
+
+              <div>
+                {overdue && <Badge color="red">Overdue</Badge>}
+                {!overdue && (
+                  <div className="space-y-1">
+                    <Badge
+                      color={
+                        item.status === InvoiceStatus.PAID ||
+                        item.status === OfferStatus.ACCEPTED ||
+                        item.status === OfferStatus.INVOICED
+                          ? "green"
+                          : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
+                          ? "blue"
+                          : item.status === OfferStatus.REJECTED
+                          ? "red"
+                          : "gray"
+                      }
+                    >
+                      {item.status}
+                    </Badge>
+                    {!isInvoice && item.invoiceId && (
+                      <div className="text-xs text-gray-600">
+                        <Link to="/app/invoices" className="underline">
+                          Invoice created
+                        </Link>{" "}
+                        <span className="text-gray-400">- {item.invoiceId}</span>
+                      </div>
+                    )}
+                    {!isInvoice && (
+                      <div className="text-xs text-gray-500">
+                        {item.sentCount && item.lastSentAt
+                          ? `Sent ${item.sentCount}x - zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
+                          : "Not sent yet"}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {!isInvoice && (
+                  <Button variant="secondary" onClick={() => void handleConvertToInvoice(item.id)}>
+                    <ReceiptEuro size={16} /> Zu Rechnung
+                  </Button>
+                )}
+                {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
+                  <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
+                    <Check size={16} /> Bezahlt
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={() => void openView(item.id)} disabled={openingId === item.id}>
+                  <Eye size={16} /> Ansehen
+                </Button>
+                <Button variant="danger" onClick={() => void handleDelete(item.id)}>
+                  <Trash2 size={16} /> Löschen
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+
+        {items.length === 0 && !loading && (
+          <div className="app-card text-center text-gray-500">Keine Dokumente gefunden.</div>
+        )}
+
+        {loading && <div className="app-card text-center text-gray-500">Lade...</div>}
+      </div>
+
+      <div className="hidden md:block bg-white rounded-lg shadow border overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b">
             <tr>
@@ -469,7 +560,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
                         {!isInvoice && item.invoiceId && (
                           <div className="text-xs text-gray-600">
-                            <Link to="/app/invoices" className="underline">Invoice created</Link>{" "}
+                            <Link to="/app/invoices" className="underline">
+                              Invoice created
+                            </Link>{" "}
                             <span className="text-gray-400">- {item.invoiceId}</span>
                           </div>
                         )}
@@ -484,43 +577,49 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                       </div>
                     )}
                   </td>
-                  <td className="p-4 text-right flex gap-2 justify-end">
-                    {!isInvoice && (
+                  <td className="p-4 text-right">
+                    <div className="flex gap-2 justify-end">
+                      {!isInvoice && (
+                        <button
+                          onClick={() => void handleConvertToInvoice(item.id)}
+                          title="In Rechnung wandeln"
+                          aria-label="In Rechnung wandeln"
+                          className="h-11 w-11 inline-flex items-center justify-center text-indigo-600 hover:bg-indigo-50 rounded"
+                        >
+                          <ReceiptEuro size={18} />
+                        </button>
+                      )}
+
+                      {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
+                        <button
+                          onClick={() => void handleMarkPaid(item.id)}
+                          title="Als bezahlt markieren"
+                          aria-label="Als bezahlt markieren"
+                          className="h-11 w-11 inline-flex items-center justify-center text-green-600 hover:bg-green-50 rounded"
+                        >
+                          <Check size={18} />
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => void handleConvertToInvoice(item.id)}
-                        title="In Rechnung wandeln"
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"
+                        onClick={() => void openView(item.id)}
+                        title={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
+                        aria-label={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
+                        className="h-11 w-11 inline-flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded"
+                        disabled={openingId === item.id}
                       >
-                        <ReceiptEuro size={18} />
+                        <Eye size={18} />
                       </button>
-                    )}
 
-                    {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
                       <button
-                        onClick={() => void handleMarkPaid(item.id)}
-                        title="Als bezahlt markieren"
-                        className="p-2 text-green-600 hover:bg-green-50 rounded"
+                        onClick={() => void handleDelete(item.id)}
+                        className="h-11 w-11 inline-flex items-center justify-center text-gray-400 hover:text-red-500 rounded"
+                        title="Löschen"
+                        aria-label="Löschen"
                       >
-                        <Check size={18} />
+                        <Trash2 size={18} />
                       </button>
-                    )}
-
-                    <button
-                      onClick={() => void openView(item.id)}
-                      title={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded"
-                      disabled={openingId === item.id}
-                    >
-                      <Eye size={18} />
-                    </button>
-
-                    <button
-                      onClick={() => void handleDelete(item.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 rounded"
-                      title="Löschen"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    </div>
                   </td>
                 </tr>
               );
