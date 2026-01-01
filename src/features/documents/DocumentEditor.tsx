@@ -434,31 +434,31 @@ export function DocumentEditor({
     const client = clients.find((c) => c.id === formData.clientId);
 
     return (
-      <div className="fixed inset-0 bg-white z-50 overflow-auto">
-        <div className="max-w-[210mm] mx-auto p-[10mm] min-h-screen bg-white shadow-none print:shadow-none">
-          <div className="no-print flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg rounded-lg sm:flex-row sm:items-center sm:justify-between">
-
-            <AppButton
-              variant="secondary"
-              aria-label={readOnly ? "Schließen" : undefined}
-              onClick={() => {
-                if (readOnly) onClose();
-                else setShowPrint(false);
-              }}
-            >
-              {readOnly ? <X size={16} aria-hidden="true" /> : "Zurück zum Editor"}
-            </AppButton>
-
-            <div className="flex flex-wrap gap-2 sm:justify-end">
-              <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
-                <FileDown size={16} /> PDF herunterladen
+      <div className="fixed inset-0 bg-white z-50 overflow-auto h-screen h-[100dvh]">
+        <div className="min-h-screen min-h-[100dvh] flex flex-col">
+          <div className="w-full max-w-none sm:max-w-[210mm] sm:mx-auto px-4 sm:p-[10mm] bg-white shadow-none print:shadow-none safe-area-container pb-28 sm:pb-12">
+            <div className="no-print hidden sm:flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg sm:flex-row sm:items-center sm:justify-between">
+              <AppButton
+                variant="secondary"
+                aria-label={readOnly ? "Schließen" : undefined}
+                onClick={() => {
+                  if (readOnly) onClose();
+                  else setShowPrint(false);
+                }}
+              >
+                {readOnly ? <X size={16} aria-hidden="true" /> : "Zurück zum Editor"}
               </AppButton>
 
-              <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
-                <Mail size={16} /> E-Mail
-              </AppButton>
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
+                  <FileDown size={16} /> PDF herunterladen
+                </AppButton>
+
+                <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
+                  <Mail size={16} /> E-Mail
+                </AppButton>
+              </div>
             </div>
-          </div>
 
           <div className="flex justify-between mb-12">
             <div>
@@ -587,6 +587,35 @@ export function DocumentEditor({
                 </div>
               </div>
             )}
+          </div>
+          </div>
+
+          <div className="no-print bottom-action-bar sm:hidden">
+            <AppButton
+              variant="secondary"
+              className="flex-1 justify-center"
+              aria-label={readOnly ? "Schließen" : undefined}
+              onClick={() => {
+                if (readOnly) onClose();
+                else setShowPrint(false);
+              }}
+            >
+              {readOnly ? <X size={16} aria-hidden="true" /> : "Zurück"}
+            </AppButton>
+            <AppButton
+              variant="secondary"
+              className="flex-1 justify-center"
+              onClick={() => void handleDownloadPdf()}
+            >
+              <FileDown size={16} /> PDF
+            </AppButton>
+            <AppButton
+              variant="secondary"
+              className="flex-1 justify-center"
+              onClick={() => void handleSendEmail()}
+            >
+              <Mail size={16} /> E-Mail
+            </AppButton>
           </div>
         </div>
       </div>

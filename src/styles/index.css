@@ -456,3 +456,26 @@
     }
   }
 }
+
+@layer utilities {
+  .safe-area-container {
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+
+  .bottom-action-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1px solid #e5e7eb;
+    box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+}
