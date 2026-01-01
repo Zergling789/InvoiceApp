@@ -141,6 +141,7 @@ export function DocumentEditor({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [showPrint, setShowPrint] = useState(startInPrint);
+  const [markAsAction, setMarkAsAction] = useState("");
 
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice)
@@ -163,6 +164,20 @@ export function DocumentEditor({
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+
+  const handleMarkAsChange = (value: string) => {
+    if (!value) return;
+    if (value === "sent") {
+      void handleMarkOfferSentManual();
+    }
+    if (value === "accepted") {
+      void handleMarkOfferAccepted();
+    }
+    if (value === "declined") {
+      void handleMarkOfferDeclined();
+    }
+    setMarkAsAction("");
+  };
 
 
   const addPosition = () => {
@@ -1003,29 +1018,51 @@ export function DocumentEditor({
             )}
 
             {!readOnly && !isInvoice && (
-              <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
-                Mark as sent
-              </AppButton>
+              <div className="w-full sm:hidden">
+                <label className="sr-only" htmlFor="offer-mark-as">
+                  Mark as
+                </label>
+                <select
+                  id="offer-mark-as"
+                  className="w-full border rounded p-2 bg-white"
+                  value={markAsAction}
+                  onChange={(e) => handleMarkAsChange(e.target.value)}
+                  disabled={disabled}
+                >
+                  <option value="">Mark as...</option>
+                  <option value="sent">Mark as sent</option>
+                  <option value="accepted" disabled={formData.status === OfferStatus.ACCEPTED}>
+                    Mark as accepted
+                  </option>
+                  <option value="declined" disabled={formData.status === OfferStatus.REJECTED}>
+                    Mark as declined
+                  </option>
+                </select>
+              </div>
             )}
 
             {!readOnly && !isInvoice && (
-              <AppButton
-                variant="secondary"
-                onClick={() => void handleMarkOfferAccepted()}
-                disabled={formData.status === OfferStatus.ACCEPTED}
-              >
-                Mark as accepted
-              </AppButton>
-            )}
+              <div className="hidden sm:flex gap-2 flex-wrap">
+                <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
+                  Mark as sent
+                </AppButton>
 
-            {!readOnly && !isInvoice && (
-              <AppButton
-                variant="secondary"
-                onClick={() => void handleMarkOfferDeclined()}
-                disabled={formData.status === OfferStatus.REJECTED}
-              >
-                Mark as declined
-              </AppButton>
+                <AppButton
+                  variant="secondary"
+                  onClick={() => void handleMarkOfferAccepted()}
+                  disabled={formData.status === OfferStatus.ACCEPTED}
+                >
+                  Mark as accepted
+                </AppButton>
+
+                <AppButton
+                  variant="secondary"
+                  onClick={() => void handleMarkOfferDeclined()}
+                  disabled={formData.status === OfferStatus.REJECTED}
+                >
+                  Mark as declined
+                </AppButton>
+              </div>
             )}
 
             {!readOnly && !isInvoice && (
