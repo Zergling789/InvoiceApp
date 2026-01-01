@@ -440,12 +440,13 @@ export function DocumentEditor({
 
             <AppButton
               variant="secondary"
+              aria-label={readOnly ? "Schließen" : undefined}
               onClick={() => {
                 if (readOnly) onClose();
                 else setShowPrint(false);
               }}
             >
-              {readOnly ? "Schließen" : "Zurück zum Editor"}
+              {readOnly ? <X size={16} aria-hidden="true" /> : "Zurück zum Editor"}
             </AppButton>
 
             <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -939,8 +940,8 @@ export function DocumentEditor({
         </div>
 
         <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
-          <AppButton variant="ghost" onClick={onClose}>
-            Schließen
+          <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">
+            <X size={16} aria-hidden="true" />
           </AppButton>
 
           <div className="flex gap-2 flex-wrap justify-end">
