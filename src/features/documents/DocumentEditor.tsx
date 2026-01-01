@@ -436,7 +436,7 @@ export function DocumentEditor({
     return (
       <div className="fixed inset-0 bg-white z-50 overflow-hidden">
         <div className="flex h-full min-h-[100vh] min-h-[100dvh] flex-col">
-          <div className="flex-1 overflow-y-auto safe-top safe-area-container">
+          <div className="flex-1 overflow-y-auto safe-top safe-area-container bottom-action-spacer">
             <div className="w-full max-w-none px-4 pt-4 bottom-action-spacer sm:max-w-[210mm] sm:mx-auto sm:p-[10mm] sm:pb-[10mm] bg-white shadow-none print:shadow-none">
               <div className="no-print flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg sm:flex-row sm:items-center sm:justify-between">
                 <AppButton
@@ -447,7 +447,7 @@ export function DocumentEditor({
                     else setShowPrint(false);
                   }}
                 >
-                  {readOnly ? <X size={16} aria-hidden="true" /> : "Zurück zum Editor"}
+                  {readOnly ? "Schließen" : "Zurück zum Editor"}
                 </AppButton>
 
                 <div className="hidden sm:flex flex-wrap gap-2 sm:justify-end">
