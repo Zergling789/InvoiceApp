@@ -453,10 +453,11 @@ export function DocumentEditor({
         <div className="flex h-full min-h-[100vh] min-h-[100dvh] flex-col">
           <div className="flex-1 overflow-y-auto safe-top safe-area-container">
             <div className="w-full max-w-none px-4 pt-4 bottom-action-spacer sm:max-w-[210mm] sm:mx-auto sm:p-[10mm] sm:pb-[10mm] bg-white shadow-none print:shadow-none">
-              <div className="no-print flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg sm:flex-row sm:items-center sm:justify-between">
+              <div className="no-print flex flex-row items-center justify-between gap-3 mb-6 p-3 bg-gray-100 rounded-lg sm:mb-8 sm:p-4">
                 <AppButton
                   variant="secondary"
                   aria-label={readOnly ? "Schließen" : undefined}
+                  className="min-h-[40px] px-3"
                   onClick={() => {
                     if (readOnly) onClose();
                     else setShowPrint(false);
