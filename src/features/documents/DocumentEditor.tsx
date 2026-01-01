@@ -594,7 +594,17 @@ export function DocumentEditor({
             </div>
 
             <div className="bottom-action-bar sm:hidden no-print safe-area-container">
-              <div className="flex flex-wrap gap-2 justify-end">
+              <div className="flex flex-wrap gap-2 justify-between">
+                <AppButton
+                  variant="secondary"
+                  aria-label={readOnly ? "Schließen" : "Zurück zum Editor"}
+                  onClick={() => {
+                    if (readOnly) onClose();
+                    else setShowPrint(false);
+                  }}
+                >
+                  <X size={16} aria-hidden="true" /> {readOnly ? "Schließen" : "Zurück"}
+                </AppButton>
                 <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
                   <FileDown size={16} /> PDF herunterladen
                 </AppButton>
