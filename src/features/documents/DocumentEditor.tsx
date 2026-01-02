@@ -1,5 +1,6 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
@@ -16,7 +17,6 @@ import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 
 export type EditorSeed = {
@@ -53,13 +53,6 @@ type FormData = {
   sentCount?: number;
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
   invoiceId?: string | null;
-};
-
-const toLocalISODate = (d: Date) => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 };
 
 function toNumberOrZero(v: unknown): number {
@@ -148,6 +141,7 @@ export function DocumentEditor({
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const { confirm } = useConfirm();
+  const navigate = useNavigate();
   const [showPrint, setShowPrint] = useState(startInPrint);
   const [showSendModal, setShowSendModal] = useState(false);
 
@@ -469,45 +463,27 @@ export function DocumentEditor({
     });
     if (!ok) return;
 
-    const invoiceNumber = await getNextDocumentNumber("invoice", settings);
-    const invoiceId = newId();
-    const today = toLocalISODate(new Date());
-
-    await invoiceService.saveInvoice({
-      id: invoiceId,
-      number: String(invoiceNumber),
-      offerId: formData.id,
-      clientId: formData.clientId,
-      projectId: formData.projectId,
-      date: today,
-      dueDate: invoiceService.buildDueDate(today, Number(settings.defaultPaymentTerms ?? 14)),
-      positions: formData.positions ?? [],
-      vatRate: Number(formData.vatRate ?? settings.defaultVatRate ?? 0),
-      status: InvoiceStatus.DRAFT,
-      paymentDate: undefined,
-      introText: formData.introText ?? "",
-      footerText: formData.footerText ?? "",
+    const { data, error } = await supabase.rpc("convert_offer_to_invoice", {
+      offer_id: formData.id,
     });
 
-    await applyOfferUpdate({
-      invoiceId,
-      status: formData.status === OfferStatus.INVOICED ? OfferStatus.SENT : formData.status,
-    });
-
-    try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (!authError && authData?.user?.id) {
-        await supabase.from("document_activity").insert({
-          user_id: authData.user.id,
-          doc_type: "offer",
-          doc_id: formData.id,
-          event_type: "CONVERTED",
-          meta: { invoice_id: invoiceId },
-        });
-      }
-    } catch (err) {
-      console.warn("Failed to record activity", err);
+    if (error) {
+      toast.error(
+        mapErrorCodeToToast(error.code ?? error.message) ||
+          "Angebot konnte nicht umgewandelt werden."
+      );
+      return;
     }
+
+    const invoiceId = data?.id;
+    if (!invoiceId) {
+      toast.error("Rechnung konnte nicht erstellt werden.");
+      return;
+    }
+
+    await onSaved();
+    onClose();
+    navigate("/app/invoices", { state: { openId: invoiceId } });
   };
 
   const sendModal = (

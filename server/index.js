@@ -25,6 +25,7 @@ app.set("trust proxy", Number.isFinite(TRUST_PROXY) ? TRUST_PROXY : 1);
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 // robustes Base-URL handling: ENV > Vercel URL > localhost
 const RAW_APP_BASE_URL =
@@ -57,6 +58,42 @@ const requireSupabase = () => {
     throw err;
   }
   return supabaseAdmin;
+};
+
+let supabaseUserConfigLogged = false;
+const createUserSupabaseClient = (token) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!supabaseUserConfigLogged) {
+      console.warn("[config] Missing Supabase anon config.", {
+        hasUrl: Boolean(SUPABASE_URL),
+        hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+      });
+      supabaseUserConfigLogged = true;
+    }
+    const err = new Error("Supabase anon key not configured.");
+    err.status = 500;
+    err.code = "SUPABASE_ANON_KEY_MISSING";
+    throw err;
+  }
+  if (!token) {
+    const err = new Error("Missing auth token.");
+    err.status = 401;
+    err.code = "NOT_AUTHENTICATED";
+    throw err;
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
 };
 
 const sanitizeFilename = (name = "") =>
@@ -462,9 +499,13 @@ const emailRateLimitGuard = async (req, res, next) => {
   return next();
 };
 
-const emailAuthGuard = async (req, res, next) => {
+const getBearerToken = (req) => {
   const auth = req.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  return auth.startsWith("Bearer ") ? auth.slice(7) : "";
+};
+
+const emailAuthGuard = async (req, res, next) => {
+  const token = getBearerToken(req);
   if (token) {
     try {
       const supabase = requireSupabase();
@@ -489,8 +530,7 @@ const emailAuthGuard = async (req, res, next) => {
 
 const requireAuth = async (req, res, next) => {
   try {
-    const auth = req.get("authorization") || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const token = getBearerToken(req);
     if (!token) {
       return sendError(res, 401, "unauthorized", "Unauthorized");
     }
@@ -543,64 +583,6 @@ const normalizeDbError = (err) => {
       return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
     default:
       return null;
-  }
-};
-
-const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
-  if (!invoiceId || !userId) return;
-  const db = supabase ?? requireSupabase();
-  const nowIso = new Date().toISOString();
-  const { error } = await db
-    .from("invoices")
-    .update({ is_locked: true, finalized_at: nowIso })
-    .eq("id", invoiceId)
-    .eq("user_id", userId)
-    .eq("is_locked", false);
-  if (error) {
-    const err = new Error("Failed to lock invoice");
-    err.status = 500;
-    throw err;
-  }
-};
-
-const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
-  if (!docId || !userId) return;
-  const db = requireSupabase();
-  const nowIso = new Date().toISOString();
-  const table = type === "invoice" ? "invoices" : "offers";
-
-  const { data: row } = await db
-    .from(table)
-    .select("sent_count, sent_at, status")
-    .eq("id", docId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  const sentCount = Number(row?.sent_count ?? 0) + 1;
-
-  const updatePayload = {
-    sent_at: row?.sent_count ? row?.sent_at ?? null : nowIso,
-    last_sent_at: nowIso,
-    sent_count: sentCount,
-    sent_via: via ?? "EMAIL",
-    last_sent_to: lastSentTo ?? null,
-  };
-
-  const { error } = await db
-    .from(table)
-    .update(updatePayload)
-    .eq("id", docId)
-    .eq("user_id", userId);
-
-  if (error) {
-    const err = new Error("Failed to update send metadata");
-    if (error.code === "23514" || error.code === "P0001") {
-      err.status = 409;
-      err.code = "status_transition_not_allowed";
-    } else {
-      err.status = 500;
-    }
-    throw err;
   }
 };
 
@@ -1467,8 +1449,13 @@ app.post(
         meta: { to: toList.join(", "), sender_identity_id: identity.id, message_id: info?.messageId ?? null },
       });
 
+      const userToken = getBearerToken(req);
+      // RPCs must run user-scoped so auth.uid() resolves correctly (service role bypasses RLS/auth context).
+      const supabaseUser = createUserSupabaseClient(userToken);
       const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
-      const { error: markError } = await requireSupabase().rpc(rpcName, {
+      // Manual smoke test: POST /api/email with Authorization: Bearer <user JWT> and verify
+      // the RPC sees auth.uid() != null (e.g. mark_*_sent succeeds and updates sender metadata).
+      const { error: markError } = await supabaseUser.rpc(rpcName, {
         doc_id: docId,
         p_to: toList.join(", "),
         p_via: "EMAIL",
@@ -1486,10 +1473,6 @@ app.post(
         throw err;
       }
 
-      if (type === "invoice") {
-        await lockInvoiceAfterSend({ invoiceId: docId, userId });
-      }
-
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("Email send failed", err);
@@ -1499,6 +1482,9 @@ app.post(
       }
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
         return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
+      }
+      if (err?.code === "SUPABASE_ANON_KEY_MISSING") {
+        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase anon key missing.");
       }
       if (err?.code === "SMTP_NOT_CONFIGURED") {
         return sendError(
@@ -1535,8 +1521,6 @@ export {
   createPdfAttachment,
   hashPayload,
   buildPdfFilename,
-  lockInvoiceAfterSend,
-  updateSendMetadata,
 };
 const closeBrowser = async () => {
   if (browserPromise) {
