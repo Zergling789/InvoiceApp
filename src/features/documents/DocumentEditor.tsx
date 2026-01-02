@@ -8,7 +8,6 @@ import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types"
 import { AppButton } from "@/ui/AppButton";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
-import { supabase } from "@/supabaseClient";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -400,15 +399,8 @@ export function DocumentEditor({
     });
     if (!ok) return;
 
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData?.user?.id) {
-      toast.error("Nicht eingeloggt.");
-      return null;
-    }
-
     const { error } = await supabase.rpc("finalize_invoice", {
       invoice_id: formData.id,
-      user_id: authData.user.id,
     });
 
     if (error) {

@@ -1431,7 +1431,6 @@ app.post(
       const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
       const { error: markError } = await requireSupabase().rpc(rpcName, {
         doc_id: docId,
-        p_user_id: userId,
         p_to: toList.join(", "),
         p_via: "EMAIL",
       });
