@@ -1428,7 +1428,23 @@ app.post(
         meta: { to: toList.join(", "), sender_identity_id: identity.id, message_id: info?.messageId ?? null },
       });
 
-      await updateSendMetadata({ type, docId, userId, via: "EMAIL", lastSentTo: toList.join(", ") });
+      const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
+      const { error: markError } = await requireSupabase().rpc(rpcName, {
+        doc_id: docId,
+        p_user_id: userId,
+        p_to: toList.join(", "),
+        p_via: "EMAIL",
+      });
+      if (markError) {
+        const err = new Error("Failed to mark document as sent");
+        if (markError.code === "23514" || markError.code === "P0001") {
+          err.status = 409;
+          err.code = "status_transition_not_allowed";
+        } else {
+          err.status = 500;
+        }
+        throw err;
+      }
 
       if (type === "invoice") {
         await lockInvoiceAfterSend({ invoiceId: docId, userId });
