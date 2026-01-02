@@ -17,10 +17,11 @@ export function AppButton({
     "disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60";
 
   const variants: Record<ButtonVariant, string> = {
-    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
-    secondary: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50",
-    danger: "bg-red-50 text-red-600 hover:bg-red-100",
-    ghost: "text-gray-600 hover:bg-gray-100",
+    primary: "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400",
+    secondary:
+      "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800",
+    danger: "bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20",
+    ghost: "text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800",
   };
 
   return (

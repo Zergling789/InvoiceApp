@@ -1,6 +1,6 @@
 // src/features/documents/DocumentsList.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, ReceiptEuro, Check, Eye } from "lucide-react";
+import { Plus, Trash2, ReceiptEuro, Check, Eye, MoreVertical } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { AppButton as Button } from "@/ui/AppButton";
@@ -20,6 +20,7 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { DocumentEditor } from "./DocumentEditor";
+import { DocumentCard } from "./DocumentCard";
 
 type EditorSeed = {
   id: string;
@@ -417,86 +418,125 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       )}
 
       <div className="md:hidden space-y-4">
-        {items.map((item) => {
+      {items.map((item) => {
           const net = calcNet(item.positions ?? []);
           const vat = calcVat(net, item.vatRate);
           const total = calcGross(net, vat);
+          const dateLabel = item.date ? formatDate(item.date, settings?.locale) : "—";
+          const amountLabel = formatCurrency(total, settings?.locale, settings?.currency);
           const overdue =
             isInvoice &&
             item.status !== InvoiceStatus.PAID &&
             isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+          const canConvert = !isInvoice && canConvertToInvoice({ status: item.status as OfferStatus, invoiceId: item.invoiceId } as Offer);
+
+          const invoiceStatus = () => {
+            if (overdue) return { label: "Überfällig", tone: "red" as const };
+            switch (item.status) {
+              case InvoiceStatus.PAID:
+                return { label: "Bezahlt", tone: "green" as const };
+              case InvoiceStatus.SENT:
+                return { label: "Offen", tone: "blue" as const };
+              case InvoiceStatus.DRAFT:
+                return { label: "Entwurf", tone: "gray" as const };
+              case InvoiceStatus.OVERDUE:
+                return { label: "Überfällig", tone: "red" as const };
+              default:
+                return { label: String(item.status), tone: "gray" as const };
+            }
+          };
+
+          const offerStatus = () => {
+            switch (item.status) {
+              case OfferStatus.DRAFT:
+                return { label: "Entwurf – nicht gesendet", tone: "gray" as const };
+              case OfferStatus.SENT:
+                return { label: "Gesendet – wartet auf Antwort", tone: "blue" as const };
+              case OfferStatus.ACCEPTED:
+                return { label: "Angenommen – bereit zur Rechnung", tone: "green" as const };
+              case OfferStatus.REJECTED:
+                return { label: "Abgelehnt", tone: "red" as const };
+              case OfferStatus.INVOICED:
+                return { label: "In Rechnung gestellt", tone: "green" as const };
+              default:
+                return { label: String(item.status), tone: "gray" as const };
+            }
+          };
+
+          const { label: statusLabel, tone: statusTone } = isInvoice ? invoiceStatus() : offerStatus();
 
           return (
-            <div key={item.id} className="app-card space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm text-gray-500">{isInvoice ? "Rechnung" : "Angebot"}</div>
-                  <div className="text-lg font-semibold text-gray-900">{item.number}</div>
-                  <div className="text-sm text-gray-600">{getClientName(item.clientId)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</div>
-                  <div className="font-mono text-sm">{formatCurrency(total, settings?.locale, settings?.currency)}</div>
-                </div>
-              </div>
-
-              <div>
-                {overdue && <Badge color="red">Overdue</Badge>}
-                {!overdue && (
-                  <div className="space-y-1">
-                    <Badge
-                      color={
-                        item.status === InvoiceStatus.PAID ||
-                        item.status === OfferStatus.ACCEPTED ||
-                        item.status === OfferStatus.INVOICED
-                          ? "green"
-                          : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
-                          ? "blue"
-                          : item.status === OfferStatus.REJECTED
-                          ? "red"
-                          : "gray"
-                      }
+            <DocumentCard
+              key={item.id}
+              typeLabel={isInvoice ? "Rechnung" : "Angebot"}
+              number={item.number}
+              dateLabel={dateLabel}
+              amountLabel={amountLabel}
+              clientName={getClientName(item.clientId)}
+              statusLabel={statusLabel}
+              statusTone={statusTone}
+              statusNote={
+                !isInvoice && item.invoiceId
+                  ? `Rechnung erstellt • ${item.invoiceId}`
+                  : !isInvoice && item.sentCount && item.lastSentAt
+                  ? `Versendet ${item.sentCount}x • zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
+                  : !isInvoice
+                  ? "Noch nicht versendet"
+                  : undefined
+              }
+              accent={isInvoice ? "neutral" : "brand"}
+              actions={
+                <>
+                  {!isInvoice && (
+                    <Button
+                      onClick={() => void handleConvertToInvoice(item.id)}
+                      disabled={!canConvert}
+                      title="Angebot in Rechnung umwandeln"
                     >
-                      {item.status}
-                    </Badge>
-                    {!isInvoice && item.invoiceId && (
-                      <div className="text-xs text-gray-600">
-                        <Link to="/app/invoices" className="underline">
-                          Invoice created
-                        </Link>{" "}
-                        <span className="text-gray-400">- {item.invoiceId}</span>
-                      </div>
-                    )}
-                    {!isInvoice && (
-                      <div className="text-xs text-gray-500">
-                        {item.sentCount && item.lastSentAt
-                          ? `Sent ${item.sentCount}x - zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
-                          : "Not sent yet"}
-                      </div>
-                    )}
+                      <ReceiptEuro size={16} /> Zu Rechnung
+                    </Button>
+                  )}
+                  <Button
+                    variant={isInvoice ? "secondary" : "ghost"}
+                    className="h-11 w-11 justify-center px-0"
+                    onClick={() => void openView(item.id)}
+                    disabled={openingId === item.id}
+                    title={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
+                    aria-label={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
+                  >
+                    <Eye size={18} />
+                  </Button>
+                  {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
+                    <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)} title="Als bezahlt markieren">
+                      <Check size={16} /> Als bezahlt markieren
+                    </Button>
+                  )}
+                </>
+              }
+              menu={
+                <details className="relative">
+                  <summary className="list-none">
+                    <Button
+                      variant="ghost"
+                      className="h-11 w-11 justify-center px-0"
+                      title="Weitere Aktionen"
+                      aria-label="Weitere Aktionen"
+                    >
+                      <MoreVertical size={18} />
+                    </Button>
+                  </summary>
+                  <div className="absolute right-0 z-10 mt-2 w-40 rounded-md border border-gray-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                      onClick={() => void handleDelete(item.id)}
+                    >
+                      <Trash2 size={16} /> Löschen
+                    </button>
                   </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {!isInvoice && (
-                  <Button variant="secondary" onClick={() => void handleConvertToInvoice(item.id)}>
-                    <ReceiptEuro size={16} /> Zu Rechnung
-                  </Button>
-                )}
-                {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
-                  <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
-                    <Check size={16} /> Bezahlt
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={() => void openView(item.id)} disabled={openingId === item.id}>
-                  <Eye size={16} /> Ansehen
-                </Button>
-                <Button variant="danger" onClick={() => void handleDelete(item.id)}>
-                  <Trash2 size={16} /> Löschen
-                </Button>
-              </div>
-            </div>
+                </details>
+              }
+            />
           );
         })}
 
