@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { AppButton as Button } from "@/ui/AppButton";
 import { AppBadge as Badge } from "@/ui/AppBadge";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { DocumentCard } from "@/components/documents/DocumentCard";
 
 import type { Client, UserSettings, Position, Invoice, Offer } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -90,6 +91,35 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [editorInitial, setEditorInitial] = useState<any>(null);
 
   const [openingId, setOpeningId] = useState<string | null>(null);
+
+  const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
+    if (overdue || status === InvoiceStatus.OVERDUE) {
+      return { label: "Überfällig", tone: "red" as const };
+    }
+
+    if (status === InvoiceStatus.PAID) {
+      return { label: "Bezahlt", tone: "green" as const };
+    }
+
+    return { label: "Offen", tone: "yellow" as const };
+  };
+
+  const getOfferStatusMeta = (status: OfferStatus) => {
+    switch (status) {
+      case OfferStatus.DRAFT:
+        return { label: "Entwurf – nicht gesendet", tone: "gray" as const };
+      case OfferStatus.SENT:
+        return { label: "Gesendet – wartet auf Antwort", tone: "blue" as const };
+      case OfferStatus.ACCEPTED:
+        return { label: "Angenommen", tone: "green" as const };
+      case OfferStatus.REJECTED:
+        return { label: "Abgelehnt", tone: "red" as const };
+      case OfferStatus.INVOICED:
+        return { label: "In Rechnung gestellt", tone: "blue" as const };
+      default:
+        return { label: status, tone: "gray" as const };
+    }
+  };
 
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -426,77 +456,116 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             item.status !== InvoiceStatus.PAID &&
             isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
 
+          if (isInvoice) {
+            const statusMeta = getInvoiceStatusMeta(item.status as InvoiceStatus, overdue);
+
+            return (
+              <DocumentCard
+                key={item.id}
+                variant="invoice"
+                documentLabel="Rechnung"
+                number={item.number}
+                date={item.date ? formatDate(item.date, settings?.locale) : "—"}
+                amount={formatCurrency(total, settings?.locale, settings?.currency)}
+                clientName={getClientName(item.clientId)}
+                statusLabel={statusMeta.label}
+                statusTone={statusMeta.tone}
+                primaryAction={
+                  <button
+                    type="button"
+                    onClick={() => void openView(item.id)}
+                    title="Rechnung ansehen"
+                    aria-label="Rechnung ansehen"
+                    className="h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    disabled={openingId === item.id}
+                  >
+                    <Eye size={18} />
+                  </button>
+                }
+                secondaryAction={
+                  item.status !== InvoiceStatus.PAID && !item.isLocked ? (
+                    <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
+                      <Check size={16} /> Als bezahlt
+                    </Button>
+                  ) : undefined
+                }
+                menuActions={
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(item.id)}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Trash2 size={14} /> Löschen
+                    </span>
+                  </button>
+                }
+              />
+            );
+          }
+
+          const offerMeta = getOfferStatusMeta(item.status as OfferStatus);
+
           return (
-            <div key={item.id} className="app-card space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm text-gray-500">{isInvoice ? "Rechnung" : "Angebot"}</div>
-                  <div className="text-lg font-semibold text-gray-900">{item.number}</div>
-                  <div className="text-sm text-gray-600">{getClientName(item.clientId)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</div>
-                  <div className="font-mono text-sm">{formatCurrency(total, settings?.locale, settings?.currency)}</div>
-                </div>
-              </div>
-
-              <div>
-                {overdue && <Badge color="red">Overdue</Badge>}
-                {!overdue && (
-                  <div className="space-y-1">
-                    <Badge
-                      color={
-                        item.status === InvoiceStatus.PAID ||
-                        item.status === OfferStatus.ACCEPTED ||
-                        item.status === OfferStatus.INVOICED
-                          ? "green"
-                          : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
-                          ? "blue"
-                          : item.status === OfferStatus.REJECTED
-                          ? "red"
-                          : "gray"
-                      }
-                    >
-                      {item.status}
-                    </Badge>
-                    {!isInvoice && item.invoiceId && (
-                      <div className="text-xs text-gray-600">
-                        <Link to="/app/invoices" className="underline">
-                          Invoice created
-                        </Link>{" "}
-                        <span className="text-gray-400">- {item.invoiceId}</span>
-                      </div>
-                    )}
-                    {!isInvoice && (
-                      <div className="text-xs text-gray-500">
-                        {item.sentCount && item.lastSentAt
-                          ? `Sent ${item.sentCount}x - zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
-                          : "Not sent yet"}
-                      </div>
-                    )}
+            <DocumentCard
+              key={item.id}
+              variant="quote"
+              documentLabel="Angebot"
+              number={item.number}
+              date={item.date ? formatDate(item.date, settings?.locale) : "—"}
+              amount={formatCurrency(total, settings?.locale, settings?.currency)}
+              clientName={getClientName(item.clientId)}
+              statusLabel={offerMeta.label}
+              statusTone={offerMeta.tone}
+              metadata={
+                <div className="space-y-1 text-xs text-gray-500 dark:text-slate-400">
+                  {item.invoiceId && (
+                    <div>
+                      <Link to="/app/invoices" className="underline">
+                        Rechnung erstellt
+                      </Link>{" "}
+                      <span className="text-gray-400">- {item.invoiceId}</span>
+                    </div>
+                  )}
+                  <div>
+                    {item.sentCount && item.lastSentAt
+                      ? `Gesendet ${item.sentCount}x – zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
+                      : "Noch nicht gesendet"}
                   </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {!isInvoice && (
-                  <Button variant="secondary" onClick={() => void handleConvertToInvoice(item.id)}>
-                    <ReceiptEuro size={16} /> Zu Rechnung
-                  </Button>
-                )}
-                {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
-                  <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
-                    <Check size={16} /> Bezahlt
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={() => void openView(item.id)} disabled={openingId === item.id}>
-                  <Eye size={16} /> Ansehen
+                </div>
+              }
+              primaryAction={
+                <Button
+                  onClick={() => void handleConvertToInvoice(item.id)}
+                  className="bg-blue-600 hover:bg-blue-700 focus-visible:outline-blue-500/60"
+                >
+                  <ReceiptEuro size={16} /> Zu Rechnung
                 </Button>
-                <Button variant="danger" onClick={() => void handleDelete(item.id)}>
-                  <Trash2 size={16} /> Löschen
-                </Button>
-              </div>
-            </div>
+              }
+              secondaryAction={
+                <button
+                  type="button"
+                  onClick={() => void openView(item.id)}
+                  title="Angebot ansehen"
+                  aria-label="Angebot ansehen"
+                  className="h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  disabled={openingId === item.id}
+                >
+                  <Eye size={18} />
+                </button>
+              }
+              menuActions={
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(item.id)}
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Trash2 size={14} /> Löschen
+                  </span>
+                </button>
+              }
+            />
           );
         })}
 
