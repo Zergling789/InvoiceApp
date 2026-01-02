@@ -81,6 +81,7 @@ export interface Offer {
   status: OfferStatus;
   sentAt?: string | null;
   lastSentAt?: string | null;
+  lastSentTo?: string | null;
   sentCount?: number;
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
   invoiceId?: string | null;
@@ -88,6 +89,7 @@ export interface Offer {
 
 export enum InvoiceStatus {
   DRAFT = "DRAFT",
+  ISSUED = "ISSUED",
   SENT = "SENT",
   OVERDUE = "OVERDUE",
   PAID = "PAID",
@@ -111,6 +113,7 @@ export interface Invoice {
   finalizedAt?: string | null;
   sentAt?: string | null;
   lastSentAt?: string | null;
+  lastSentTo?: string | null;
   sentCount?: number;
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
 }

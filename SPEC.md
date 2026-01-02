@@ -15,7 +15,7 @@ Quelle: vorhandener Code (u.a. `src/App.tsx`, `src/pages/*`, `src/features/docum
 - `UserSettings`: name, companyName, address, taxId, defaultVatRate, defaultPaymentTerms, iban, bic, bankName, email.
 - `Client`: id, companyName, contactPerson, email, address, notes.
 - `Project`: id, clientId, name, budgetType (`hourly` | `fixed`), hourlyRate, budgetTotal, status (`active` | `completed` | `archived`).
-- `Offer`/`Invoice`: id, number, clientId, projectId?, date, validUntil|dueDate, positions[{id, description, quantity, unit, price}], vatRate, introText, footerText, status (Offers: Draft/Sent/Accepted/Rejected/Invoiced; Invoices: Draft/Sent/Overdue/Paid), invoice: paymentDate?, offer: offerId? (beim Umwandeln).
+- `Offer`/`Invoice`: id, number, clientId, projectId?, date, validUntil|dueDate, positions[{id, description, quantity, unit, price}], vatRate, introText, footerText, status (Offers: Draft/Sent/Accepted/Rejected/Invoiced; Invoices: Draft/Issued/Sent/Overdue/Paid), invoice: paymentDate?, offer: offerId? (beim Umwandeln).
 
 ### Dashboard
 - Lädt Settings, Clients, Offers, Invoices.
@@ -51,6 +51,10 @@ Quelle: vorhandener Code (u.a. `src/App.tsx`, `src/pages/*`, `src/features/docum
   - Aktionen: Ansehen (öffnet Editor read-only + Print), Löschen (Confirm).
   - Rechnungen: „Als bezahlt markieren“ setzt `status=PAID`, `paymentDate=now`, verlangt vorhandenes `dueDate`.
   - Angebote: „In Rechnung wandeln“ erstellt Invoice mit neuer Nummer, kopiert Positionen/Intro/Footer, setzt status `SENT`, dueDate basierend auf Settings.paymentTerms; ursprüngliches Angebot -> status `INVOICED`.
+
+## Locking source of truth
+- Das Frontend setzt `is_locked` + `finalized_at`, sobald eine Rechnung von `DRAFT` nach `ISSUED` übergeht.
+- Der Server darf beim Versand zusätzlich locken, überschreibt jedoch keine bereits gelockten Rechnungen (idempotent).
 - Neuerstellung:
   - `DocumentEditor` mit Seed: Nummer via `dbNextNumber`, Datum heute, Invoice: dueDate = heute + paymentTerms; Offer: validUntil = heute + 14 Tage; intro/footer Text Default abhängig vom Typ; vatRate aus Settings.defaultVatRate.
   - Validierung: Client Pflicht; Invoice: dueDate Pflicht; Offer: validUntil Pflicht.

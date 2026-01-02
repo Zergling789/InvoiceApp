@@ -20,6 +20,7 @@ export function createEmptyInvoice(id: string, clientId = ""): Invoice {
     finalizedAt: null,
     sentAt: null,
     lastSentAt: null,
+    lastSentTo: null,
     sentCount: 0,
     sentVia: null,
   };
@@ -39,6 +40,7 @@ export function normalizeInvoice(invoice: Invoice): Invoice {
     finalizedAt: invoice.finalizedAt ?? null,
     sentAt: invoice.sentAt ?? null,
     lastSentAt: invoice.lastSentAt ?? null,
+    lastSentTo: invoice.lastSentTo ?? null,
     sentCount: invoice.sentCount ?? 0,
     sentVia: invoice.sentVia ?? null,
   };
