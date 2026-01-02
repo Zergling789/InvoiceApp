@@ -10,6 +10,7 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { supabase } from "@/supabaseClient";
+import { mapErrorCodeToToast } from "@/utils/errorMapping";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -408,7 +409,7 @@ export function DocumentEditor({
     });
 
     if (error) {
-      toast.error(error.message || "Rechnung konnte nicht finalisiert werden.");
+      toast.error(mapErrorCodeToToast(error.message) || "Rechnung konnte nicht finalisiert werden.");
       return null;
     }
 

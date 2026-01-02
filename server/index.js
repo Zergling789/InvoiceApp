@@ -507,6 +507,45 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
+const normalizeDbError = (err) => {
+  const rawMessage = typeof err?.message === "string" ? err.message : "";
+  const message = rawMessage.trim();
+  const code = err?.code || message;
+
+  if (!code) return null;
+
+  switch (code) {
+    case "NOT_AUTHENTICATED":
+      return { code, message: "Not authenticated.", httpStatus: 401 };
+    case "FORBIDDEN":
+      return { code, message: "Forbidden.", httpStatus: 403 };
+    case "INVOICE_LOCKED_CONTENT":
+      return { code, message: "Invoice content is locked.", httpStatus: 409 };
+    case "INVOICE_LOCK_INVALID_STATUS":
+      return { code, message: "Invoice lock status invalid.", httpStatus: 409 };
+    case "status_transition_not_allowed":
+      return { code, message: "Status transition not allowed.", httpStatus: 409 };
+    case "P0001":
+      if (message.includes("NOT_AUTHENTICATED")) {
+        return { code: "NOT_AUTHENTICATED", message: "Not authenticated.", httpStatus: 401 };
+      }
+      if (message.includes("FORBIDDEN")) {
+        return { code: "FORBIDDEN", message: "Forbidden.", httpStatus: 403 };
+      }
+      if (message.includes("INVOICE_LOCKED_CONTENT")) {
+        return { code: "INVOICE_LOCKED_CONTENT", message: "Invoice content is locked.", httpStatus: 409 };
+      }
+      if (message.includes("status transition")) {
+        return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
+      }
+      return { code: "db_error", message: message || "Database error.", httpStatus: 409 };
+    case "23514":
+      return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
+    default:
+      return null;
+  }
+};
+
 const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
   if (!invoiceId || !userId) return;
   const db = supabase ?? requireSupabase();
@@ -1435,10 +1474,12 @@ app.post(
         p_via: "EMAIL",
       });
       if (markError) {
+        const normalized = normalizeDbError(markError);
         const err = new Error("Failed to mark document as sent");
-        if (markError.code === "23514" || markError.code === "P0001") {
-          err.status = 409;
-          err.code = "status_transition_not_allowed";
+        if (normalized) {
+          err.status = normalized.httpStatus;
+          err.code = normalized.code;
+          err.message = normalized.message;
         } else {
           err.status = 500;
         }
@@ -1452,8 +1493,9 @@ app.post(
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("Email send failed", err);
-      if (err?.code === "status_transition_not_allowed") {
-        return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      const dbError = normalizeDbError(err);
+      if (dbError) {
+        return sendError(res, dbError.httpStatus, dbError.code, dbError.message);
       }
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
         return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");

@@ -8,6 +8,7 @@ import { useToast } from "@/ui/FeedbackProvider";
 import { fetchDocumentPdf } from "@/app/pdf/documentPdfService";
 import { sendDocumentEmail } from "@/app/email/emailService";
 import { getSendWarnings } from "@/domain/rules/sendWarnings";
+import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 
 type SendDocumentModalProps = {
@@ -162,9 +163,7 @@ export function SendDocumentModal({
       });
 
       if (!result.ok) {
-        if (result.code === "EMAIL_NOT_CONFIGURED") {
-          toast.error("E-Mail Versand ist nicht konfiguriert.");
-        }
+        toast.error(mapErrorCodeToToast(result.code));
         return;
       }
 
@@ -186,9 +185,9 @@ export function SendDocumentModal({
       toast.success("E-Mail wurde erfolgreich versendet.");
       onClose();
     } catch (error) {
-      const messageText =
-        error instanceof Error && error.message ? error.message : "E-Mail konnte nicht gesendet werden.";
-      toast.error(messageText);
+      const errAny = error as { code?: string; message?: string } | null;
+      const messageText = mapErrorCodeToToast(errAny?.code) || errAny?.message;
+      toast.error(messageText ?? "E-Mail konnte nicht gesendet werden.");
     } finally {
       setSending(false);
     }
