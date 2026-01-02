@@ -7,13 +7,16 @@ import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types"
 
 import { AppButton } from "@/ui/AppButton";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
+import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { supabase } from "@/supabaseClient";
+import { mapErrorCodeToToast } from "@/utils/errorMapping";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
-import { sendDocumentEmail } from "@/app/email/emailService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 
 export type EditorSeed = {
@@ -46,6 +49,7 @@ type FormData = {
   finalizedAt?: string | null;
   sentAt?: string | null;
   lastSentAt?: string | null;
+  lastSentTo?: string | null;
   sentCount?: number;
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
   invoiceId?: string | null;
@@ -62,6 +66,9 @@ function toNumberOrZero(v: unknown): number {
   const n = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
   return Number.isFinite(n) ? n : 0;
 }
+
+const formatStatusLabel = (status: InvoiceStatus | OfferStatus) =>
+  status ? `${status.slice(0, 1)}${status.slice(1).toLowerCase()}` : "—";
 
 function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -97,6 +104,7 @@ function buildFormData(
     finalizedAt: null,
     sentAt: null,
     lastSentAt: null,
+    lastSentTo: null,
     sentCount: 0,
     sentVia: null,
     invoiceId: null,
@@ -141,14 +149,17 @@ export function DocumentEditor({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [showPrint, setShowPrint] = useState(startInPrint);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice)
   );
+  const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
 
   // ✅ WICHTIG: wenn seed/initial wechseln (Viewer lädt async), state neu setzen
   useEffect(() => {
     setFormData(buildFormData(seed, initial, isInvoice));
+    setActiveTab("details");
     setShowPrint(startInPrint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed.id, startInPrint]);
@@ -166,6 +177,17 @@ export function DocumentEditor({
   const showOfferWizard =
     !isInvoice && !readOnly && formData.status === OfferStatus.DRAFT && !formData.invoiceId;
   const selectedClient = clients.find((c) => c.id === formData.clientId);
+  const { defaultSubject, defaultMessage } = useMemo(
+    () => buildTemplateDefaults(formData),
+    [
+      formData,
+      isInvoice,
+      settings.emailDefaultSubject,
+      settings.emailDefaultText,
+      settings.companyName,
+      clients,
+    ]
+  );
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -210,8 +232,12 @@ export function DocumentEditor({
     return { subtotal, tax, total: calcGross(subtotal, tax) };
   }, [formData.positions, formData.vatRate]);
 
-  const handleSave = async (opts?: { closeAfterSave?: boolean; data?: FormData }): Promise<boolean> => {
-    if (readOnly || locked) return false;
+  const handleSave = async (opts?: {
+    closeAfterSave?: boolean;
+    data?: FormData;
+    allowLocked?: boolean;
+  }): Promise<boolean> => {
+    if (readOnly || (!opts?.allowLocked && locked)) return false;
 
     const closeAfterSave = opts?.closeAfterSave ?? true;
     const data = opts?.data ?? formData;
@@ -250,6 +276,7 @@ export function DocumentEditor({
           finalizedAt: data.finalizedAt ?? null,
           sentAt: data.sentAt ?? null,
           lastSentAt: data.lastSentAt ?? null,
+          lastSentTo: data.lastSentTo ?? null,
           sentCount: data.sentCount ?? 0,
           sentVia: data.sentVia ?? null,
         });
@@ -268,6 +295,7 @@ export function DocumentEditor({
           status: (data.status as OfferStatus) ?? OfferStatus.DRAFT,
           sentAt: data.sentAt ?? null,
           lastSentAt: data.lastSentAt ?? null,
+          lastSentTo: data.lastSentTo ?? null,
           sentCount: data.sentCount ?? 0,
           sentVia: data.sentVia ?? null,
           invoiceId: data.invoiceId ?? null,
@@ -296,12 +324,12 @@ export function DocumentEditor({
     }
   };
 
-  const handleSendEmail = async () => {
-    const client = clients.find((c) => c.id === formData.clientId);
+  function buildTemplateDefaults(data: FormData) {
+    const client = clients.find((c) => c.id === data.clientId);
     const templateData = {
       dokument: isInvoice ? "Rechnung" : "Angebot",
-      nummer: formData.number ?? "",
-      datum: formData.date ?? "",
+      nummer: data.number ?? "",
+      datum: data.date ?? "",
       kunde: client?.companyName ?? "",
       firma: settings.companyName ?? "",
     };
@@ -312,68 +340,95 @@ export function DocumentEditor({
       settings.emailDefaultText?.trim() || "Bitte im Anhang finden Sie das Dokument.";
     const defaultMessage = applyTemplate(defaultMessageTemplate, templateData);
 
-    const to = client?.email?.trim() || "";
-    if (!to) {
-      toast.error("Bitte beim Kunden eine E-Mail-Adresse hinterlegen.");
-      return;
+    return { defaultSubject, defaultMessage };
+  }
+
+  const handleSendSuccess = async (nextData: FormData) => {
+    setFormData(nextData);
+    await handleSave({ closeAfterSave: false, data: nextData, allowLocked: true });
+    await onSaved();
+  };
+
+  const validateFinalizeInvoice = () => {
+    if (!formData.clientId) {
+      toast.error("Bitte Kunde wählen");
+      return false;
     }
-    const senderIdentityId = settings.defaultSenderIdentityId ?? "";
-    if (!senderIdentityId) {
-      toast.error("Bitte in den Einstellungen eine verifizierte Reply-To Adresse setzen.");
-      return;
+    if (!formData.number?.trim()) {
+      toast.error("Bitte Rechnungsnummer vergeben");
+      return false;
     }
+    if (!formData.date) {
+      toast.error("Bitte Rechnungsdatum setzen");
+      return false;
+    }
+    if (!formData.dueDate) {
+      toast.error("Bitte Fälligkeitsdatum setzen");
+      return false;
+    }
+    if (!selectedClient?.address?.trim()) {
+      toast.error("Bitte Kundenadresse hinterlegen");
+      return false;
+    }
+    if (!settings.address?.trim()) {
+      toast.error("Bitte Absenderadresse in den Einstellungen ergänzen");
+      return false;
+    }
+    if (!settings.taxId?.trim()) {
+      toast.error("Bitte Steuernummer in den Einstellungen ergänzen");
+      return false;
+    }
+    if (!Number.isFinite(formData.vatRate)) {
+      toast.error("Bitte einen gültigen MwSt.-Satz setzen");
+      return false;
+    }
+    if (!Number.isFinite(settings.defaultPaymentTerms) || settings.defaultPaymentTerms <= 0) {
+      toast.error("Bitte Zahlungsziel in den Einstellungen prüfen");
+      return false;
+    }
+    if ((formData.positions ?? []).length === 0) {
+      toast.error("Bitte mindestens eine Position hinzufügen");
+      return false;
+    }
+    return true;
+  };
 
-    const subject = defaultSubject.trim() || `${isInvoice ? "Rechnung" : "Angebot"} ${formData.number}`;
-    const message = defaultMessage.trim() || "Bitte im Anhang finden Sie das Dokument.";
+  const handleFinalizeInvoice = async (): Promise<FormData | null> => {
+    if (!isInvoice || readOnly || locked) return;
+    if (!validateFinalizeInvoice()) return;
 
-    try {
-      const result = await sendDocumentEmail({
-        documentId: formData.id,
-        documentType: isInvoice ? "invoice" : "offer",
-        to,
-        subject,
-        message,
-        senderIdentityId,
-      });
+    const ok = await confirm({
+      title: "Rechnung finalisieren",
+      message:
+        "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+    });
+    if (!ok) return;
 
-      if (!result.ok) {
-        if (result.code === "EMAIL_NOT_CONFIGURED") {
-          toast.error("E-Mail Versand ist nicht konfiguriert.");
-        }
-        return;
-      }
+    const { error } = await supabase.rpc("finalize_invoice", {
+      invoice_id: formData.id,
+    });
 
-      const nowIso = new Date().toISOString();
-      const nextData = {
-        ...formData,
-        status:
-          formData.status === (isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT)
-            ? isInvoice
-              ? InvoiceStatus.SENT
-              : OfferStatus.SENT
-            : formData.status,
-        sentAt: formData.sentAt ?? nowIso,
-        lastSentAt: nowIso,
-        sentCount: (formData.sentCount ?? 0) + 1,
-        sentVia: "EMAIL",
-        ...(isInvoice
-          ? { isLocked: true, finalizedAt: nowIso }
-          : {}),
-      };
-
-      setFormData(nextData);
-      await handleSave({ closeAfterSave: false, data: nextData });
-      setShowPrint(false);
-      onClose();
-      toast.success("E-Mail wurde erfolgreich versendet.");
-    } catch (err) {
-      console.error(err);
+    if (error) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "E-Mail konnte nicht automatisch gesendet werden."
+        mapErrorCodeToToast(error.code ?? error.message) ||
+          "Rechnung konnte nicht finalisiert werden."
       );
+      return null;
     }
+
+    const updated = await invoiceService.getInvoice(formData.id);
+    if (!updated) {
+      toast.error("Rechnung konnte nicht geladen werden.");
+      return null;
+    }
+
+    const nextData: FormData = {
+      ...formData,
+      ...updated,
+    };
+    setFormData(nextData);
+    await onSaved();
+    return nextData;
   };
 
   const applyOfferUpdate = async (patch: Partial<FormData>) => {
@@ -438,7 +493,39 @@ export function DocumentEditor({
       invoiceId,
       status: formData.status === OfferStatus.INVOICED ? OfferStatus.SENT : formData.status,
     });
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (!authError && authData?.user?.id) {
+        await supabase.from("document_activity").insert({
+          user_id: authData.user.id,
+          doc_type: "offer",
+          doc_id: formData.id,
+          event_type: "CONVERTED",
+          meta: { invoice_id: invoiceId },
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to record activity", err);
+    }
   };
+
+  const sendModal = (
+    <SendDocumentModal
+      isOpen={showSendModal}
+      onClose={() => setShowSendModal(false)}
+      documentType={isInvoice ? "invoice" : "offer"}
+      document={formData as any}
+      client={selectedClient}
+      settings={settings}
+      defaultSubject={defaultSubject}
+      defaultMessage={defaultMessage}
+      onFinalize={isInvoice ? handleFinalizeInvoice : undefined}
+      onSent={async (nextData) => {
+        await handleSendSuccess(nextData as FormData);
+      }}
+    />
+  );
 
   // ---------- Print Overlay ----------
   if (showPrint) {
@@ -446,6 +533,7 @@ export function DocumentEditor({
 
     return (
       <div className="fixed inset-0 bg-white z-50 overflow-hidden">
+        {sendModal}
         <div className="flex h-full min-h-[100vh] min-h-[100dvh] flex-col">
           <div className="flex-1 overflow-y-auto safe-top safe-area-container bottom-action-spacer">
             <div className="w-full max-w-none px-4 pt-4 bottom-action-spacer sm:max-w-[210mm] sm:mx-auto sm:p-[10mm] sm:pb-[10mm] bg-white shadow-none print:shadow-none">
@@ -455,7 +543,10 @@ export function DocumentEditor({
                     <FileDown size={16} /> PDF herunterladen
                   </AppButton>
 
-                  <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
+                  <AppButton
+                    variant="secondary"
+                    onClick={() => setShowSendModal(true)}
+                  >
                     <Mail size={16} /> E-Mail
                   </AppButton>
 
@@ -610,7 +701,10 @@ export function DocumentEditor({
                   <FileDown size={16} /> PDF herunterladen
                 </AppButton>
 
-                <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
+                <AppButton
+                  variant="secondary"
+                  onClick={() => setShowSendModal(true)}
+                >
                   <Mail size={16} /> E-Mail
                 </AppButton>
 
@@ -635,6 +729,7 @@ export function DocumentEditor({
   // ---------- Normal Editor ----------
   return (
     <div className="fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40">
+      {sendModal}
       <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom">
         {showOfferWizard ? (
           <>
@@ -929,21 +1024,66 @@ export function DocumentEditor({
         ) : (
           <>
             <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-bold">
-                {readOnly
-                  ? isInvoice
-                    ? "Rechnung ansehen"
-                    : "Angebot ansehen"
-                  : isInvoice
-                  ? "Rechnung bearbeiten"
-                  : "Angebot bearbeiten"}
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold">
+                  {readOnly
+                    ? isInvoice
+                      ? "Rechnung ansehen"
+                      : "Angebot ansehen"
+                    : isInvoice
+                    ? "Rechnung bearbeiten"
+                    : "Angebot bearbeiten"}
+                </h2>
+                {isInvoice && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2 py-1 rounded border bg-gray-100 text-gray-700">
+                      {formatStatusLabel(formData.status)}
+                    </span>
+                    {locked && (
+                      <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">
+                        Locked
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
               <AppButton variant="ghost" onClick={onClose}>
                 <X size={20} />
               </AppButton>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <button
+                  type="button"
+                  className={`text-sm font-medium px-3 py-2 rounded-t ${
+                    activeTab === "details"
+                      ? "text-blue-600 border-b-2 border-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  onClick={() => setActiveTab("details")}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  className={`text-sm font-medium px-3 py-2 rounded-t ${
+                    activeTab === "activity"
+                      ? "text-blue-600 border-b-2 border-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  onClick={() => setActiveTab("activity")}
+                >
+                  Aktivität
+                </button>
+              </div>
+
+              {activeTab === "activity" ? (
+                <div className="mt-4">
+                  <ActivityTimeline docType={type} docId={formData.id} />
+                </div>
+              ) : (
+              <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label
@@ -1273,6 +1413,8 @@ export function DocumentEditor({
             />
           </div>
         </div>
+              )}
+            </div>
 
         <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
           <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">
@@ -1284,7 +1426,7 @@ export function DocumentEditor({
               variant="secondary"
               disabled={saving}
               onClick={async () => {
-                if (readOnly) {
+                if (readOnly || locked) {
                   setShowPrint(true);
                   return;
                 }
@@ -1305,13 +1447,13 @@ export function DocumentEditor({
             )}
 
             {!readOnly && !isInvoice && formData.status === OfferStatus.DRAFT && (
-              <AppButton onClick={() => void handleSendEmail()}>
+              <AppButton onClick={() => setShowSendModal(true)}>
                 <Mail size={16} /> Send offer
               </AppButton>
             )}
 
             {!readOnly && !isInvoice && formData.status !== OfferStatus.DRAFT && (
-              <AppButton variant="secondary" onClick={() => void handleSendEmail()}>
+              <AppButton variant="secondary" onClick={() => setShowSendModal(true)}>
                 <Mail size={16} /> Resend
               </AppButton>
             )}
@@ -1352,8 +1494,19 @@ export function DocumentEditor({
               </AppButton>
             )}
 
-            {isInvoice && (
-              <AppButton onClick={() => void handleSendEmail()}>
+            {isInvoice && !readOnly && formData.status === InvoiceStatus.DRAFT && (
+              <>
+                <AppButton variant="secondary" onClick={() => void handleFinalizeInvoice()}>
+                  Finalisieren
+                </AppButton>
+                <AppButton onClick={() => setShowSendModal(true)}>
+                  Finalisieren & Senden
+                </AppButton>
+              </>
+            )}
+
+            {isInvoice && formData.status !== InvoiceStatus.DRAFT && (
+              <AppButton onClick={() => setShowSendModal(true)}>
                 <Mail size={16} /> Per E-Mail senden
               </AppButton>
             )}

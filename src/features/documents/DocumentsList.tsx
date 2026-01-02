@@ -121,6 +121,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     }
   };
 
+  const formatStatusLabel = (status: OfferStatus | InvoiceStatus) =>
+    status ? `${status.slice(0, 1)}${status.slice(1).toLowerCase()}` : "—";
+
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of clients) map.set(c.id, c.companyName);
@@ -617,14 +620,16 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                             item.status === OfferStatus.ACCEPTED ||
                             item.status === OfferStatus.INVOICED
                               ? "green"
-                              : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
+                              : item.status === OfferStatus.SENT ||
+                                item.status === InvoiceStatus.SENT ||
+                                item.status === InvoiceStatus.ISSUED
                               ? "blue"
                               : item.status === OfferStatus.REJECTED
                               ? "red"
                               : "gray"
                           }
                         >
-                          {item.status}
+                          {formatStatusLabel(item.status)}
                         </Badge>
 
                         {!isInvoice && item.invoiceId && (

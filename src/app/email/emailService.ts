@@ -1,4 +1,5 @@
 import { apiFetch } from "@/app/api/apiClient";
+import { readApiError } from "@/app/api/apiError";
 
 export type SendDocumentEmailResult = {
   ok: true;
@@ -12,6 +13,8 @@ type SendDocumentEmailPayload = {
   documentId: string;
   documentType: "offer" | "invoice";
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   message: string;
   senderIdentityId: string;
@@ -23,31 +26,19 @@ export async function sendDocumentEmail(payload: SendDocumentEmailPayload): Prom
     body: JSON.stringify(payload),
   }, { auth: true });
 
-  const raw = await res.text().catch(() => "");
-  let data: any = null;
-  if (raw) {
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      data = null;
-    }
-  }
-
-  if (res.ok && data?.ok) {
+  if (res.ok) {
     return { ok: true };
   }
 
-  const code = data?.error?.code ?? "EMAIL_SEND_FAILED";
-  const message = data?.error?.message;
+  const { code, message } = await readApiError(res);
 
   if (code === "EMAIL_NOT_CONFIGURED") {
     return { ok: false, code, message };
   }
 
-  if (!res.ok) {
-    const fallback = message || raw;
-    throw new Error(fallback || "E-Mail konnte nicht gesendet werden.");
+  const error = new Error(message || "E-Mail konnte nicht gesendet werden.");
+  if (code) {
+    (error as any).code = code;
   }
-
-  throw new Error(message || "E-Mail konnte nicht gesendet werden.");
+  throw error;
 }

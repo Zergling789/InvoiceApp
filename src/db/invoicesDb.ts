@@ -2,33 +2,24 @@ import { supabase } from "@/supabaseClient";
 import { InvoiceStatus } from "@/types";
 import type { Invoice } from "@/types";
 
-const toDbInvoiceStatus = (status: InvoiceStatus): string => {
-  switch (status) {
+const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
+  switch ((status ?? "").toUpperCase()) {
+    case InvoiceStatus.ISSUED:
+      return InvoiceStatus.ISSUED;
     case InvoiceStatus.SENT:
-      return "Sent";
-    case InvoiceStatus.OVERDUE:
-      return "Overdue";
-    case InvoiceStatus.PAID:
-      return "Paid";
-    case InvoiceStatus.DRAFT:
-    default:
-      return "Draft";
-  }
-};
-
-const fromDbInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
-  switch (status) {
-    case "Sent":
       return InvoiceStatus.SENT;
-    case "Overdue":
+    case InvoiceStatus.OVERDUE:
       return InvoiceStatus.OVERDUE;
-    case "Paid":
+    case InvoiceStatus.PAID:
       return InvoiceStatus.PAID;
-    case "Draft":
+    case InvoiceStatus.DRAFT:
     default:
       return InvoiceStatus.DRAFT;
   }
 };
+
+const toDbInvoiceStatus = (status: InvoiceStatus | null | undefined): string =>
+  normalizeInvoiceStatus(status ?? InvoiceStatus.DRAFT);
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
@@ -65,11 +56,12 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
     vatRate: Number(r.vat_rate ?? 0),
-    status: fromDbInvoiceStatus(r.status),
+    status: normalizeInvoiceStatus(r.status),
     isLocked: Boolean(r.is_locked ?? false),
     finalizedAt: r.finalized_at ?? null,
     sentAt: r.sent_at ?? null,
     lastSentAt: r.last_sent_at ?? null,
+    lastSentTo: r.last_sent_to ?? null,
     sentCount: Number(r.sent_count ?? 0),
     sentVia: r.sent_via ?? null,
   }));
@@ -101,11 +93,12 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
     vatRate: Number(data.vat_rate ?? 0),
-    status: fromDbInvoiceStatus(data.status),
+    status: normalizeInvoiceStatus(data.status),
     isLocked: Boolean(data.is_locked ?? false),
     finalizedAt: data.finalized_at ?? null,
     sentAt: data.sent_at ?? null,
     lastSentAt: data.last_sent_at ?? null,
+    lastSentTo: data.last_sent_to ?? null,
     sentCount: Number(data.sent_count ?? 0),
     sentVia: data.sent_via ?? null,
   };
@@ -136,8 +129,11 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
 
     vat_rate: Number(inv.vatRate ?? 0),
     status: toDbInvoiceStatus(inv.status ?? InvoiceStatus.DRAFT),
+    is_locked: Boolean(inv.isLocked ?? false),
+    finalized_at: inv.finalizedAt ?? null,
     sent_at: inv.sentAt ?? null,
     last_sent_at: inv.lastSentAt ?? null,
+    last_sent_to: inv.lastSentTo ?? null,
     sent_count: Number(inv.sentCount ?? 0),
     sent_via: inv.sentVia ?? null,
 
