@@ -15,7 +15,7 @@ export function MobileNav({ items }: MobileNavProps) {
 
   return (
     <nav
-      className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom"
+      className="mobile-nav md:hidden fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom"
       aria-label="Mobile Navigation"
     >
       <div className="grid grid-cols-5 gap-1 px-2 py-2">

@@ -1,6 +1,6 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
-import { X, Trash2, Plus, FileDown, Mail } from "lucide-react";
+import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -163,6 +163,17 @@ export function DocumentEditor({
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+  const showOfferWizard =
+    !isInvoice && !readOnly && formData.status === OfferStatus.DRAFT && !formData.invoiceId;
+  const selectedClient = clients.find((c) => c.id === formData.clientId);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("offer-wizard-open", showOfferWizard);
+    return () => {
+      document.body.classList.remove("offer-wizard-open");
+    };
+  }, [showOfferWizard]);
 
 
   const addPosition = () => {
@@ -625,157 +636,449 @@ export function DocumentEditor({
   return (
     <div className="fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40">
       <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-xl font-bold">
-            {readOnly
-              ? isInvoice
-                ? "Rechnung ansehen"
-                : "Angebot ansehen"
-              : isInvoice
-              ? "Rechnung bearbeiten"
-              : "Angebot bearbeiten"}
-          </h2>
-          <AppButton variant="ghost" onClick={onClose}>
-            <X size={20} />
-          </AppButton>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <label
-                className="block text-sm font-medium text-gray-700 mb-1"
-                htmlFor="document-client"
-              >
-                Kunde
-              </label>
-              <select
-                id="document-client"
-                className="w-full border rounded p-2"
-                value={formData.clientId}
-                disabled={disabled}
-                onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-              >
-                <option value="">Wählen...</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.companyName}
-                  </option>
-                ))}
-              </select>
+        {showOfferWizard ? (
+          <>
+            <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
+              <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                <ArrowLeft size={20} />
+              </AppButton>
+              <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
+              <AppButton variant="ghost" aria-label="Einstellungen">
+                <Settings size={20} />
+              </AppButton>
             </div>
 
-            <div>
-              <label
-                className="block text-sm font-medium text-gray-700 mb-1"
-                htmlFor="document-number"
-              >
-                Nummer
-              </label>
-              <input
-                id="document-number"
-                className="w-full border rounded p-2"
-                value={formData.number}
-                disabled={disabled}
-                onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-              />
+            <div className="flex-1 overflow-y-auto bg-gray-50">
+              <div className="px-6 pt-4 pb-3 border-b bg-white">
+                <div className="text-base font-semibold text-gray-700">Kundendaten eingeben</div>
+              </div>
+
+              <div className="px-6 py-4 space-y-5">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+                  <div className="px-4 py-3 border-b">
+                    <h3 className="text-sm font-semibold text-gray-700">Kundendaten</h3>
+                  </div>
+                  <div className="divide-y">
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label
+                        className="text-sm font-medium text-gray-700"
+                        htmlFor="document-client"
+                      >
+                        Kunde
+                      </label>
+                      <select
+                        id="document-client"
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                        value={formData.clientId}
+                        disabled={disabled}
+                        onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                      >
+                        <option value="">Kunde auswählen</option>
+                        {clients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.companyName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-sm font-medium text-gray-700">Ansprechpartner</span>
+                      <input
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
+                        placeholder="z.B. Max Mustermann"
+                        value={selectedClient?.contactPerson ?? ""}
+                        readOnly
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-sm font-medium text-gray-700">E-Mail</span>
+                      <input
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
+                        placeholder="E-Mail-Adresse"
+                        value={selectedClient?.email ?? ""}
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+                  <div className="px-4 py-3 border-b">
+                    <h3 className="text-sm font-semibold text-gray-700">Angebotsdetails</h3>
+                  </div>
+                  <div className="divide-y">
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label className="text-sm font-medium text-gray-700" htmlFor="document-number">
+                        Angebotsnummer
+                      </label>
+                      <input
+                        id="document-number"
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                        value={formData.number}
+                        disabled={disabled}
+                        onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                        placeholder="z.B. ANG-2023-001"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label className="text-sm font-medium text-gray-700" htmlFor="document-date">
+                        Datum
+                      </label>
+                      <input
+                        id="document-date"
+                        type="date"
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                        value={formData.date}
+                        disabled={disabled}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label
+                        className="text-sm font-medium text-gray-700"
+                        htmlFor="document-valid-until"
+                      >
+                        Gültig bis
+                      </label>
+                      <input
+                        id="document-valid-until"
+                        type="date"
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                        value={formData.validUntil ?? ""}
+                        disabled={disabled}
+                        onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label className="text-sm font-medium text-gray-700" htmlFor="document-vat">
+                        MwSt. (%)
+                      </label>
+                      <input
+                        id="document-vat"
+                        type="number"
+                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                        value={formData.vatRate ?? 0}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                        }
+                        inputMode="decimal"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-4">
+                  {(formData.positions ?? []).length > 0 && (
+                    <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+                      {(formData.positions ?? []).map((pos, idx) => (
+                        <div key={pos.id ?? idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-center">
+                          <input
+                            className="w-full border rounded-lg p-2 text-sm"
+                            placeholder="Beschreibung"
+                            value={pos.description ?? ""}
+                            disabled={disabled}
+                            onChange={(e) => updatePosition(idx, "description", e.target.value)}
+                          />
+                          <input
+                            type="number"
+                            className="w-full border rounded-lg p-2 text-sm"
+                            placeholder="Menge"
+                            value={pos.quantity ?? 0}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              updatePosition(idx, "quantity", toNumberOrZero(e.target.value))
+                            }
+                            inputMode="decimal"
+                          />
+                          <input
+                            className="w-full border rounded-lg p-2 text-sm"
+                            placeholder="Einh."
+                            value={pos.unit ?? ""}
+                            disabled={disabled}
+                            onChange={(e) => updatePosition(idx, "unit", e.target.value)}
+                          />
+                          <input
+                            type="number"
+                            className="w-full border rounded-lg p-2 text-sm"
+                            placeholder="Preis"
+                            value={pos.price ?? 0}
+                            disabled={disabled}
+                            onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
+                            inputMode="decimal"
+                          />
+                          {!readOnly && (
+                            <button
+                              onClick={() => removePosition(idx)}
+                              className="h-10 w-10 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"
+                              title="Position löschen"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!readOnly && (
+                    <AppButton
+                      variant="primary"
+                      onClick={addPosition}
+                      className="w-full sm:w-auto px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                    >
+                      <Plus size={18} /> Position hinzufügen
+                    </AppButton>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+                  <div className="px-4 py-3 border-b">
+                    <h3 className="text-sm font-semibold text-gray-700">Zusammenfassung</h3>
+                  </div>
+                  <div className="px-4 py-4 space-y-3 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Zwischensumme:</span>
+                      <span>
+                        {formatCurrency(
+                          totals.subtotal,
+                          settings.locale ?? "de-DE",
+                          settings.currency ?? "EUR"
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>zzgl. MwSt. ({toNumberOrZero(formData.vatRate)}%):</span>
+                      <span>
+                        {formatCurrency(
+                          totals.tax,
+                          settings.locale ?? "de-DE",
+                          settings.currency ?? "EUR"
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-base font-semibold text-blue-700 pt-2 border-t">
+                      <span>Gesamtbetrag:</span>
+                      <span>
+                        {formatCurrency(
+                          totals.total,
+                          settings.locale ?? "de-DE",
+                          settings.currency ?? "EUR"
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                  <div className="space-y-3">
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                        htmlFor="document-intro"
+                      >
+                        Einleitungstext
+                      </label>
+                      <textarea
+                        id="document-intro"
+                        className="w-full border rounded-lg p-2 text-sm"
+                        rows={2}
+                        value={formData.introText ?? ""}
+                        disabled={disabled}
+                        onChange={(e) => setFormData({ ...formData, introText: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                        htmlFor="document-footer"
+                      >
+                        Fußtext
+                      </label>
+                      <textarea
+                        id="document-footer"
+                        className="w-full border rounded-lg p-2 text-sm"
+                        rows={2}
+                        value={formData.footerText ?? ""}
+                        disabled={disabled}
+                        onChange={(e) => setFormData({ ...formData, footerText: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label
-                className="block text-sm font-medium text-gray-700 mb-1"
-                htmlFor="document-date"
+            <div className="px-6 py-4 border-t bg-white flex justify-between gap-3">
+              <AppButton
+                variant="secondary"
+                onClick={onClose}
+                className="w-full sm:w-40 justify-center"
               >
-                Datum
-              </label>
-              <input
-                id="document-date"
-                type="date"
-                className="w-full border rounded p-2"
-                value={formData.date}
-                disabled={disabled}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              />
+                Zurück
+              </AppButton>
+              <AppButton
+                onClick={() => void handleSave({ closeAfterSave: true })}
+                disabled={saving || !formData.clientId}
+                className="w-full sm:w-40 justify-center bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {saving ? "Speichere..." : "Weiter"}
+              </AppButton>
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-bold">
+                {readOnly
+                  ? isInvoice
+                    ? "Rechnung ansehen"
+                    : "Angebot ansehen"
+                  : isInvoice
+                  ? "Rechnung bearbeiten"
+                  : "Angebot bearbeiten"}
+              </h2>
+              <AppButton variant="ghost" onClick={onClose}>
+                <X size={20} />
+              </AppButton>
+            </div>
 
-          {isInvoice ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                  htmlFor="document-due-date"
-                >
-                  Fällig am
-                </label>
-                <input
-                  id="document-due-date"
-                  type="date"
-                  className="w-full border rounded p-2"
-                  value={formData.dueDate ?? ""}
-                  disabled={disabled}
-                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                />
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
+                  <label
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                    htmlFor="document-client"
+                  >
+                    Kunde
+                  </label>
+                  <select
+                    id="document-client"
+                    className="w-full border rounded p-2"
+                    value={formData.clientId}
+                    disabled={disabled}
+                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                  >
+                    <option value="">Wählen...</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.companyName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                    htmlFor="document-number"
+                  >
+                    Nummer
+                  </label>
+                  <input
+                    id="document-number"
+                    className="w-full border rounded p-2"
+                    value={formData.number}
+                    disabled={disabled}
+                    onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                    htmlFor="document-date"
+                  >
+                    Datum
+                  </label>
+                  <input
+                    id="document-date"
+                    type="date"
+                    className="w-full border rounded p-2"
+                    value={formData.date}
+                    disabled={disabled}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <label
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                  htmlFor="document-vat"
-                >
-                  MwSt (%)
-                </label>
-                <input
-                  id="document-vat"
-                  type="number"
-                  className="w-full border rounded p-2"
-                  value={formData.vatRate ?? 0}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
-                  }
-                  inputMode="decimal"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                  htmlFor="document-valid-until"
-                >
-                  Gültig bis
-                </label>
-                <input
-                  id="document-valid-until"
-                  type="date"
-                  className="w-full border rounded p-2"
-                  value={formData.validUntil ?? ""}
-                  disabled={disabled}
-                  onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
-                />
-              </div>
-              <div>
-                <label
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                  htmlFor="document-vat"
-                >
-                  MwSt (%)
-                </label>
-                <input
-                  id="document-vat"
-                  type="number"
-                  className="w-full border rounded p-2"
-                  value={formData.vatRate ?? 0}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
-                  }
-                  inputMode="decimal"
-                />
-              </div>
-            </div>
-          )}
+
+              {isInvoice ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-due-date"
+                    >
+                      Fällig am
+                    </label>
+                    <input
+                      id="document-due-date"
+                      type="date"
+                      className="w-full border rounded p-2"
+                      value={formData.dueDate ?? ""}
+                      disabled={disabled}
+                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-vat"
+                    >
+                      MwSt (%)
+                    </label>
+                    <input
+                      id="document-vat"
+                      type="number"
+                      className="w-full border rounded p-2"
+                      value={formData.vatRate ?? 0}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                      }
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-valid-until"
+                    >
+                      Gültig bis
+                    </label>
+                    <input
+                      id="document-valid-until"
+                      type="date"
+                      className="w-full border rounded p-2"
+                      value={formData.validUntil ?? ""}
+                      disabled={disabled}
+                      onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-vat"
+                    >
+                      MwSt (%)
+                    </label>
+                    <input
+                      id="document-vat"
+                      type="number"
+                      className="w-full border rounded p-2"
+                      value={formData.vatRate ?? 0}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                      }
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+              )}
 
 
           {!isInvoice && (
@@ -1056,6 +1359,8 @@ export function DocumentEditor({
             )}
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
