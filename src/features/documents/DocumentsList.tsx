@@ -1,7 +1,7 @@
 // src/features/documents/DocumentsList.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, ReceiptEuro, Check, Eye } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { AppButton as Button } from "@/ui/AppButton";
 import { AppBadge as Badge } from "@/ui/AppBadge";
@@ -78,6 +78,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [items, setItems] = useState<DocListItem[]>([]);
   const { confirm } = useConfirm();
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -307,6 +309,14 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       setOpeningId(null);
     }
   };
+
+  useEffect(() => {
+    if (!isInvoice) return;
+    const openId = (location.state as { openId?: string } | null)?.openId;
+    if (!openId || typeof openId !== "string") return;
+    void openView(openId);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [isInvoice, location.pathname, location.state, navigate, openView]);
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({ title: "Dokument loeschen", message: "Wirklich loeschen?" });
