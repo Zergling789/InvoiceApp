@@ -84,15 +84,12 @@ export function DocumentCard({
         </div>
         {menuActions && (
           <details className="relative">
-            <summary className="list-none [&::-webkit-details-marker]:hidden">
-              <button
-                type="button"
-                className="h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                aria-label="Weitere Aktionen"
-                title="Weitere Aktionen"
-              >
-                <MoreVertical size={18} />
-              </button>
+            <summary
+              className="list-none [&::-webkit-details-marker]:hidden h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              aria-label="Weitere Aktionen"
+              title="Weitere Aktionen"
+            >
+              <MoreVertical size={18} />
             </summary>
             <div className="absolute right-0 z-10 mt-2 w-44 rounded-md border border-gray-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
               <div className="py-1">{menuActions}</div>
@@ -103,4 +100,3 @@ export function DocumentCard({
     </article>
   );
 }
-
