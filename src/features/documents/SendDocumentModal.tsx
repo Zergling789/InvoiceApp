@@ -180,9 +180,6 @@ export function SendDocumentModal({
         lastSentTo: toList.join(", "),
         sentCount: (activeDocument.sentCount ?? 0) + 1,
         sentVia: "EMAIL",
-        ...(documentType === "invoice"
-          ? { isLocked: true, finalizedAt: activeDocument.finalizedAt ?? nowIso }
-          : {}),
       } as Offer | Invoice;
 
       await onSent(nextData);
