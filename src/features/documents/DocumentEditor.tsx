@@ -7,7 +7,9 @@ import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types"
 
 import { AppButton } from "@/ui/AppButton";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { supabase } from "@/supabaseClient";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -151,10 +153,12 @@ export function DocumentEditor({
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice)
   );
+  const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
 
   // ✅ WICHTIG: wenn seed/initial wechseln (Viewer lädt async), state neu setzen
   useEffect(() => {
     setFormData(buildFormData(seed, initial, isInvoice));
+    setActiveTab("details");
     setShowPrint(startInPrint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed.id, startInPrint]);
@@ -485,6 +489,21 @@ export function DocumentEditor({
       invoiceId,
       status: formData.status === OfferStatus.INVOICED ? OfferStatus.SENT : formData.status,
     });
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (!authError && authData?.user?.id) {
+        await supabase.from("document_activity").insert({
+          user_id: authData.user.id,
+          doc_type: "offer",
+          doc_id: formData.id,
+          event_type: "CONVERTED",
+          meta: { invoice_id: invoiceId },
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to record activity", err);
+    }
   };
 
   const sendModal = (
@@ -1030,6 +1049,37 @@ export function DocumentEditor({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <button
+                  type="button"
+                  className={`text-sm font-medium px-3 py-2 rounded-t ${
+                    activeTab === "details"
+                      ? "text-blue-600 border-b-2 border-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  onClick={() => setActiveTab("details")}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  className={`text-sm font-medium px-3 py-2 rounded-t ${
+                    activeTab === "activity"
+                      ? "text-blue-600 border-b-2 border-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  onClick={() => setActiveTab("activity")}
+                >
+                  Aktivität
+                </button>
+              </div>
+
+              {activeTab === "activity" ? (
+                <div className="mt-4">
+                  <ActivityTimeline docType={type} docId={formData.id} />
+                </div>
+              ) : (
+              <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label
@@ -1359,6 +1409,8 @@ export function DocumentEditor({
             />
           </div>
         </div>
+              </div>
+              )}
 
         <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
           <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">

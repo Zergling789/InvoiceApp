@@ -50,6 +50,9 @@ begin
   where id = invoice_id
   returning * into inv;
 
+  insert into public.document_activity (user_id, doc_type, doc_id, event_type, meta)
+  values (uid, 'invoice', invoice_id, 'FINALIZED', '{}'::jsonb);
+
   return inv;
 end;
 $$;
@@ -104,6 +107,15 @@ begin
     returning * into rec;
   end if;
 
+  insert into public.document_activity (user_id, doc_type, doc_id, event_type, meta)
+  values (
+    uid,
+    'offer',
+    doc_id,
+    'SENT',
+    jsonb_build_object('to', p_to, 'via', p_via)
+  );
+
   return rec;
 end;
 $$;
@@ -157,6 +169,15 @@ begin
     where id = doc_id
     returning * into rec;
   end if;
+
+  insert into public.document_activity (user_id, doc_type, doc_id, event_type, meta)
+  values (
+    uid,
+    'invoice',
+    doc_id,
+    'SENT',
+    jsonb_build_object('to', p_to, 'via', p_via)
+  );
 
   return rec;
 end;
