@@ -163,17 +163,19 @@ export function DocumentEditor({
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
-  const showOfferWizard =
-    !isInvoice && !readOnly && formData.status === OfferStatus.DRAFT && !formData.invoiceId;
+  const showDocumentWizard = !readOnly
+    && (isInvoice
+      ? formData.status === InvoiceStatus.DRAFT
+      : formData.status === OfferStatus.DRAFT && !formData.invoiceId);
   const selectedClient = clients.find((c) => c.id === formData.clientId);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.body.classList.toggle("offer-wizard-open", showOfferWizard);
+    document.body.classList.toggle("offer-wizard-open", showDocumentWizard);
     return () => {
       document.body.classList.remove("offer-wizard-open");
     };
-  }, [showOfferWizard]);
+  }, [showDocumentWizard]);
 
 
   const addPosition = () => {
@@ -636,13 +638,15 @@ export function DocumentEditor({
   return (
     <div className="fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40">
       <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom">
-        {showOfferWizard ? (
+        {showDocumentWizard ? (
           <>
             <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
               <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
                 <ArrowLeft size={20} />
               </AppButton>
-              <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {isInvoice ? "Rechnung erstellen" : "Angebot erstellen"}
+              </h2>
               <AppButton variant="ghost" aria-label="Einstellungen">
                 <Settings size={20} />
               </AppButton>
@@ -704,12 +708,14 @@ export function DocumentEditor({
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
                   <div className="px-4 py-3 border-b">
-                    <h3 className="text-sm font-semibold text-gray-700">Angebotsdetails</h3>
+                    <h3 className="text-sm font-semibold text-gray-700">
+                      {isInvoice ? "Rechnungsdetails" : "Angebotsdetails"}
+                    </h3>
                   </div>
                   <div className="divide-y">
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <label className="text-sm font-medium text-gray-700" htmlFor="document-number">
-                        Angebotsnummer
+                        {isInvoice ? "Rechnungsnummer" : "Angebotsnummer"}
                       </label>
                       <input
                         id="document-number"
@@ -717,7 +723,7 @@ export function DocumentEditor({
                         value={formData.number}
                         disabled={disabled}
                         onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                        placeholder="z.B. ANG-2023-001"
+                        placeholder={isInvoice ? "z.B. RE-2023-001" : "z.B. ANG-2023-001"}
                       />
                     </div>
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -733,22 +739,41 @@ export function DocumentEditor({
                         onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                       />
                     </div>
-                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <label
-                        className="text-sm font-medium text-gray-700"
-                        htmlFor="document-valid-until"
-                      >
-                        Gültig bis
-                      </label>
-                      <input
-                        id="document-valid-until"
-                        type="date"
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
-                        value={formData.validUntil ?? ""}
-                        disabled={disabled}
-                        onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
-                      />
-                    </div>
+                    {isInvoice ? (
+                      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label
+                          className="text-sm font-medium text-gray-700"
+                          htmlFor="document-due-date"
+                        >
+                          Fällig am
+                        </label>
+                        <input
+                          id="document-due-date"
+                          type="date"
+                          className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                          value={formData.dueDate ?? ""}
+                          disabled={disabled}
+                          onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label
+                          className="text-sm font-medium text-gray-700"
+                          htmlFor="document-valid-until"
+                        >
+                          Gültig bis
+                        </label>
+                        <input
+                          id="document-valid-until"
+                          type="date"
+                          className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                          value={formData.validUntil ?? ""}
+                          disabled={disabled}
+                          onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
+                        />
+                      </div>
+                    )}
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <label className="text-sm font-medium text-gray-700" htmlFor="document-vat">
                         MwSt. (%)
