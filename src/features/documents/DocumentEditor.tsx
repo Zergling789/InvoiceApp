@@ -1410,7 +1410,6 @@ export function DocumentEditor({
             />
           </div>
         </div>
-              </div>
               )}
 
         <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
