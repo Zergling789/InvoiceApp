@@ -200,6 +200,11 @@ const getMailer = async () => {
 };
 
 const normalizeEmail = (email = "") => String(email).trim().toLowerCase();
+const parseEmailList = (value = "") =>
+  String(value)
+    .split(/[;,]/)
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
 
 const generateToken = () => crypto.randomBytes(32).toString("base64url");
 const hashToken = (token) =>
@@ -502,6 +507,45 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
+const normalizeDbError = (err) => {
+  const rawMessage = typeof err?.message === "string" ? err.message : "";
+  const message = rawMessage.trim();
+  const code = err?.code || message;
+
+  if (!code) return null;
+
+  switch (code) {
+    case "NOT_AUTHENTICATED":
+      return { code, message: "Not authenticated.", httpStatus: 401 };
+    case "FORBIDDEN":
+      return { code, message: "Forbidden.", httpStatus: 403 };
+    case "INVOICE_LOCKED_CONTENT":
+      return { code, message: "Invoice content is locked.", httpStatus: 409 };
+    case "INVOICE_LOCK_INVALID_STATUS":
+      return { code, message: "Invoice lock status invalid.", httpStatus: 409 };
+    case "status_transition_not_allowed":
+      return { code, message: "Status transition not allowed.", httpStatus: 409 };
+    case "P0001":
+      if (message.includes("NOT_AUTHENTICATED")) {
+        return { code: "NOT_AUTHENTICATED", message: "Not authenticated.", httpStatus: 401 };
+      }
+      if (message.includes("FORBIDDEN")) {
+        return { code: "FORBIDDEN", message: "Forbidden.", httpStatus: 403 };
+      }
+      if (message.includes("INVOICE_LOCKED_CONTENT")) {
+        return { code: "INVOICE_LOCKED_CONTENT", message: "Invoice content is locked.", httpStatus: 409 };
+      }
+      if (message.includes("status transition")) {
+        return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
+      }
+      return { code: "db_error", message: message || "Database error.", httpStatus: 409 };
+    case "23514":
+      return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
+    default:
+      return null;
+  }
+};
+
 const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
   if (!invoiceId || !userId) return;
   const db = supabase ?? requireSupabase();
@@ -510,7 +554,8 @@ const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
     .from("invoices")
     .update({ is_locked: true, finalized_at: nowIso })
     .eq("id", invoiceId)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("is_locked", false);
   if (error) {
     const err = new Error("Failed to lock invoice");
     err.status = 500;
@@ -518,7 +563,7 @@ const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
   }
 };
 
-const updateSendMetadata = async ({ type, docId, userId, via }) => {
+const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
   if (!docId || !userId) return;
   const db = requireSupabase();
   const nowIso = new Date().toISOString();
@@ -538,14 +583,8 @@ const updateSendMetadata = async ({ type, docId, userId, via }) => {
     last_sent_at: nowIso,
     sent_count: sentCount,
     sent_via: via ?? "EMAIL",
+    last_sent_to: lastSentTo ?? null,
   };
-
-  if (type === "invoice" && row?.status === "DRAFT") {
-    updatePayload.status = "SENT";
-  }
-  if (type === "offer" && row?.status === "DRAFT") {
-    updatePayload.status = "SENT";
-  }
 
   const { error } = await db
     .from(table)
@@ -555,7 +594,12 @@ const updateSendMetadata = async ({ type, docId, userId, via }) => {
 
   if (error) {
     const err = new Error("Failed to update send metadata");
-    err.status = 500;
+    if (error.code === "23514" || error.code === "P0001") {
+      err.status = 409;
+      err.code = "status_transition_not_allowed";
+    } else {
+      err.status = 500;
+    }
     throw err;
   }
 };
@@ -1319,6 +1363,8 @@ app.post(
 
       const {
         to,
+        cc,
+        bcc,
         subject,
         message,
         senderIdentityId,
@@ -1338,9 +1384,17 @@ app.post(
         );
       }
 
-      const normalizedTo = normalizeEmail(to);
-      if (!isValidEmail(normalizedTo)) {
+      const toList = parseEmailList(to);
+      if (!toList.length || toList.some((entry) => !isValidEmail(entry))) {
         return sendError(res, 400, "invalid_email", "Invalid recipient email.");
+      }
+      const ccList = parseEmailList(cc);
+      if (ccList.some((entry) => !isValidEmail(entry))) {
+        return sendError(res, 400, "invalid_cc", "Invalid CC email.");
+      }
+      const bccList = parseEmailList(bcc);
+      if (bccList.some((entry) => !isValidEmail(entry))) {
+        return sendError(res, 400, "invalid_bcc", "Invalid BCC email.");
       }
 
       const subjectText = String(subject ?? "");
@@ -1384,7 +1438,9 @@ app.post(
 
       const info = await transporter.sendMail({
         from,
-        to: normalizedTo,
+        to: toList.join(", "),
+        cc: ccList.length ? ccList.join(", ") : undefined,
+        bcc: bccList.length ? bccList.join(", ") : undefined,
         subject: subjectText,
         text: messageText ?? "",
         replyTo,
@@ -1408,10 +1464,27 @@ app.post(
         action: "invoice_email_sent",
         entityType: type,
         entityId: docId ?? null,
-        meta: { to: normalizedTo, sender_identity_id: identity.id, message_id: info?.messageId ?? null },
+        meta: { to: toList.join(", "), sender_identity_id: identity.id, message_id: info?.messageId ?? null },
       });
 
-      await updateSendMetadata({ type, docId, userId, via: "EMAIL" });
+      const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
+      const { error: markError } = await requireSupabase().rpc(rpcName, {
+        doc_id: docId,
+        p_to: toList.join(", "),
+        p_via: "EMAIL",
+      });
+      if (markError) {
+        const normalized = normalizeDbError(markError);
+        const err = new Error("Failed to mark document as sent");
+        if (normalized) {
+          err.status = normalized.httpStatus;
+          err.code = normalized.code;
+          err.message = normalized.message;
+        } else {
+          err.status = 500;
+        }
+        throw err;
+      }
 
       if (type === "invoice") {
         await lockInvoiceAfterSend({ invoiceId: docId, userId });
@@ -1420,6 +1493,10 @@ app.post(
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("Email send failed", err);
+      const dbError = normalizeDbError(err);
+      if (dbError) {
+        return sendError(res, dbError.httpStatus, dbError.code, dbError.message);
+      }
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
         return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
       }
