@@ -12,6 +12,8 @@ type SendDocumentEmailPayload = {
   documentId: string;
   documentType: "offer" | "invoice";
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   message: string;
   senderIdentityId: string;

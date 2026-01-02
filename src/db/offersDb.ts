@@ -2,37 +2,24 @@ import { supabase } from "@/supabaseClient";
 import { OfferStatus } from "@/types";
 import type { Offer } from "@/types";
 
-const toDbOfferStatus = (status: OfferStatus): string => {
-  switch (status) {
+const normalizeOfferStatus = (status: string | null | undefined): OfferStatus => {
+  switch ((status ?? "").toUpperCase()) {
     case OfferStatus.SENT:
-      return "Sent";
-    case OfferStatus.ACCEPTED:
-      return "Accepted";
-    case OfferStatus.REJECTED:
-      return "Rejected";
-    case OfferStatus.INVOICED:
-      return "Invoiced";
-    case OfferStatus.DRAFT:
-    default:
-      return "Draft";
-  }
-};
-
-const fromDbOfferStatus = (status: string | null | undefined): OfferStatus => {
-  switch (status) {
-    case "Sent":
       return OfferStatus.SENT;
-    case "Accepted":
+    case OfferStatus.ACCEPTED:
       return OfferStatus.ACCEPTED;
-    case "Rejected":
+    case OfferStatus.REJECTED:
       return OfferStatus.REJECTED;
-    case "Invoiced":
+    case OfferStatus.INVOICED:
       return OfferStatus.INVOICED;
-    case "Draft":
+    case OfferStatus.DRAFT:
     default:
       return OfferStatus.DRAFT;
   }
 };
+
+const toDbOfferStatus = (status: OfferStatus | null | undefined): string =>
+  normalizeOfferStatus(status ?? OfferStatus.DRAFT);
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
@@ -67,9 +54,10 @@ export async function dbListOffers(): Promise<Offer[]> {
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
     vatRate: Number(r.vat_rate ?? 0),
-    status: fromDbOfferStatus(r.status),
+    status: normalizeOfferStatus(r.status),
     sentAt: r.sent_at ?? null,
     lastSentAt: r.last_sent_at ?? null,
+    lastSentTo: r.last_sent_to ?? null,
     sentCount: Number(r.sent_count ?? 0),
     sentVia: r.sent_via ?? null,
     invoiceId: r.invoice_id ?? null,
@@ -100,9 +88,10 @@ export async function dbGetOffer(id: string): Promise<Offer> {
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
     vatRate: Number(data.vat_rate ?? 0),
-    status: fromDbOfferStatus(data.status),
+    status: normalizeOfferStatus(data.status),
     sentAt: data.sent_at ?? null,
     lastSentAt: data.last_sent_at ?? null,
+    lastSentTo: data.last_sent_to ?? null,
     sentCount: Number(data.sent_count ?? 0),
     sentVia: data.sent_via ?? null,
     invoiceId: data.invoice_id ?? null,
@@ -132,6 +121,7 @@ export async function dbUpsertOffer(o: Offer): Promise<void> {
     status: toDbOfferStatus(o.status ?? OfferStatus.DRAFT),
     sent_at: o.sentAt ?? null,
     last_sent_at: o.lastSentAt ?? null,
+    last_sent_to: o.lastSentTo ?? null,
     sent_count: Number(o.sentCount ?? 0),
     sent_via: o.sentVia ?? null,
     invoice_id: o.invoiceId ?? null,

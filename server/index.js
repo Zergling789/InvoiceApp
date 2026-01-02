@@ -200,6 +200,11 @@ const getMailer = async () => {
 };
 
 const normalizeEmail = (email = "") => String(email).trim().toLowerCase();
+const parseEmailList = (value = "") =>
+  String(value)
+    .split(/[;,]/)
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
 
 const generateToken = () => crypto.randomBytes(32).toString("base64url");
 const hashToken = (token) =>
@@ -510,7 +515,8 @@ const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
     .from("invoices")
     .update({ is_locked: true, finalized_at: nowIso })
     .eq("id", invoiceId)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("is_locked", false);
   if (error) {
     const err = new Error("Failed to lock invoice");
     err.status = 500;
@@ -518,7 +524,12 @@ const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
   }
 };
 
-const updateSendMetadata = async ({ type, docId, userId, via }) => {
+const normalizeDocStatus = (status) => {
+  if (!status) return null;
+  return String(status).toUpperCase();
+};
+
+const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
   if (!docId || !userId) return;
   const db = requireSupabase();
   const nowIso = new Date().toISOString();
@@ -532,18 +543,23 @@ const updateSendMetadata = async ({ type, docId, userId, via }) => {
     .maybeSingle();
 
   const sentCount = Number(row?.sent_count ?? 0) + 1;
+  const normalizedStatus = normalizeDocStatus(row?.status);
 
   const updatePayload = {
     sent_at: row?.sent_count ? row?.sent_at ?? null : nowIso,
     last_sent_at: nowIso,
     sent_count: sentCount,
     sent_via: via ?? "EMAIL",
+    last_sent_to: lastSentTo ?? null,
   };
 
-  if (type === "invoice" && row?.status === "DRAFT") {
+  if (normalizedStatus) {
+    updatePayload.status = normalizedStatus;
+  }
+  if (type === "invoice" && (normalizedStatus === "DRAFT" || normalizedStatus === "ISSUED")) {
     updatePayload.status = "SENT";
   }
-  if (type === "offer" && row?.status === "DRAFT") {
+  if (type === "offer" && normalizedStatus === "DRAFT") {
     updatePayload.status = "SENT";
   }
 
@@ -1319,6 +1335,8 @@ app.post(
 
       const {
         to,
+        cc,
+        bcc,
         subject,
         message,
         senderIdentityId,
@@ -1338,9 +1356,17 @@ app.post(
         );
       }
 
-      const normalizedTo = normalizeEmail(to);
-      if (!isValidEmail(normalizedTo)) {
+      const toList = parseEmailList(to);
+      if (!toList.length || toList.some((entry) => !isValidEmail(entry))) {
         return sendError(res, 400, "invalid_email", "Invalid recipient email.");
+      }
+      const ccList = parseEmailList(cc);
+      if (ccList.some((entry) => !isValidEmail(entry))) {
+        return sendError(res, 400, "invalid_cc", "Invalid CC email.");
+      }
+      const bccList = parseEmailList(bcc);
+      if (bccList.some((entry) => !isValidEmail(entry))) {
+        return sendError(res, 400, "invalid_bcc", "Invalid BCC email.");
       }
 
       const subjectText = String(subject ?? "");
@@ -1384,7 +1410,9 @@ app.post(
 
       const info = await transporter.sendMail({
         from,
-        to: normalizedTo,
+        to: toList.join(", "),
+        cc: ccList.length ? ccList.join(", ") : undefined,
+        bcc: bccList.length ? bccList.join(", ") : undefined,
         subject: subjectText,
         text: messageText ?? "",
         replyTo,
@@ -1408,10 +1436,10 @@ app.post(
         action: "invoice_email_sent",
         entityType: type,
         entityId: docId ?? null,
-        meta: { to: normalizedTo, sender_identity_id: identity.id, message_id: info?.messageId ?? null },
+        meta: { to: toList.join(", "), sender_identity_id: identity.id, message_id: info?.messageId ?? null },
       });
 
-      await updateSendMetadata({ type, docId, userId, via: "EMAIL" });
+      await updateSendMetadata({ type, docId, userId, via: "EMAIL", lastSentTo: toList.join(", ") });
 
       if (type === "invoice") {
         await lockInvoiceAfterSend({ invoiceId: docId, userId });
