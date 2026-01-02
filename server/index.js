@@ -524,11 +524,6 @@ const lockInvoiceAfterSend = async ({ supabase, invoiceId, userId }) => {
   }
 };
 
-const normalizeDocStatus = (status) => {
-  if (!status) return null;
-  return String(status).toUpperCase();
-};
-
 const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
   if (!docId || !userId) return;
   const db = requireSupabase();
@@ -543,7 +538,6 @@ const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
     .maybeSingle();
 
   const sentCount = Number(row?.sent_count ?? 0) + 1;
-  const normalizedStatus = normalizeDocStatus(row?.status);
 
   const updatePayload = {
     sent_at: row?.sent_count ? row?.sent_at ?? null : nowIso,
@@ -553,16 +547,6 @@ const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
     last_sent_to: lastSentTo ?? null,
   };
 
-  if (normalizedStatus) {
-    updatePayload.status = normalizedStatus;
-  }
-  if (type === "invoice" && (normalizedStatus === "DRAFT" || normalizedStatus === "ISSUED")) {
-    updatePayload.status = "SENT";
-  }
-  if (type === "offer" && normalizedStatus === "DRAFT") {
-    updatePayload.status = "SENT";
-  }
-
   const { error } = await db
     .from(table)
     .update(updatePayload)
@@ -571,7 +555,12 @@ const updateSendMetadata = async ({ type, docId, userId, via, lastSentTo }) => {
 
   if (error) {
     const err = new Error("Failed to update send metadata");
-    err.status = 500;
+    if (error.code === "23514" || error.code === "P0001") {
+      err.status = 409;
+      err.code = "status_transition_not_allowed";
+    } else {
+      err.status = 500;
+    }
     throw err;
   }
 };
@@ -1448,6 +1437,9 @@ app.post(
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("Email send failed", err);
+      if (err?.code === "status_transition_not_allowed") {
+        return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      }
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
         return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
       }
