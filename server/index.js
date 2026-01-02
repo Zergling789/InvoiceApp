@@ -1450,11 +1450,14 @@ app.post(
       });
 
       const userToken = getBearerToken(req);
-      // RPCs must run user-scoped so auth.uid() resolves correctly (service role bypasses RLS/auth context).
+      if (!userToken) {
+        return sendError(res, 401, "NOT_AUTHENTICATED", "Missing auth token.");
+      }
       const supabaseUser = createUserSupabaseClient(userToken);
       const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
       // Manual smoke test: POST /api/email with Authorization: Bearer <user JWT> and verify
       // the RPC sees auth.uid() != null (e.g. mark_*_sent succeeds and updates sender metadata).
+      // Must be user-scoped because DB uses auth.uid()
       const { error: markError } = await supabaseUser.rpc(rpcName, {
         doc_id: docId,
         p_to: toList.join(", "),
