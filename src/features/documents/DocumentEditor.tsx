@@ -167,6 +167,14 @@ export function DocumentEditor({
     !isInvoice && !readOnly && formData.status === OfferStatus.DRAFT && !formData.invoiceId;
   const selectedClient = clients.find((c) => c.id === formData.clientId);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("offer-wizard-open", showOfferWizard);
+    return () => {
+      document.body.classList.remove("offer-wizard-open");
+    };
+  }, [showOfferWizard]);
+
 
   const addPosition = () => {
     if (readOnly || locked) return;
@@ -642,13 +650,7 @@ export function DocumentEditor({
 
             <div className="flex-1 overflow-y-auto bg-gray-50">
               <div className="px-6 pt-4 pb-3 border-b bg-white">
-                <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
-                  <span>Schritt 1 von 3</span>
-                  <div className="flex-1 h-2 rounded-full bg-gray-200">
-                    <div className="h-2 rounded-full bg-blue-600 w-1/3" />
-                  </div>
-                </div>
-                <div className="mt-3 text-base font-semibold text-gray-700">Kundendaten eingeben</div>
+                <div className="text-base font-semibold text-gray-700">Kundendaten eingeben</div>
               </div>
 
               <div className="px-6 py-4 space-y-5">
