@@ -1,7 +1,17 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
+import {
+  X,
+  Trash2,
+  Plus,
+  FileDown,
+  Mail,
+  ArrowLeft,
+  Settings,
+  CalendarDays,
+  BadgeCheck,
+} from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -58,6 +68,14 @@ type FormData = {
 function toNumberOrZero(v: unknown): number {
   const n = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
   return Number.isFinite(n) ? n : 0;
+}
+
+function getInitials(value: string | undefined | null): string {
+  if (!value) return "—";
+  const parts = value.trim().split(/\s+/);
+  const [first, second] = parts;
+  if (!first) return "—";
+  return `${first[0]}${second?.[0] ?? ""}`.toUpperCase();
 }
 
 const formatStatusLabel = (status: InvoiceStatus | OfferStatus) =>
@@ -511,9 +529,9 @@ export function DocumentEditor({
       <div className="fixed inset-0 bg-white z-50 overflow-hidden">
         {sendModal}
         <div className="flex h-full min-h-[100vh] min-h-[100dvh] flex-col">
-          <div className="flex-1 overflow-y-auto safe-top safe-area-container bottom-action-spacer">
-            <div className="w-full max-w-none px-4 pt-4 bottom-action-spacer sm:max-w-[210mm] sm:mx-auto sm:p-[10mm] sm:pb-[10mm] bg-white shadow-none print:shadow-none">
-              <div className="no-print flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex-1 overflow-y-auto safe-top safe-area-container bottom-action-spacer bg-slate-100 print:bg-white">
+            <div className="w-full max-w-none px-4 pt-6 pb-24 sm:max-w-[210mm] sm:mx-auto sm:p-[10mm] sm:pb-[10mm]">
+              <div className="no-print flex flex-col gap-3 mb-6 p-4 bg-white rounded-2xl shadow-sm border border-slate-200 sm:flex-row sm:items-center sm:justify-between">
                 <div className="hidden sm:flex flex-wrap gap-2 sm:justify-end">
                   <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
                     <FileDown size={16} /> PDF herunterladen
@@ -539,135 +557,178 @@ export function DocumentEditor({
                 </div>
               </div>
 
-              <div className="flex justify-between mb-12">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-800">{settings.companyName}</h1>
-                  <p className="text-sm text-gray-500 whitespace-pre-line">{settings.address}</p>
-                </div>
-                <div className="text-right">
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                    {isInvoice ? "RECHNUNG" : "ANGEBOT"}
-                  </h2>
-                  <p className="text-gray-500">Nr: {formData.number}</p>
-                  <p className="text-gray-500">Datum: {formatDate(formData.date, settings.locale ?? "de-DE")}</p>
-                  {isInvoice && formData.dueDate && (
-                    <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, settings.locale ?? "de-DE")}</p>
-                  )}
-                  {!isInvoice && formData.validUntil && (
-                    <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil, settings.locale ?? "de-DE")}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="mb-12">
-                <p className="text-xs text-gray-400 mb-2 underline">
-                  {settings.companyName} • {settings.address.split("\n")[0]}
-                </p>
-                <div className="font-medium text-gray-900">
-                  {client?.companyName || "—"}
-                  <br />
-                  {client?.contactPerson && (
-                    <>
-                      {client.contactPerson}
-                      <br />
-                    </>
-                  )}
-                  {(client?.address ?? "").split("\n").map((line, i) => (
-                    <span key={i}>
-                      {line}
-                      <br />
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-8">
-                <h3 className="font-bold text-lg mb-2">
-                  {isInvoice ? `Rechnung ${formData.number}` : `Angebot ${formData.number}`}
-                </h3>
-
-                {formData.introText && (
-                  <p className="mb-6 whitespace-pre-line text-sm">{formData.introText}</p>
-                )}
-
-                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                  <table className="w-full min-w-[520px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-gray-100">
-                      <th className="py-2 w-1/2">Beschreibung</th>
-                      <th className="py-2 text-right">Menge</th>
-                      <th className="py-2 text-right">Einzelpreis</th>
-                      <th className="py-2 text-right">Gesamt</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {(formData.positions ?? []).map((pos, idx) => (
-                      <tr key={pos.id ?? idx} className="border-b border-gray-50">
-                        <td className="py-3 pr-4">{pos.description}</td>
-                        <td className="py-3 text-right">
-                          {toNumberOrZero(pos.quantity)} {pos.unit}
-                        </td>
-                        <td className="py-3 text-right">{formatCurrency(toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                        <td className="py-3 text-right font-medium">
-                          {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}
-                        </td>
-                      </tr>
-                    ))}
-                    {(formData.positions ?? []).length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="py-6 text-center text-gray-400">
-                          Keine Positionen
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-
-                  <tfoot className="border-t-2 border-gray-200">
-                    <tr>
-                      <td colSpan={3} className="pt-4 text-right">
-                        Zwischensumme:
-                      </td>
-                      <td className="pt-4 text-right">{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="text-right text-gray-500">
-                        Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
-                      </td>
-                      <td className="text-right text-gray-500">{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="pt-2 text-right font-bold text-lg">
-                        Gesamtsumme:
-                      </td>
-                      <td className="pt-2 text-right font-bold text-lg">{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-                </div>
-              </div>
-
-              <div className="mt-12 pt-8 border-t border-gray-100 text-sm">
-                <p className="mb-4 whitespace-pre-line">{formData.footerText}</p>
-
-                {isInvoice && (
-                  <div className="bg-gray-50 p-4 rounded text-xs text-gray-600 grid grid-cols-2 gap-4 print:bg-transparent print:p-0">
+              <div className="space-y-5">
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-5 print:shadow-none print:border-transparent">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <strong>Bankverbindung:</strong>
-                      <br />
-                      {settings.bankName}
-                      <br />
-                      IBAN: {settings.iban}
-                      <br />
-                      BIC: {settings.bic}
+                      <h1 className="text-xl font-semibold text-slate-900">{settings.companyName}</h1>
+                      <p className="text-sm text-slate-500 whitespace-pre-line">{settings.address}</p>
                     </div>
-                    <div className="text-right">
-                      <strong>Steuer-Nr:</strong> {settings.taxId}
-                      <br />
-                      Bitte geben Sie bei der Zahlung die Rechnungsnummer an.
+                    <div className="text-left sm:text-right">
+                      <h2 className="text-2xl font-semibold text-slate-900 mb-1">
+                        {isInvoice ? "RECHNUNG" : "ANGEBOT"}
+                      </h2>
+                      <p className="text-sm text-slate-500">Nr: {formData.number}</p>
                     </div>
                   </div>
-                )}
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="flex items-start gap-3 rounded-2xl bg-blue-50 p-3 text-blue-700">
+                      <CalendarDays size={18} className="mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Datum</p>
+                        <p className="font-semibold">
+                          {formatDate(formData.date, settings.locale ?? "de-DE")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 rounded-2xl bg-blue-50 p-3 text-blue-700">
+                      <BadgeCheck size={18} className="mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                          {isInvoice ? "Fällig" : "Gültig bis"}
+                        </p>
+                        <p className="font-semibold">
+                          {isInvoice
+                            ? formData.dueDate
+                              ? formatDate(formData.dueDate, settings.locale ?? "de-DE")
+                              : "—"
+                            : formData.validUntil
+                              ? formatDate(formData.validUntil, settings.locale ?? "de-DE")
+                              : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 border-t border-slate-100 pt-4 flex items-center justify-between text-sm">
+                    <span className="text-slate-500">Zwischensumme:</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-sm font-semibold text-slate-600">
+                    {getInitials(client?.contactPerson ?? client?.companyName)}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {client?.contactPerson ?? client?.companyName ?? "—"}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      {(client?.address ?? "").split("\n")[0] || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-5 print:shadow-none print:border-transparent">
+                  <h3 className="font-semibold text-slate-800 mb-3 text-base">
+                    {isInvoice ? `Rechnung ${formData.number}` : `Angebot ${formData.number}`}
+                  </h3>
+
+                  {formData.introText && (
+                    <p className="mb-4 whitespace-pre-line text-sm text-slate-500">
+                      {formData.introText}
+                    </p>
+                  )}
+
+                  <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <table className="w-full min-w-[520px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-500">
+                          <th className="py-2 w-1/2">Beschreibung</th>
+                          <th className="py-2 text-right">Menge</th>
+                          <th className="py-2 text-right">Einzelpreis</th>
+                          <th className="py-2 text-right">Gesamt</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {(formData.positions ?? []).map((pos, idx) => (
+                          <tr key={pos.id ?? idx} className="border-b border-slate-100">
+                            <td className="py-3 pr-4">{pos.description}</td>
+                            <td className="py-3 text-right">
+                              {toNumberOrZero(pos.quantity)} {pos.unit}
+                            </td>
+                            <td className="py-3 text-right">
+                              {formatCurrency(
+                                toNumberOrZero(pos.price),
+                                settings.locale ?? "de-DE",
+                                settings.currency ?? "EUR"
+                              )}
+                            </td>
+                            <td className="py-3 text-right font-medium">
+                              {formatCurrency(
+                                toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price),
+                                settings.locale ?? "de-DE",
+                                settings.currency ?? "EUR"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {(formData.positions ?? []).length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-6 text-center text-slate-400">
+                              Keine Positionen
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+
+                      <tfoot className="border-t border-slate-200">
+                        <tr>
+                          <td colSpan={3} className="pt-4 text-right text-slate-500">
+                            Zwischensumme:
+                          </td>
+                          <td className="pt-4 text-right font-semibold">
+                            {formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="text-right text-slate-400">
+                            Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
+                          </td>
+                          <td className="text-right text-slate-400">
+                            {formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="pt-2 text-right font-semibold text-base">
+                            Gesamtsumme:
+                          </td>
+                          <td className="pt-2 text-right font-semibold text-base">
+                            {formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  <div className="mt-6 border-t border-slate-100 pt-4 text-sm">
+                    <p className="mb-4 whitespace-pre-line text-slate-500">{formData.footerText}</p>
+
+                    {isInvoice && (
+                      <div className="bg-slate-50 p-4 rounded-2xl text-xs text-slate-600 grid grid-cols-2 gap-4 print:bg-transparent print:p-0">
+                        <div>
+                          <strong>Bankverbindung:</strong>
+                          <br />
+                          {settings.bankName}
+                          <br />
+                          IBAN: {settings.iban}
+                          <br />
+                          BIC: {settings.bic}
+                        </div>
+                        <div className="text-right">
+                          <strong>Steuer-Nr:</strong> {settings.taxId}
+                          <br />
+                          Bitte geben Sie bei der Zahlung die Rechnungsnummer an.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
