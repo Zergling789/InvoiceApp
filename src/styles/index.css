@@ -494,24 +494,6 @@
     background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   }
 
-  .settings-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 6px;
-    border-radius: 999px;
-    background: rgba(148, 163, 184, 0.2);
-  }
-
-  .settings-tab {
-    border-radius: 999px;
-    box-shadow: none;
-  }
-
-  .settings-tab:hover {
-    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
-  }
-
   @media (max-width: 720px) {
     .landing__cta {
       flex-direction: column;
