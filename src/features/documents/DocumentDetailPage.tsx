@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FileDown, Mail, MoreVertical, Pencil } from "lucide-react";
+import { MoreVertical, Pencil } from "lucide-react";
 
 import type { Client, Invoice, Offer, Position, UserSettings } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -8,10 +8,10 @@ import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { ActionSheet } from "@/components/ui/ActionSheet";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { isInvoiceOverdue } from "@/utils/dashboard";
-import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
@@ -57,11 +57,29 @@ export default function DocumentDetailPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [sendTemplateType, setSendTemplateType] = useState<
+    "reminder" | "dunning" | "followup" | undefined
+  >(undefined);
+  const [showActionSheet, setShowActionSheet] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
   const [editorInitial, setEditorInitial] = useState<any>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   const docType = type === "invoice" ? "invoice" : "offer";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const handleChange = () => setIsMobile(mediaQuery.matches);
+    handleChange();
+    if ("addEventListener" in mediaQuery) {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -133,15 +151,6 @@ export default function DocumentDetailPage() {
     return settings.emailDefaultText?.trim() || "Bitte im Anhang finden Sie das Dokument.";
   }, [settings]);
 
-  const handleDownload = async () => {
-    if (!doc) return;
-    try {
-      await downloadDocumentPdf({ type: docType, docId: doc.id });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "PDF konnte nicht erstellt werden.");
-    }
-  };
-
   const handleMarkPaid = async () => {
     if (!doc || docType !== "invoice") return;
     const invoice = doc as Invoice;
@@ -159,6 +168,29 @@ export default function DocumentDetailPage() {
     });
     setDoc({ ...invoice, status: InvoiceStatus.PAID, paymentDate: now });
     toast.success("Rechnung als bezahlt markiert.");
+  };
+
+  const handleMarkOfferSentManual = async () => {
+    if (!doc || docType !== "offer") return;
+    const offer = doc as Offer;
+    const nowIso = new Date().toISOString();
+    await offerService.saveOffer({
+      ...offer,
+      status: OfferStatus.SENT,
+      sentAt: offer.sentAt ?? nowIso,
+      lastSentAt: nowIso,
+      sentCount: (offer.sentCount ?? 0) + 1,
+      sentVia: "MANUAL",
+    });
+    setDoc({
+      ...offer,
+      status: OfferStatus.SENT,
+      sentAt: offer.sentAt ?? nowIso,
+      lastSentAt: nowIso,
+      sentCount: (offer.sentCount ?? 0) + 1,
+      sentVia: "MANUAL",
+    });
+    toast.success("Angebot als gesendet markiert.");
   };
 
   const handleOfferAccepted = async () => {
@@ -202,12 +234,87 @@ export default function DocumentDetailPage() {
     navigate(`/app/documents/invoice/${invoiceId}`);
   };
 
+  const handleOpenSend = (templateType?: "reminder" | "dunning" | "followup") => {
+    setSendTemplateType(templateType);
+    setShowSendModal(true);
+  };
+
+  const actions =
+    docType === "invoice"
+      ? [
+          {
+            label: "Senden",
+            onSelect: () => {
+              setShowActionSheet(false);
+              handleOpenSend();
+            },
+          },
+          {
+            label: "Erinnerung senden",
+            onSelect: () => {
+              setShowActionSheet(false);
+              handleOpenSend("reminder");
+            },
+          },
+          {
+            label: "Mahnung senden",
+            onSelect: () => {
+              setShowActionSheet(false);
+              handleOpenSend("dunning");
+            },
+          },
+          {
+            label: "Als bezahlt markieren",
+            onSelect: () => {
+              setShowActionSheet(false);
+              void handleMarkPaid();
+            },
+            disabled: doc.status === InvoiceStatus.PAID,
+          },
+        ]
+      : [
+          {
+            label: "Senden",
+            onSelect: () => {
+              setShowActionSheet(false);
+              handleOpenSend();
+            },
+          },
+          {
+            label: "Als gesendet markieren",
+            onSelect: () => {
+              setShowActionSheet(false);
+              void handleMarkOfferSentManual();
+            },
+          },
+          {
+            label: "Als angenommen markieren",
+            onSelect: () => {
+              setShowActionSheet(false);
+              void handleOfferAccepted();
+            },
+            disabled: doc.status === OfferStatus.ACCEPTED,
+          },
+          {
+            label: "In Rechnung wandeln",
+            onSelect: () => {
+              setShowActionSheet(false);
+              void handleConvertToInvoice();
+            },
+            disabled: !canConvertToInvoice(doc as Offer),
+          },
+        ];
+
   const handleEdit = () => {
     if (!doc || !settings) return;
     const locked =
       ("isLocked" in doc && doc.isLocked) || ("finalizedAt" in doc && Boolean(doc.finalizedAt));
     if (locked) {
       toast.info("Finalisiert – nicht editierbar.");
+      return;
+    }
+    if (isMobile) {
+      navigate(`/app/documents/${docType}/${doc.id}/edit`);
       return;
     }
     setEditorSeed(buildEditorSeed(doc, docType));
@@ -268,13 +375,17 @@ export default function DocumentDetailPage() {
       {showSendModal && client && settings && (
         <SendDocumentModal
           isOpen={showSendModal}
-          onClose={() => setShowSendModal(false)}
+          onClose={() => {
+            setShowSendModal(false);
+            setSendTemplateType(undefined);
+          }}
           documentType={docType}
           document={doc as Invoice | Offer}
           client={client}
           settings={settings}
           defaultSubject={defaultSubject}
           defaultMessage={defaultMessage}
+          templateType={sendTemplateType}
           onFinalize={docType === "invoice" ? undefined : undefined}
           onSent={async (nextData) => {
             setDoc(nextData as Invoice | Offer);
@@ -324,16 +435,10 @@ export default function DocumentDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <AppButton variant="secondary" onClick={handleDownload}>
-            <FileDown size={16} /> PDF
-          </AppButton>
-          <AppButton variant="secondary" onClick={() => setShowSendModal(true)}>
-            <Mail size={16} /> Teilen
-          </AppButton>
           <AppButton variant="ghost" onClick={handleEdit}>
             <Pencil size={16} /> Bearbeiten
           </AppButton>
-          <AppButton variant="ghost" onClick={() => toast.info("Weitere Aktionen folgen.")}>
+          <AppButton variant="ghost" onClick={() => setShowActionSheet(true)}>
             <MoreVertical size={16} /> Mehr
           </AppButton>
         </div>
@@ -418,32 +523,24 @@ export default function DocumentDetailPage() {
         )}
       </AppCard>
 
+      <ActionSheet
+        isOpen={showActionSheet}
+        onClose={() => setShowActionSheet(false)}
+        title="Aktionen"
+        actions={actions}
+      />
+
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom">
         <div className="app-container">
           <div className="flex flex-wrap gap-2 py-3">
             {docType === "invoice" ? (
-              <>
-                <AppButton onClick={handleMarkPaid} disabled={doc.status === InvoiceStatus.PAID} className="flex-1 justify-center">
-                  Als bezahlt markieren
-                </AppButton>
-                <AppButton variant="secondary" onClick={() => setShowSendModal(true)} className="flex-1 justify-center">
-                  Erinnerung senden
-                </AppButton>
-              </>
+              <AppButton onClick={handleMarkPaid} disabled={doc.status === InvoiceStatus.PAID} className="flex-1 justify-center">
+                Als bezahlt markieren
+              </AppButton>
             ) : (
-              <>
-                <AppButton onClick={handleOfferAccepted} disabled={doc.status === OfferStatus.ACCEPTED} className="flex-1 justify-center">
-                  Als angenommen markieren
-                </AppButton>
-                <AppButton
-                  variant="secondary"
-                  onClick={handleConvertToInvoice}
-                  disabled={!canConvertToInvoice(doc as Offer)}
-                  className="flex-1 justify-center"
-                >
-                  In Rechnung wandeln
-                </AppButton>
-              </>
+              <AppButton onClick={handleOfferAccepted} disabled={doc.status === OfferStatus.ACCEPTED} className="flex-1 justify-center">
+                Als angenommen markieren
+              </AppButton>
             )}
           </div>
         </div>

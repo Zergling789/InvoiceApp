@@ -3,9 +3,12 @@ import type { NavItem } from "./Sidebar";
 
 type MobileNavProps = {
   items: NavItem[];
+  hidden?: boolean;
 };
 
-export function MobileNav({ items }: MobileNavProps) {
+export function MobileNav({ items, hidden = false }: MobileNavProps) {
+  if (hidden) return null;
+
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
       "flex flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium",
