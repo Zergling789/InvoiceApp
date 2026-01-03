@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
-import type { Client, Invoice, Offer } from "@/types";
+import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { InvoiceStatus, OfferStatus } from "@/types";
 import { loadDashboardData } from "@/app/dashboard/dashboardService";
+import { fetchSettings } from "@/app/settings/settingsService";
 import {
   calculateDocumentTotal,
   formatCurrencyEur,
@@ -18,7 +19,13 @@ import {
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
-import { useToast } from "@/ui/FeedbackProvider";
+import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { supabase } from "@/supabaseClient";
+import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import * as invoiceService from "@/app/invoices/invoiceService";
+import { getNextDocumentNumber } from "@/app/numbering/numberingService";
+import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 
 type DashboardData = {
   clients: Client[];
@@ -49,12 +56,38 @@ const daysUntil = (dateStr?: string | null, today = new Date()) => {
   return Math.max(0, Math.ceil((date.getTime() - today.getTime()) / DAY_MS));
 };
 
+const toLocalISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const todayISO = () => toLocalISODate(new Date());
+const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
+
+const newId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+
 export default function TodosPage() {
+  const navigate = useNavigate();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendIntent, setSendIntent] = useState<"reminder" | "dunning" | "followup" | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<Invoice | Offer | null>(null);
+  const [selectedType, setSelectedType] = useState<"invoice" | "offer" | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
+  const [editorType, setEditorType] = useState<"invoice" | "offer">("invoice");
+  const [fabOpen, setFabOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -62,9 +95,10 @@ export default function TodosPage() {
       setLoading(true);
       setError(null);
       try {
-        const nextData = await loadDashboardData();
+        const [nextData, settingsData] = await Promise.all([loadDashboardData(), fetchSettings()]);
         if (mounted) {
           setData(nextData);
+          setSettings(settingsData);
         }
       } catch (e) {
         if (mounted) {
@@ -190,7 +224,7 @@ export default function TodosPage() {
       statusLabel: "Follow-up fällig",
       tone: "blue",
       ageLabel: `seit ${getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today)} Tagen`,
-      secondaryLabel: "Follow-up",
+      secondaryLabel: "Follow-up senden",
     })
   );
 
@@ -219,13 +253,163 @@ export default function TodosPage() {
     followUpOfferCards.length +
     draftCards.length;
 
-  const handleSecondary = (label?: string) => {
-    if (!label) return;
-    toast.info(`${label} kommt als Nächstes.`);
+  const getDefaultSubject = (docType: "invoice" | "offer", docNumber: string) => {
+    if (!settings) return "";
+    const label = docType === "invoice" ? "Rechnung" : "Angebot";
+    const template = settings.emailDefaultSubject?.trim() || `${label} {nummer}`;
+    return template.replace("{nummer}", docNumber);
+  };
+
+  const getDefaultMessage = () => {
+    if (!settings) return "";
+    return settings.emailDefaultText?.trim() || "Bitte im Anhang finden Sie das Dokument.";
+  };
+
+  const handleFinalizeInvoice = async () => {
+    if (!selectedDoc || selectedType !== "invoice") return null;
+    const invoice = selectedDoc as Invoice;
+    if (invoice.status !== InvoiceStatus.DRAFT) return invoice;
+
+    const ok = await confirm({
+      title: "Rechnung finalisieren",
+      message:
+        "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+    });
+    if (!ok) return null;
+
+    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
+      invoice_id: invoice.id,
+    });
+
+    if (finalizeError) {
+      toast.error(
+        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
+          "Rechnung konnte nicht finalisiert werden."
+      );
+      return null;
+    }
+
+    const updated = await invoiceService.getInvoice(invoice.id);
+    if (!updated) {
+      toast.error("Rechnung konnte nicht geladen werden.");
+      return null;
+    }
+
+    setSelectedDoc(updated);
+    setData((prev) => ({
+      ...prev,
+      invoices: prev.invoices.map((entry) => (entry.id === updated.id ? updated : entry)),
+    }));
+    return updated;
+  };
+
+  const handleSecondary = (card: TodoCard) => {
+    if (!settings) {
+      toast.error("E-Mail-Einstellungen fehlen.");
+      return;
+    }
+    if (!card.secondaryLabel) return;
+
+    if (card.type === "invoice") {
+      const invoice = data.invoices.find((entry) => entry.id === card.id);
+      if (!invoice) return;
+      const intent = card.secondaryLabel.includes("Mahnung") ? "dunning" : "reminder";
+      setSelectedDoc(invoice);
+      setSelectedType("invoice");
+      setSendIntent(intent);
+      setSendOpen(true);
+      return;
+    }
+
+    if (card.type === "offer" && card.secondaryLabel.includes("Follow-up")) {
+      const offer = data.offers.find((entry) => entry.id === card.id);
+      if (!offer) return;
+      setSelectedDoc(offer);
+      setSelectedType("offer");
+      setSendIntent("followup");
+      setSendOpen(true);
+      return;
+    }
+
+    toast.info(`${card.secondaryLabel} kommt als Nächstes.`);
+  };
+
+  const openNewEditor = async (type: "invoice" | "offer") => {
+    try {
+      const nextSettings = settings ?? (await fetchSettings());
+      setSettings(nextSettings);
+      const num = await getNextDocumentNumber(type, nextSettings);
+      const isInvoice = type === "invoice";
+      const seed: EditorSeed = {
+        id: newId(),
+        number: num,
+        date: todayISO(),
+        dueDate: isInvoice
+          ? invoiceService.buildDueDate(todayISO(), Number(nextSettings.defaultPaymentTerms ?? 14))
+          : undefined,
+        validUntil: !isInvoice ? addDaysISO(14) : undefined,
+        vatRate: Number(nextSettings.defaultVatRate ?? 0),
+        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
+        footerText: isInvoice
+          ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
+          : "Ich freue mich auf Ihre Rückmeldung.",
+      };
+      setEditorType(type);
+      setEditorSeed(seed);
+      setEditorOpen(true);
+      setFabOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
   };
 
   return (
     <div className="space-y-6">
+      {sendOpen && selectedDoc && selectedType && settings && (
+        <SendDocumentModal
+          isOpen={sendOpen}
+          onClose={() => setSendOpen(false)}
+          documentType={selectedType}
+          document={selectedDoc}
+          client={data.clients.find((entry) => entry.id === selectedDoc.clientId)}
+          settings={settings}
+          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number)}
+          defaultMessage={getDefaultMessage()}
+          templateType={sendIntent ?? undefined}
+          onFinalize={selectedType === "invoice" ? handleFinalizeInvoice : undefined}
+          onSent={async (nextData) => {
+            if (selectedType === "invoice") {
+              const invoice = nextData as Invoice;
+              setData((prev) => ({
+                ...prev,
+                invoices: prev.invoices.map((entry) => (entry.id === invoice.id ? invoice : entry)),
+              }));
+            } else {
+              const offer = nextData as Offer;
+              setData((prev) => ({
+                ...prev,
+                offers: prev.offers.map((entry) => (entry.id === offer.id ? offer : entry)),
+              }));
+            }
+          }}
+        />
+      )}
+      {editorOpen && editorSeed && settings && (
+        <DocumentEditor
+          type={editorType}
+          seed={editorSeed}
+          settings={settings}
+          clients={data.clients}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditorSeed(null);
+          }}
+          onSaved={async () => {
+            const nextData = await loadDashboardData();
+            setData(nextData);
+          }}
+        />
+      )}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-gray-900">To-dos</h1>
         <p className="text-sm text-gray-600">Deine nächsten Schritte auf einen Blick.</p>
@@ -271,10 +455,10 @@ export default function TodosPage() {
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/app/offers">
+            <Link to="/app/documents?mode=offers">
               <AppButton>Neues Angebot</AppButton>
             </Link>
-            <Link to="/app/invoices">
+            <Link to="/app/documents?mode=invoices">
               <AppButton variant="secondary">Neue Rechnung</AppButton>
             </Link>
           </div>
@@ -307,10 +491,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -347,10 +528,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -387,10 +565,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -429,10 +604,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -441,6 +613,50 @@ export default function TodosPage() {
             ))}
           </div>
         </section>
+      )}
+
+      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+        <button
+          type="button"
+          onClick={() => setFabOpen(true)}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+          aria-label="Neues Dokument erstellen"
+        >
+          <span className="text-2xl leading-none">+</span>
+        </button>
+      </div>
+
+      {fabOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden">
+          <div className="w-full rounded-t-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
+            <div className="space-y-3">
+              <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
+                Neue Rechnung
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={() => void openNewEditor("offer")}
+              >
+                Neues Angebot
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={() => {
+                  setFabOpen(false);
+                  navigate("/app/clients");
+                }}
+              >
+                Neuer Kunde
+              </AppButton>
+              <AppButton variant="ghost" className="w-full justify-center" onClick={() => setFabOpen(false)}>
+                Abbrechen
+              </AppButton>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -16,6 +16,7 @@ import type { NavItem } from "@/components/Layout/Sidebar";
 import HomePage from "@/pages/HomePage";
 import LoginPage from "@/pages/LoginPage";
 import RequireAuth from "@/components/Auth/RequireAuth";
+import AngebotDetails from "@/pages/AngebotDetails";
 
 const navItems: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -29,6 +30,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/demo/angebotdetails" element={<AngebotDetails />} />
       <Route path="/login" element={<LoginPage />} />
 
       <Route

@@ -20,6 +20,7 @@ import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
+import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
 
 const statusTone = (status: InvoiceStatus | OfferStatus) => {
   if (status === InvoiceStatus.PAID || status === OfferStatus.ACCEPTED) return "green";
@@ -27,9 +28,6 @@ const statusTone = (status: InvoiceStatus | OfferStatus) => {
   if (status === InvoiceStatus.SENT || status === InvoiceStatus.ISSUED || status === OfferStatus.SENT) return "blue";
   return "gray";
 };
-
-const statusLabel = (status: InvoiceStatus | OfferStatus) =>
-  status ? `${status.slice(0, 1)}${status.slice(1).toLowerCase()}` : "—";
 
 const toNumberOrZero = (value: unknown) => {
   const n = typeof value === "number" ? value : Number(String(value ?? "").replace(",", "."));
@@ -320,7 +318,9 @@ export default function DocumentDetailPage() {
               )}
             </div>
           </div>
-          <AppBadge color={overdue ? "red" : statusTone(docStatus)}>{statusLabel(docStatus)}</AppBadge>
+          <AppBadge color={overdue ? "red" : statusTone(docStatus)}>
+            {formatDocumentStatus(docType, docStatus, { isOverdue: overdue })}
+          </AppBadge>
         </div>
 
         <div className="flex flex-wrap gap-2">
