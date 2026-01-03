@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import type { Client, Invoice, Offer } from "@/types";
+import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
 import { calculateDocumentTotal, formatCurrencyEur, isInvoiceOverdue, isInvoiceOpen } from "@/utils/dashboard";
 import { AppBadge } from "@/ui/AppBadge";
@@ -11,6 +11,9 @@ import * as clientService from "@/app/clients/clientService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
+import { fetchSettings } from "@/app/settings/settingsService";
+import { getNextDocumentNumber } from "@/app/numbering/numberingService";
+import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 
 type FilterMode = "all" | "offer" | "invoice";
 type InvoiceFilterStatus = "DRAFT" | "OPEN" | "OVERDUE" | "PAID";
@@ -31,6 +34,21 @@ type DocumentRow = {
   validUntil?: string;
   isOverdue?: boolean;
 };
+
+const toLocalISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const todayISO = () => toLocalISODate(new Date());
+const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
+
+const newId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 
 const invoiceStatusLabel = (status: InvoiceFilterStatus) => {
   if (status === "OPEN") {
@@ -87,6 +105,7 @@ const getRowDocumentTimestamp = (row: DocumentRow) =>
   getTimestamp(row.date) ?? getTimestamp(row.createdAt) ?? 0;
 
 export default function DocumentsHubPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -96,7 +115,31 @@ export default function DocumentsHubPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
+  const [editorType, setEditorType] = useState<"invoice" | "offer">("invoice");
+  const [fabOpen, setFabOpen] = useState(false);
   const [searchParams] = useSearchParams();
+
+  const refreshDocuments = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [clientData, offerData, invoiceData] = await Promise.all([
+        clientService.list(),
+        offerService.listOffers(),
+        invoiceService.listInvoices(),
+      ]);
+      setClients(clientData);
+      setOffers(offerData);
+      setInvoices(invoiceData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -295,8 +338,50 @@ export default function DocumentsHubPage() {
     );
   };
 
+  const openNewEditor = async (type: "invoice" | "offer") => {
+    try {
+      const nextSettings = settings ?? (await fetchSettings());
+      setSettings(nextSettings);
+      const num = await getNextDocumentNumber(type, nextSettings);
+      const isInvoice = type === "invoice";
+      const seed: EditorSeed = {
+        id: newId(),
+        number: num,
+        date: todayISO(),
+        dueDate: isInvoice
+          ? invoiceService.buildDueDate(todayISO(), Number(nextSettings.defaultPaymentTerms ?? 14))
+          : undefined,
+        validUntil: !isInvoice ? addDaysISO(14) : undefined,
+        vatRate: Number(nextSettings.defaultVatRate ?? 0),
+        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
+        footerText: isInvoice
+          ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
+          : "Ich freue mich auf Ihre Rückmeldung.",
+      };
+      setEditorType(type);
+      setEditorSeed(seed);
+      setEditorOpen(true);
+      setFabOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {editorOpen && editorSeed && settings && (
+        <DocumentEditor
+          type={editorType}
+          seed={editorSeed}
+          settings={settings}
+          clients={clients}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditorSeed(null);
+          }}
+          onSaved={refreshDocuments}
+        />
+      )}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-gray-900">Dokumente</h1>
         <p className="text-sm text-gray-600">
@@ -404,6 +489,50 @@ export default function DocumentsHubPage() {
               </AppCard>
             </Link>
           ))}
+        </div>
+      )}
+
+      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+        <button
+          type="button"
+          onClick={() => setFabOpen(true)}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+          aria-label="Neues Dokument erstellen"
+        >
+          <span className="text-2xl leading-none">+</span>
+        </button>
+      </div>
+
+      {fabOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden">
+          <div className="w-full rounded-t-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
+            <div className="space-y-3">
+              <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
+                Neue Rechnung
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={() => void openNewEditor("offer")}
+              >
+                Neues Angebot
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={() => {
+                  setFabOpen(false);
+                  navigate("/app/clients");
+                }}
+              >
+                Neuer Kunde
+              </AppButton>
+              <AppButton variant="ghost" className="w-full justify-center" onClick={() => setFabOpen(false)}>
+                Abbrechen
+              </AppButton>
+            </div>
+          </div>
         </div>
       )}
     </div>

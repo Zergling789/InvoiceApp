@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { InvoiceStatus, OfferStatus } from "@/types";
@@ -24,6 +24,8 @@ import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { supabase } from "@/supabaseClient";
 import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
+import { getNextDocumentNumber } from "@/app/numbering/numberingService";
+import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 
 type DashboardData = {
   clients: Client[];
@@ -54,7 +56,23 @@ const daysUntil = (dateStr?: string | null, today = new Date()) => {
   return Math.max(0, Math.ceil((date.getTime() - today.getTime()) / DAY_MS));
 };
 
+const toLocalISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const todayISO = () => toLocalISODate(new Date());
+const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
+
+const newId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+
 export default function TodosPage() {
+  const navigate = useNavigate();
   const toast = useToast();
   const { confirm } = useConfirm();
   const [filter, setFilter] = useState<FilterType>("all");
@@ -66,6 +84,10 @@ export default function TodosPage() {
   const [sendIntent, setSendIntent] = useState<"reminder" | "dunning" | "followup" | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Invoice | Offer | null>(null);
   const [selectedType, setSelectedType] = useState<"invoice" | "offer" | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
+  const [editorType, setEditorType] = useState<"invoice" | "offer">("invoice");
+  const [fabOpen, setFabOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -312,6 +334,35 @@ export default function TodosPage() {
     toast.info(`${card.secondaryLabel} kommt als Nächstes.`);
   };
 
+  const openNewEditor = async (type: "invoice" | "offer") => {
+    try {
+      const nextSettings = settings ?? (await fetchSettings());
+      setSettings(nextSettings);
+      const num = await getNextDocumentNumber(type, nextSettings);
+      const isInvoice = type === "invoice";
+      const seed: EditorSeed = {
+        id: newId(),
+        number: num,
+        date: todayISO(),
+        dueDate: isInvoice
+          ? invoiceService.buildDueDate(todayISO(), Number(nextSettings.defaultPaymentTerms ?? 14))
+          : undefined,
+        validUntil: !isInvoice ? addDaysISO(14) : undefined,
+        vatRate: Number(nextSettings.defaultVatRate ?? 0),
+        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
+        footerText: isInvoice
+          ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
+          : "Ich freue mich auf Ihre Rückmeldung.",
+      };
+      setEditorType(type);
+      setEditorSeed(seed);
+      setEditorOpen(true);
+      setFabOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <div className="space-y-6">
       {sendOpen && selectedDoc && selectedType && settings && (
@@ -340,6 +391,22 @@ export default function TodosPage() {
                 offers: prev.offers.map((entry) => (entry.id === offer.id ? offer : entry)),
               }));
             }
+          }}
+        />
+      )}
+      {editorOpen && editorSeed && settings && (
+        <DocumentEditor
+          type={editorType}
+          seed={editorSeed}
+          settings={settings}
+          clients={data.clients}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditorSeed(null);
+          }}
+          onSaved={async () => {
+            const nextData = await loadDashboardData();
+            setData(nextData);
           }}
         />
       )}
@@ -546,6 +613,50 @@ export default function TodosPage() {
             ))}
           </div>
         </section>
+      )}
+
+      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+        <button
+          type="button"
+          onClick={() => setFabOpen(true)}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+          aria-label="Neues Dokument erstellen"
+        >
+          <span className="text-2xl leading-none">+</span>
+        </button>
+      </div>
+
+      {fabOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden">
+          <div className="w-full rounded-t-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
+            <div className="space-y-3">
+              <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
+                Neue Rechnung
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={() => void openNewEditor("offer")}
+              >
+                Neues Angebot
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={() => {
+                  setFabOpen(false);
+                  navigate("/app/clients");
+                }}
+              >
+                Neuer Kunde
+              </AppButton>
+              <AppButton variant="ghost" className="w-full justify-center" onClick={() => setFabOpen(false)}>
+                Abbrechen
+              </AppButton>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
