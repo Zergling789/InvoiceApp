@@ -2,22 +2,30 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
-import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
-import { calculateDocumentTotal, formatCurrencyEur, isInvoiceOverdue, isInvoiceOpen } from "@/utils/dashboard";
+import { formatDate } from "@/types";
+import { calculateDocumentTotal, formatCurrencyEur } from "@/utils/dashboard";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import * as clientService from "@/app/clients/clientService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
+import {
+  getInvoicePhase,
+  getOfferPhase,
+  type InvoicePhase,
+  type OfferPhase,
+} from "@/features/documents/state/documentState";
+import {
+  formatInvoicePhaseLabel,
+  formatOfferPhaseLabel,
+} from "@/features/documents/state/formatPhaseLabel";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 
 type FilterMode = "all" | "offer" | "invoice";
-type InvoiceFilterStatus = "DRAFT" | "OPEN" | "OVERDUE" | "PAID";
-type CombinedStatus = OfferStatus | InvoiceFilterStatus;
+type CombinedStatus = OfferPhase | InvoicePhase;
 
 type DocumentRow = {
   id: string;
@@ -50,49 +58,33 @@ const newId = () =>
     ? crypto.randomUUID()
     : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 
-const invoiceStatusLabel = (status: InvoiceFilterStatus) => {
-  if (status === "OPEN") {
-    return formatInvoiceStatus(InvoiceStatus.ISSUED);
-  }
-  if (status === "OVERDUE") {
-    return formatInvoiceStatus(InvoiceStatus.OVERDUE, true);
-  }
-  return formatInvoiceStatus(status as InvoiceStatus);
-};
-
-const offerStatusTone = (status: OfferStatus): DocumentRow["statusTone"] => {
-  switch (status) {
-    case OfferStatus.ACCEPTED:
+const offerStatusTone = (phase: OfferPhase): DocumentRow["statusTone"] => {
+  switch (phase) {
+    case "accepted":
+    case "invoiced":
       return "green";
-    case OfferStatus.REJECTED:
+    case "rejected":
       return "red";
-    case OfferStatus.SENT:
-    case OfferStatus.INVOICED:
+    case "sent":
       return "blue";
     default:
       return "gray";
   }
 };
 
-const invoiceStatusTone = (status: InvoiceFilterStatus): DocumentRow["statusTone"] => {
-  switch (status) {
-    case "OVERDUE":
+const invoiceStatusTone = (phase: InvoicePhase): DocumentRow["statusTone"] => {
+  switch (phase) {
+    case "overdue":
       return "red";
-    case "OPEN":
-      return "yellow";
-    case "PAID":
+    case "paid":
       return "green";
+    case "sent":
+      return "blue";
+    case "issued":
+      return "yellow";
     default:
       return "gray";
   }
-};
-
-const buildInvoiceStatus = (invoice: Invoice, today: Date): InvoiceFilterStatus => {
-  if (invoice.status === InvoiceStatus.PAID) return "PAID";
-  if (invoice.status === InvoiceStatus.DRAFT) return "DRAFT";
-  if (isInvoiceOverdue(invoice, today)) return "OVERDUE";
-  if (isInvoiceOpen(invoice)) return "OPEN";
-  return "OPEN";
 };
 
 const getTimestamp = (value?: string) => {
@@ -197,38 +189,32 @@ export default function DocumentsHubPage() {
 
   const statusOptions = useMemo((): CombinedStatus[] => {
     if (mode === "offer") {
-      return [
-        OfferStatus.DRAFT,
-        OfferStatus.SENT,
-        OfferStatus.ACCEPTED,
-        OfferStatus.REJECTED,
-        OfferStatus.INVOICED,
-      ];
+      return ["draft", "sent", "accepted", "rejected", "invoiced"];
     }
     if (mode === "invoice") {
-      return ["DRAFT", "OPEN", "OVERDUE", "PAID"];
+      return ["draft", "issued", "sent", "overdue", "paid"];
     }
     return [
-      OfferStatus.DRAFT,
-      OfferStatus.SENT,
-      OfferStatus.ACCEPTED,
-      OfferStatus.REJECTED,
-      OfferStatus.INVOICED,
-      "OPEN",
-      "OVERDUE",
-      "PAID",
+      "draft",
+      "sent",
+      "accepted",
+      "rejected",
+      "invoiced",
+      "issued",
+      "overdue",
+      "paid",
     ];
   }, [mode]);
 
   const statusLabel = useMemo(() => {
-    const offerStatusValues = new Set(Object.values(OfferStatus));
-    const invoiceStatusValues = new Set<InvoiceFilterStatus>(["DRAFT", "OPEN", "OVERDUE", "PAID"]);
+    const offerPhases = new Set<OfferPhase>(["draft", "sent", "accepted", "rejected", "invoiced"]);
+    const invoicePhases = new Set<InvoicePhase>(["draft", "issued", "sent", "overdue", "paid"]);
     return (status: CombinedStatus) => {
-      if (offerStatusValues.has(status as OfferStatus)) {
-        return formatOfferStatus(status as OfferStatus);
+      if (offerPhases.has(status as OfferPhase)) {
+        return formatOfferPhaseLabel(status as OfferPhase);
       }
-      if (invoiceStatusValues.has(status as InvoiceFilterStatus)) {
-        return invoiceStatusLabel(status as InvoiceFilterStatus);
+      if (invoicePhases.has(status as InvoicePhase)) {
+        return formatInvoicePhaseLabel(status as InvoicePhase);
       }
       return String(status);
     };
@@ -240,7 +226,7 @@ export default function DocumentsHubPage() {
       mode === "offer"
         ? []
         : invoices.map((invoice) => {
-            const statusKey = buildInvoiceStatus(invoice, today);
+            const phase = getInvoicePhase(invoice, today);
             return {
               id: invoice.id,
               type: "invoice",
@@ -251,32 +237,35 @@ export default function DocumentsHubPage() {
               amountLabel: formatCurrencyEur(
                 calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0))
               ),
-              statusLabel: formatInvoiceStatus(invoice.status, statusKey === "OVERDUE"),
-              statusTone: invoiceStatusTone(statusKey),
-              statusKey,
+              statusLabel: formatInvoicePhaseLabel(phase),
+              statusTone: invoiceStatusTone(phase),
+              statusKey: phase,
               dueDate: invoice.dueDate,
-              isOverdue: statusKey === "OVERDUE",
+              isOverdue: phase === "overdue",
             };
           });
 
     const offerRows: DocumentRow[] =
       mode === "invoice"
         ? []
-        : offers.map((offer) => ({
-            id: offer.id,
-            type: "offer",
-            number: offer.number,
-            clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
-            date: offer.date,
-            createdAt: (offer as { createdAt?: string }).createdAt,
-            amountLabel: formatCurrencyEur(
-              calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0))
-            ),
-            statusLabel: formatOfferStatus(offer.status),
-            statusTone: offerStatusTone(offer.status),
-            statusKey: offer.status,
-            validUntil: offer.validUntil,
-          }));
+        : offers.map((offer) => {
+            const phase = getOfferPhase(offer);
+            return {
+              id: offer.id,
+              type: "offer",
+              number: offer.number,
+              clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
+              date: offer.date,
+              createdAt: (offer as { createdAt?: string }).createdAt,
+              amountLabel: formatCurrencyEur(
+                calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0))
+              ),
+              statusLabel: formatOfferPhaseLabel(phase),
+              statusTone: offerStatusTone(phase),
+              statusKey: phase,
+              validUntil: offer.validUntil,
+            };
+          });
 
     return [...offerRows, ...invoiceRows];
   }, [clientNameById, invoices, offers, mode]);

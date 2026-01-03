@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
-import { InvoiceStatus, OfferStatus } from "@/types";
 import { loadDashboardData } from "@/app/dashboard/dashboardService";
 import { fetchSettings } from "@/app/settings/settingsService";
 import {
@@ -11,9 +10,6 @@ import {
   getDaysSince,
   getInvoiceReferenceDate,
   getOfferReferenceDate,
-  isInvoiceOpen,
-  isInvoiceOverdue,
-  isOfferFollowUpDue,
   type OfferWithFollowUp,
 } from "@/utils/dashboard";
 import { AppBadge } from "@/ui/AppBadge";
@@ -26,6 +22,15 @@ import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
+import {
+  getDocumentCapabilities,
+  getInvoicePhase,
+  getOfferPhase,
+} from "@/features/documents/state/documentState";
+import {
+  formatInvoicePhaseLabel,
+  formatOfferPhaseLabel,
+} from "@/features/documents/state/formatPhaseLabel";
 
 type DashboardData = {
   clients: Client[];
@@ -42,7 +47,10 @@ type TodoCard = {
   statusLabel: string;
   statusTone: "gray" | "yellow" | "red" | "blue";
   ageLabel: string;
-  secondaryLabel?: string;
+  secondaryAction?: {
+    label: string;
+    intent: "reminder" | "dunning" | "followup" | "edit";
+  };
 };
 
 type FilterType = "all" | "invoices" | "offers";
@@ -126,7 +134,7 @@ export default function TodosPage() {
   const overdueInvoices = useMemo(
     () =>
       showInvoices
-        ? data.invoices.filter((invoice) => isInvoiceOpen(invoice) && isInvoiceOverdue(invoice, today))
+        ? data.invoices.filter((invoice) => getInvoicePhase(invoice, today) === "overdue")
         : [],
     [data.invoices, showInvoices, today]
   );
@@ -134,7 +142,10 @@ export default function TodosPage() {
   const openInvoices = useMemo(
     () =>
       showInvoices
-        ? data.invoices.filter((invoice) => isInvoiceOpen(invoice) && !isInvoiceOverdue(invoice, today))
+        ? data.invoices.filter((invoice) => {
+            const phase = getInvoicePhase(invoice, today);
+            return phase === "issued" || phase === "sent";
+          })
         : [],
     [data.invoices, showInvoices, today]
   );
@@ -142,9 +153,9 @@ export default function TodosPage() {
   const followUpOffers = useMemo(
     () =>
       showOffers
-        ? data.offers.filter((offer) => isOfferFollowUpDue(offer as OfferWithFollowUp, today))
+        ? data.offers.filter((offer) => getOfferPhase(offer) === "sent")
         : [],
-    [data.offers, showOffers, today]
+    [data.offers, showOffers]
   );
 
   const draftItems = useMemo(() => {
@@ -152,7 +163,7 @@ export default function TodosPage() {
     if (showInvoices) {
       data.invoices.forEach((invoice) => {
         const isIncomplete =
-          invoice.status === InvoiceStatus.DRAFT &&
+          getInvoicePhase(invoice, today) === "draft" &&
           ((invoice.positions ?? []).length === 0 || !invoice.clientId || invoice.vatRate == null);
         if (isIncomplete) items.push({ type: "invoice", data: invoice });
       });
@@ -160,15 +171,23 @@ export default function TodosPage() {
     if (showOffers) {
       data.offers.forEach((offer) => {
         const isIncomplete =
-          offer.status === OfferStatus.DRAFT &&
+          getOfferPhase(offer) === "draft" &&
           ((offer.positions ?? []).length === 0 || !offer.clientId || offer.vatRate == null);
         if (isIncomplete) items.push({ type: "offer", data: offer });
       });
     }
     return items;
-  }, [data.invoices, data.offers, showInvoices, showOffers]);
+  }, [data.invoices, data.offers, showInvoices, showOffers, today]);
 
-  const buildInvoiceCard = (invoice: Invoice, options: { statusLabel: string; tone: TodoCard["statusTone"]; ageLabel: string; secondaryLabel?: string }) => {
+  const buildInvoiceCard = (
+    invoice: Invoice,
+    options: {
+      statusLabel: string;
+      tone: TodoCard["statusTone"];
+      ageLabel: string;
+      secondaryAction?: TodoCard["secondaryAction"];
+    }
+  ) => {
     const total = calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0));
     return {
       id: invoice.id,
@@ -179,11 +198,19 @@ export default function TodosPage() {
       statusLabel: options.statusLabel,
       statusTone: options.tone,
       ageLabel: options.ageLabel,
-      secondaryLabel: options.secondaryLabel,
+      secondaryAction: options.secondaryAction,
     };
   };
 
-  const buildOfferCard = (offer: Offer, options: { statusLabel: string; tone: TodoCard["statusTone"]; ageLabel: string; secondaryLabel?: string }) => {
+  const buildOfferCard = (
+    offer: Offer,
+    options: {
+      statusLabel: string;
+      tone: TodoCard["statusTone"];
+      ageLabel: string;
+      secondaryAction?: TodoCard["secondaryAction"];
+    }
+  ) => {
     const total = calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0));
     return {
       id: offer.id,
@@ -194,56 +221,68 @@ export default function TodosPage() {
       statusLabel: options.statusLabel,
       statusTone: options.tone,
       ageLabel: options.ageLabel,
-      secondaryLabel: options.secondaryLabel,
+      secondaryAction: options.secondaryAction,
     };
   };
 
   const overdueInvoiceCards = overdueInvoices.map((invoice) =>
-    buildInvoiceCard(invoice, {
-      statusLabel: "Überfällig",
-      tone: "red",
-      ageLabel: `seit ${getDaysSince(invoice.dueDate ?? invoice.date, today)} Tagen`,
-      secondaryLabel: "Mahnung senden",
-    })
+    buildInvoiceCard(invoice, (() => {
+      const phase = getInvoicePhase(invoice, today);
+      const capabilities = getDocumentCapabilities("invoice", invoice, today);
+      return {
+        statusLabel: formatInvoicePhaseLabel(phase),
+        tone: "red",
+        ageLabel: `seit ${getDaysSince(invoice.dueDate ?? invoice.date, today)} Tagen`,
+        secondaryAction: capabilities.canSendDunning ? { label: "Mahnung senden", intent: "dunning" } : undefined,
+      };
+    })())
   );
 
   const openInvoiceCards = openInvoices.map((invoice) => {
     const dueLabel = invoice.dueDate
       ? `fällig in ${daysUntil(invoice.dueDate, today)} Tagen`
       : `seit ${getDaysSince(getInvoiceReferenceDate(invoice), today)} Tagen`;
+    const phase = getInvoicePhase(invoice, today);
+    const capabilities = getDocumentCapabilities("invoice", invoice, today);
     return buildInvoiceCard(invoice, {
-      statusLabel: "Offen",
+      statusLabel: formatInvoicePhaseLabel(phase),
       tone: "yellow",
       ageLabel: dueLabel,
-      secondaryLabel: "Erinnerung senden",
+      secondaryAction: capabilities.canSendReminder ? { label: "Erinnerung senden", intent: "reminder" } : undefined,
     });
   });
 
   const followUpOfferCards = followUpOffers.map((offer) =>
-    buildOfferCard(offer, {
-      statusLabel: "Follow-up fällig",
-      tone: "blue",
-      ageLabel: `seit ${getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today)} Tagen`,
-      secondaryLabel: "Follow-up senden",
-    })
+    buildOfferCard(offer, (() => {
+      const phase = getOfferPhase(offer);
+      const capabilities = getDocumentCapabilities("offer", offer);
+      return {
+        statusLabel: formatOfferPhaseLabel(phase),
+        tone: "blue",
+        ageLabel: `seit ${getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today)} Tagen`,
+        secondaryAction: capabilities.canSend ? { label: "Follow-up senden", intent: "followup" } : undefined,
+      };
+    })())
   );
 
   const draftCards = draftItems.map((item) => {
     if (item.type === "invoice") {
       const invoice = item.data as Invoice;
+      const capabilities = getDocumentCapabilities("invoice", invoice, today);
       return buildInvoiceCard(invoice, {
         statusLabel: "Entwurf unvollständig",
         tone: "gray",
         ageLabel: `seit ${getDaysSince(invoice.date, today)} Tagen`,
-        secondaryLabel: "Vervollständigen",
+        secondaryAction: capabilities.canEdit ? { label: "Vervollständigen", intent: "edit" } : undefined,
       });
     }
     const offer = item.data as Offer;
+    const capabilities = getDocumentCapabilities("offer", offer);
     return buildOfferCard(offer, {
       statusLabel: "Entwurf unvollständig",
       tone: "gray",
       ageLabel: `seit ${getDaysSince(offer.date, today)} Tagen`,
-      secondaryLabel: "Vervollständigen",
+      secondaryAction: capabilities.canEdit ? { label: "Vervollständigen", intent: "edit" } : undefined,
     });
   });
 
@@ -268,7 +307,8 @@ export default function TodosPage() {
   const handleFinalizeInvoice = async () => {
     if (!selectedDoc || selectedType !== "invoice") return null;
     const invoice = selectedDoc as Invoice;
-    if (invoice.status !== InvoiceStatus.DRAFT) return invoice;
+    const capabilities = getDocumentCapabilities("invoice", invoice, today);
+    if (!capabilities.canFinalize) return invoice;
 
     const ok = await confirm({
       title: "Rechnung finalisieren",
@@ -308,30 +348,41 @@ export default function TodosPage() {
       toast.error("E-Mail-Einstellungen fehlen.");
       return;
     }
-    if (!card.secondaryLabel) return;
+    if (!card.secondaryAction) return;
 
     if (card.type === "invoice") {
       const invoice = data.invoices.find((entry) => entry.id === card.id);
       if (!invoice) return;
-      const intent = card.secondaryLabel.includes("Mahnung") ? "dunning" : "reminder";
-      setSelectedDoc(invoice);
-      setSelectedType("invoice");
-      setSendIntent(intent);
-      setSendOpen(true);
-      return;
+      if (card.secondaryAction.intent === "edit") {
+        navigate(`/app/documents/invoice/${invoice.id}/edit`);
+        return;
+      }
+      if (card.secondaryAction.intent === "reminder" || card.secondaryAction.intent === "dunning") {
+        setSelectedDoc(invoice);
+        setSelectedType("invoice");
+        setSendIntent(card.secondaryAction.intent);
+        setSendOpen(true);
+        return;
+      }
     }
 
-    if (card.type === "offer" && card.secondaryLabel.includes("Follow-up")) {
+    if (card.type === "offer") {
       const offer = data.offers.find((entry) => entry.id === card.id);
       if (!offer) return;
-      setSelectedDoc(offer);
-      setSelectedType("offer");
-      setSendIntent("followup");
-      setSendOpen(true);
-      return;
+      if (card.secondaryAction.intent === "edit") {
+        navigate(`/app/documents/offer/${offer.id}/edit`);
+        return;
+      }
+      if (card.secondaryAction.intent === "followup") {
+        setSelectedDoc(offer);
+        setSelectedType("offer");
+        setSendIntent("followup");
+        setSendOpen(true);
+        return;
+      }
     }
 
-    toast.info(`${card.secondaryLabel} kommt als Nächstes.`);
+    toast.info(`${card.secondaryAction.label} kommt als Nächstes.`);
   };
 
   const openNewEditor = async (type: "invoice" | "offer") => {
@@ -490,9 +541,9 @@ export default function TodosPage() {
                   <Link to={`/app/documents/${card.type}/${card.id}`}>
                     <AppButton>Öffnen</AppButton>
                   </Link>
-                  {card.secondaryLabel && (
+                  {card.secondaryAction && (
                     <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
-                      {card.secondaryLabel}
+                      {card.secondaryAction.label}
                     </AppButton>
                   )}
                 </div>
@@ -527,9 +578,9 @@ export default function TodosPage() {
                   <Link to={`/app/documents/${card.type}/${card.id}`}>
                     <AppButton>Öffnen</AppButton>
                   </Link>
-                  {card.secondaryLabel && (
+                  {card.secondaryAction && (
                     <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
-                      {card.secondaryLabel}
+                      {card.secondaryAction.label}
                     </AppButton>
                   )}
                 </div>
@@ -564,9 +615,9 @@ export default function TodosPage() {
                   <Link to={`/app/documents/${card.type}/${card.id}`}>
                     <AppButton>Öffnen</AppButton>
                   </Link>
-                  {card.secondaryLabel && (
+                  {card.secondaryAction && (
                     <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
-                      {card.secondaryLabel}
+                      {card.secondaryAction.label}
                     </AppButton>
                   )}
                 </div>
@@ -603,9 +654,9 @@ export default function TodosPage() {
                   <Link to={`/app/documents/${card.type}/${card.id}`}>
                     <AppButton>Öffnen</AppButton>
                   </Link>
-                  {card.secondaryLabel && (
+                  {card.secondaryAction && (
                     <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
-                      {card.secondaryLabel}
+                      {card.secondaryAction.label}
                     </AppButton>
                   )}
                 </div>

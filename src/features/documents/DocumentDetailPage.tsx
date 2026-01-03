@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { MoreVertical, Pencil } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 
 import type { Client, Invoice, Offer, Position, UserSettings } from "@/types";
 import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
@@ -10,8 +10,6 @@ import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActionSheet } from "@/components/ui/ActionSheet";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
-import { canConvertToInvoice } from "@/domain/rules/offerRules";
-import { isInvoiceOverdue } from "@/utils/dashboard";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
@@ -21,11 +19,16 @@ import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
+import {
+  getDocumentCapabilities,
+  getInvoicePhase,
+  getOfferPhase,
+} from "@/features/documents/state/documentState";
 
-const statusTone = (status: InvoiceStatus | OfferStatus) => {
-  if (status === InvoiceStatus.PAID || status === OfferStatus.ACCEPTED) return "green";
-  if (status === InvoiceStatus.OVERDUE || status === OfferStatus.REJECTED) return "red";
-  if (status === InvoiceStatus.SENT || status === InvoiceStatus.ISSUED || status === OfferStatus.SENT) return "blue";
+const statusTone = (phase: string) => {
+  if (phase === "paid" || phase === "accepted" || phase === "invoiced") return "green";
+  if (phase === "overdue" || phase === "rejected") return "red";
+  if (phase === "sent" || phase === "issued") return "blue";
   return "gray";
 };
 
@@ -151,10 +154,22 @@ export default function DocumentDetailPage() {
     return settings.emailDefaultText?.trim() || "Bitte im Anhang finden Sie das Dokument.";
   }, [settings]);
 
+  const phase = useMemo(() => {
+    if (!doc) return null;
+    return docType === "invoice" ? getInvoicePhase(doc as Invoice) : getOfferPhase(doc as Offer);
+  }, [doc, docType]);
+
+  const capabilities = useMemo(() => {
+    if (!doc) return null;
+    return docType === "invoice"
+      ? getDocumentCapabilities("invoice", doc as Invoice)
+      : getDocumentCapabilities("offer", doc as Offer);
+  }, [doc, docType]);
+
   const handleMarkPaid = async () => {
     if (!doc || docType !== "invoice") return;
+    if (!capabilities?.canMarkPaid) return;
     const invoice = doc as Invoice;
-    if (invoice.status === InvoiceStatus.PAID) return;
     const ok = await confirm({
       title: "Als bezahlt markieren",
       message: "Soll die Rechnung als bezahlt markiert werden?",
@@ -170,33 +185,10 @@ export default function DocumentDetailPage() {
     toast.success("Rechnung als bezahlt markiert.");
   };
 
-  const handleMarkOfferSentManual = async () => {
-    if (!doc || docType !== "offer") return;
-    const offer = doc as Offer;
-    const nowIso = new Date().toISOString();
-    await offerService.saveOffer({
-      ...offer,
-      status: OfferStatus.SENT,
-      sentAt: offer.sentAt ?? nowIso,
-      lastSentAt: nowIso,
-      sentCount: (offer.sentCount ?? 0) + 1,
-      sentVia: "MANUAL",
-    });
-    setDoc({
-      ...offer,
-      status: OfferStatus.SENT,
-      sentAt: offer.sentAt ?? nowIso,
-      lastSentAt: nowIso,
-      sentCount: (offer.sentCount ?? 0) + 1,
-      sentVia: "MANUAL",
-    });
-    toast.success("Angebot als gesendet markiert.");
-  };
-
   const handleOfferAccepted = async () => {
     if (!doc || docType !== "offer") return;
+    if (!capabilities?.canAccept) return;
     const offer = doc as Offer;
-    if (offer.status === OfferStatus.ACCEPTED) return;
     const ok = await confirm({
       title: "Angebot annehmen",
       message: "Soll das Angebot als angenommen markiert werden?",
@@ -207,13 +199,24 @@ export default function DocumentDetailPage() {
     toast.success("Angebot als angenommen markiert.");
   };
 
+  const handleOfferRejected = async () => {
+    if (!doc || docType !== "offer") return;
+    if (!capabilities?.canReject) return;
+    const offer = doc as Offer;
+    const ok = await confirm({
+      title: "Angebot ablehnen",
+      message: "Soll das Angebot als abgelehnt markiert werden?",
+    });
+    if (!ok) return;
+    await offerService.saveOffer({ ...offer, status: OfferStatus.REJECTED });
+    setDoc({ ...offer, status: OfferStatus.REJECTED });
+    toast.success("Angebot als abgelehnt markiert.");
+  };
+
   const handleConvertToInvoice = async () => {
     if (!doc || docType !== "offer") return;
+    if (!capabilities?.canConvertToInvoice) return;
     const offer = doc as Offer;
-    if (!canConvertToInvoice(offer)) {
-      toast.error("Dieses Angebot kann nicht mehr umgewandelt werden.");
-      return;
-    }
     const ok = await confirm({
       title: "Rechnung erstellen",
       message: "Angebot in Rechnung umwandeln?",
@@ -239,77 +242,145 @@ export default function DocumentDetailPage() {
     setShowSendModal(true);
   };
 
+  const handleFinalizeInvoice = async () => {
+    if (!doc || docType !== "invoice") return;
+    if (!capabilities?.canFinalize) return;
+    const invoice = doc as Invoice;
+    const ok = await confirm({
+      title: "Rechnung finalisieren",
+      message: "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+    });
+    if (!ok) return;
+
+    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
+      invoice_id: invoice.id,
+    });
+
+    if (finalizeError) {
+      toast.error(
+        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
+          "Rechnung konnte nicht finalisiert werden."
+      );
+      return;
+    }
+
+    const updated = await invoiceService.getInvoice(invoice.id);
+    if (!updated) {
+      toast.error("Rechnung konnte nicht geladen werden.");
+      return;
+    }
+    setDoc(updated);
+  };
+
   const actions =
     docType === "invoice"
       ? [
-          {
-            label: "Senden",
-            onSelect: () => {
-              setShowActionSheet(false);
-              handleOpenSend();
-            },
-          },
-          {
-            label: "Erinnerung senden",
-            onSelect: () => {
-              setShowActionSheet(false);
-              handleOpenSend("reminder");
-            },
-          },
-          {
-            label: "Mahnung senden",
-            onSelect: () => {
-              setShowActionSheet(false);
-              handleOpenSend("dunning");
-            },
-          },
-          {
-            label: "Als bezahlt markieren",
-            onSelect: () => {
-              setShowActionSheet(false);
-              void handleMarkPaid();
-            },
-            disabled: doc.status === InvoiceStatus.PAID,
-          },
+          ...(capabilities?.canFinalize
+            ? [
+                {
+                  label: "Finalisieren",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    void handleFinalizeInvoice();
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canSend
+            ? [
+                {
+                  label: "Senden",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    handleOpenSend();
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canSendReminder
+            ? [
+                {
+                  label: "Erinnerung senden",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    handleOpenSend("reminder");
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canSendDunning
+            ? [
+                {
+                  label: "Mahnung senden",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    handleOpenSend("dunning");
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canEdit
+            ? [
+                {
+                  label: "Bearbeiten",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    handleEdit();
+                  },
+                },
+              ]
+            : []),
         ]
       : [
-          {
-            label: "Senden",
-            onSelect: () => {
-              setShowActionSheet(false);
-              handleOpenSend();
-            },
-          },
-          {
-            label: "Als gesendet markieren",
-            onSelect: () => {
-              setShowActionSheet(false);
-              void handleMarkOfferSentManual();
-            },
-          },
-          {
-            label: "Als angenommen markieren",
-            onSelect: () => {
-              setShowActionSheet(false);
-              void handleOfferAccepted();
-            },
-            disabled: doc.status === OfferStatus.ACCEPTED,
-          },
-          {
-            label: "In Rechnung wandeln",
-            onSelect: () => {
-              setShowActionSheet(false);
-              void handleConvertToInvoice();
-            },
-            disabled: !canConvertToInvoice(doc as Offer),
-          },
+          ...(capabilities?.canSend
+            ? [
+                {
+                  label: "Senden",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    handleOpenSend();
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canReject
+            ? [
+                {
+                  label: "Ablehnen",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    void handleOfferRejected();
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canConvertToInvoice
+            ? [
+                {
+                  label: "In Rechnung wandeln",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    void handleConvertToInvoice();
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canEdit
+            ? [
+                {
+                  label: "Bearbeiten",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    handleEdit();
+                  },
+                },
+              ]
+            : []),
         ];
 
   const handleEdit = () => {
     if (!doc || !settings) return;
-    const locked =
-      ("isLocked" in doc && doc.isLocked) || ("finalizedAt" in doc && Boolean(doc.finalizedAt));
-    if (locked) {
+    if (!capabilities?.canEdit) {
       toast.info("Finalisiert – nicht editierbar.");
       return;
     }
@@ -368,7 +439,19 @@ export default function DocumentDetailPage() {
   }
 
   const docStatus = doc.status;
-  const overdue = docType === "invoice" && isInvoiceOverdue(doc as Invoice);
+  const overdue = phase === "overdue";
+  const primaryAction =
+    docType === "invoice" && capabilities?.canMarkPaid
+      ? {
+          label: "Als bezahlt markieren",
+          onClick: handleMarkPaid,
+        }
+      : docType === "offer" && capabilities?.canAccept
+        ? {
+            label: "Als angenommen markieren",
+            onClick: handleOfferAccepted,
+          }
+        : null;
 
   return (
     <div className="space-y-6 pb-24">
@@ -429,15 +512,12 @@ export default function DocumentDetailPage() {
               )}
             </div>
           </div>
-          <AppBadge color={overdue ? "red" : statusTone(docStatus)}>
+          <AppBadge color={overdue ? "red" : statusTone(phase ?? String(docStatus))}>
             {formatDocumentStatus(docType, docStatus, { isOverdue: overdue })}
           </AppBadge>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <AppButton variant="ghost" onClick={handleEdit}>
-            <Pencil size={16} /> Bearbeiten
-          </AppButton>
           <AppButton variant="ghost" onClick={() => setShowActionSheet(true)}>
             <MoreVertical size={16} /> Mehr
           </AppButton>
@@ -530,21 +610,17 @@ export default function DocumentDetailPage() {
         actions={actions}
       />
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom">
-        <div className="app-container">
-          <div className="flex flex-wrap gap-2 py-3">
-            {docType === "invoice" ? (
-              <AppButton onClick={handleMarkPaid} disabled={doc.status === InvoiceStatus.PAID} className="flex-1 justify-center">
-                Als bezahlt markieren
+      {primaryAction && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom">
+          <div className="app-container">
+            <div className="flex flex-wrap gap-2 py-3">
+              <AppButton onClick={primaryAction.onClick} className="flex-1 justify-center">
+                {primaryAction.label}
               </AppButton>
-            ) : (
-              <AppButton onClick={handleOfferAccepted} disabled={doc.status === OfferStatus.ACCEPTED} className="flex-1 justify-center">
-                Als angenommen markieren
-              </AppButton>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

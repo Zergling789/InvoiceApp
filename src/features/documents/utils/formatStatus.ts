@@ -1,28 +1,46 @@
-import { InvoiceStatus, OfferStatus } from "@/types";
+import { Invoice, InvoiceStatus, Offer, OfferStatus } from "@/types";
+import { getInvoicePhase, getOfferPhase } from "@/features/documents/state/documentState";
+import { formatInvoicePhaseLabel, formatOfferPhaseLabel } from "@/features/documents/state/formatPhaseLabel";
+
+const buildInvoiceForPhase = (status: InvoiceStatus, isOverdue: boolean): Invoice => {
+  const now = new Date();
+  const overdueDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  return {
+    id: "status-placeholder",
+    number: "STATUS",
+    clientId: "status-placeholder",
+    date: now.toISOString(),
+    dueDate: isOverdue ? overdueDate : undefined,
+    positions: [],
+    vatRate: 0,
+    introText: "",
+    footerText: "",
+    status,
+  };
+};
+
+const buildOfferForPhase = (status: OfferStatus): Offer => ({
+  id: "status-placeholder",
+  number: "STATUS",
+  clientId: "status-placeholder",
+  date: new Date().toISOString(),
+  positions: [],
+  vatRate: 0,
+  introText: "",
+  footerText: "",
+  status,
+});
 
 export const formatInvoiceStatus = (status: InvoiceStatus, isOverdue = false): string => {
-  if (status === InvoiceStatus.PAID) return "Bezahlt";
-  if (status === InvoiceStatus.DRAFT) return "Entwurf";
-  if (isOverdue || status === InvoiceStatus.OVERDUE) return "Überfällig";
-  if (status === InvoiceStatus.SENT) return "Gesendet";
-  return "Offen";
+  const invoice = buildInvoiceForPhase(status, isOverdue);
+  const phase = getInvoicePhase(invoice, new Date());
+  return formatInvoicePhaseLabel(phase);
 };
 
 export const formatOfferStatus = (status: OfferStatus): string => {
-  switch (status) {
-    case OfferStatus.DRAFT:
-      return "Entwurf";
-    case OfferStatus.SENT:
-      return "Gesendet";
-    case OfferStatus.ACCEPTED:
-      return "Angenommen";
-    case OfferStatus.REJECTED:
-      return "Abgelehnt";
-    case OfferStatus.INVOICED:
-      return "In Rechnung gestellt";
-    default:
-      return String(status);
-  }
+  const offer = buildOfferForPhase(status);
+  const phase = getOfferPhase(offer);
+  return formatOfferPhaseLabel(phase);
 };
 
 export const formatDocumentStatus = (
