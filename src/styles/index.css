@@ -540,6 +540,10 @@
     }
   }
 
+  .app-shell--no-mobile-nav {
+    padding-bottom: 0;
+  }
+
   .safe-top {
     padding-top: env(safe-area-inset-top);
   }

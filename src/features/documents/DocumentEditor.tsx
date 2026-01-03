@@ -123,6 +123,11 @@ export function DocumentEditor({
   initial,
   readOnly = false,
   startInPrint = false,
+  layout = "modal",
+  showTabs = true,
+  actionMode = "full",
+  primaryActionLabel = "Speichern",
+  disableOfferWizard = false,
 }: {
   type: "offer" | "invoice";
   seed: EditorSeed;
@@ -133,8 +138,15 @@ export function DocumentEditor({
   initial?: Partial<FormData>;
   readOnly?: boolean;
   startInPrint?: boolean;
+  layout?: "modal" | "page";
+  showTabs?: boolean;
+  actionMode?: "full" | "save-only";
+  primaryActionLabel?: string;
+  disableOfferWizard?: boolean;
 }) {
   const isInvoice = type === "invoice";
+  const isPageLayout = layout === "page";
+  const showStatusActions = actionMode === "full";
 
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -167,7 +179,11 @@ export function DocumentEditor({
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
   const showOfferWizard =
-    !isInvoice && !readOnly && formData.status === OfferStatus.DRAFT && !formData.invoiceId;
+    !disableOfferWizard &&
+    !isInvoice &&
+    !readOnly &&
+    formData.status === OfferStatus.DRAFT &&
+    !formData.invoiceId;
   const selectedClient = clients.find((c) => c.id === formData.clientId);
   const { defaultSubject, defaultMessage } = useMemo(
     () => buildTemplateDefaults(formData),
@@ -702,9 +718,21 @@ export function DocumentEditor({
 
   // ---------- Normal Editor ----------
   return (
-    <div className="fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40">
+    <div
+      className={
+        isPageLayout
+          ? "min-h-screen-safe bg-gray-50"
+          : "fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40"
+      }
+    >
       {sendModal}
-      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom">
+      <div
+        className={
+          isPageLayout
+            ? "bg-white min-h-screen-safe flex flex-col"
+            : "bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom"
+        }
+      >
         {showOfferWizard ? (
           <>
             <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
@@ -1021,38 +1049,40 @@ export function DocumentEditor({
                   </div>
                 )}
               </div>
-              <AppButton variant="ghost" onClick={onClose}>
-                <X size={20} />
+              <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                {isPageLayout ? <ArrowLeft size={20} /> : <X size={20} />}
               </AppButton>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="flex items-center gap-2 border-b pb-2">
-                <button
-                  type="button"
-                  className={`text-sm font-medium px-3 py-2 rounded-t ${
-                    activeTab === "details"
-                      ? "text-blue-600 border-b-2 border-blue-600"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                  onClick={() => setActiveTab("details")}
-                >
-                  Details
-                </button>
-                <button
-                  type="button"
-                  className={`text-sm font-medium px-3 py-2 rounded-t ${
-                    activeTab === "activity"
-                      ? "text-blue-600 border-b-2 border-blue-600"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                  onClick={() => setActiveTab("activity")}
-                >
-                  Aktivität
-                </button>
-              </div>
+            <div className={`flex-1 overflow-y-auto p-6 space-y-6 ${actionMode === "save-only" ? "bottom-action-spacer" : ""}`}>
+              {showTabs && (
+                <div className="flex items-center gap-2 border-b pb-2">
+                  <button
+                    type="button"
+                    className={`text-sm font-medium px-3 py-2 rounded-t ${
+                      activeTab === "details"
+                        ? "text-blue-600 border-b-2 border-blue-600"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setActiveTab("details")}
+                  >
+                    Details
+                  </button>
+                  <button
+                    type="button"
+                    className={`text-sm font-medium px-3 py-2 rounded-t ${
+                      activeTab === "activity"
+                        ? "text-blue-600 border-b-2 border-blue-600"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setActiveTab("activity")}
+                  >
+                    Aktivität
+                  </button>
+                </div>
+              )}
 
-              {activeTab === "activity" ? (
+              {showTabs && activeTab === "activity" ? (
                 <div className="mt-4">
                   <ActivityTimeline docType={type} docId={formData.id} />
                 </div>
@@ -1390,102 +1420,116 @@ export function DocumentEditor({
               )}
             </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
-          <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">
-            <X size={16} aria-hidden="true" />
-          </AppButton>
-
-          <div className="flex gap-2 flex-wrap justify-end">
-            <AppButton
-              variant="secondary"
-              disabled={saving}
-              onClick={async () => {
-                if (readOnly || locked) {
-                  setShowPrint(true);
-                  return;
-                }
-                const ok = await handleSave({ closeAfterSave: false });
-                if (ok) setShowPrint(true);
-              }}
-            >
-              Vorschau & Drucken
-            </AppButton>
-
-            {!readOnly && (
+        {actionMode === "save-only" ? (
+          !readOnly && (
+            <div className={isPageLayout ? "bottom-action-bar safe-area-container" : "p-6 border-t bg-gray-50"}>
               <AppButton
                 disabled={saving || !formData.clientId}
                 onClick={() => void handleSave({ closeAfterSave: true })}
+                className="w-full justify-center"
               >
-                {saving ? "Speichere..." : "Speichern"}
+                {saving ? "Speichere..." : primaryActionLabel}
               </AppButton>
-            )}
+            </div>
+          )
+        ) : (
+          <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
+            <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">
+              <X size={16} aria-hidden="true" />
+            </AppButton>
 
-            {!readOnly && !isInvoice && formData.status === OfferStatus.DRAFT && (
-              <AppButton onClick={() => setShowSendModal(true)}>
-                <Mail size={16} /> Send offer
-              </AppButton>
-            )}
-
-            {!readOnly && !isInvoice && formData.status !== OfferStatus.DRAFT && (
-              <AppButton variant="secondary" onClick={() => setShowSendModal(true)}>
-                <Mail size={16} /> Resend
-              </AppButton>
-            )}
-
-            {!readOnly && !isInvoice && (
-              <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
-                Mark as sent
-              </AppButton>
-            )}
-
-            {!readOnly && !isInvoice && (
+            <div className="flex gap-2 flex-wrap justify-end">
               <AppButton
                 variant="secondary"
-                onClick={() => void handleMarkOfferAccepted()}
-                disabled={formData.status === OfferStatus.ACCEPTED}
+                disabled={saving}
+                onClick={async () => {
+                  if (readOnly || locked) {
+                    setShowPrint(true);
+                    return;
+                  }
+                  const ok = await handleSave({ closeAfterSave: false });
+                  if (ok) setShowPrint(true);
+                }}
               >
-                Mark as accepted
+                Vorschau & Drucken
               </AppButton>
-            )}
 
-            {!readOnly && !isInvoice && (
-              <AppButton
-                variant="secondary"
-                onClick={() => void handleMarkOfferDeclined()}
-                disabled={formData.status === OfferStatus.REJECTED}
-              >
-                Mark as declined
-              </AppButton>
-            )}
-
-            {!readOnly && !isInvoice && (
-              <AppButton
-                variant="secondary"
-                onClick={() => void handleCreateInvoiceFromOffer()}
-                disabled={!canConvertToInvoice(formData as any) || Boolean(formData.invoiceId)}
-              >
-                Create invoice
-              </AppButton>
-            )}
-
-            {isInvoice && !readOnly && formData.status === InvoiceStatus.DRAFT && (
-              <>
-                <AppButton variant="secondary" onClick={() => void handleFinalizeInvoice()}>
-                  Finalisieren
+              {!readOnly && (
+                <AppButton
+                  disabled={saving || !formData.clientId}
+                  onClick={() => void handleSave({ closeAfterSave: true })}
+                >
+                  {saving ? "Speichere..." : "Speichern"}
                 </AppButton>
+              )}
+
+              {showStatusActions && !readOnly && !isInvoice && formData.status === OfferStatus.DRAFT && (
                 <AppButton onClick={() => setShowSendModal(true)}>
-                  Finalisieren & Senden
+                  <Mail size={16} /> Send offer
                 </AppButton>
-              </>
-            )}
+              )}
 
-            {isInvoice && formData.status !== InvoiceStatus.DRAFT && (
-              <AppButton onClick={() => setShowSendModal(true)}>
-                <Mail size={16} /> Per E-Mail senden
-              </AppButton>
-            )}
+              {showStatusActions && !readOnly && !isInvoice && formData.status !== OfferStatus.DRAFT && (
+                <AppButton variant="secondary" onClick={() => setShowSendModal(true)}>
+                  <Mail size={16} /> Resend
+                </AppButton>
+              )}
+
+              {showStatusActions && !readOnly && !isInvoice && (
+                <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
+                  Mark as sent
+                </AppButton>
+              )}
+
+              {showStatusActions && !readOnly && !isInvoice && (
+                <AppButton
+                  variant="secondary"
+                  onClick={() => void handleMarkOfferAccepted()}
+                  disabled={formData.status === OfferStatus.ACCEPTED}
+                >
+                  Mark as accepted
+                </AppButton>
+              )}
+
+              {showStatusActions && !readOnly && !isInvoice && (
+                <AppButton
+                  variant="secondary"
+                  onClick={() => void handleMarkOfferDeclined()}
+                  disabled={formData.status === OfferStatus.REJECTED}
+                >
+                  Mark as declined
+                </AppButton>
+              )}
+
+              {showStatusActions && !readOnly && !isInvoice && (
+                <AppButton
+                  variant="secondary"
+                  onClick={() => void handleCreateInvoiceFromOffer()}
+                  disabled={!canConvertToInvoice(formData as any) || Boolean(formData.invoiceId)}
+                >
+                  Create invoice
+                </AppButton>
+              )}
+
+              {showStatusActions && isInvoice && !readOnly && formData.status === InvoiceStatus.DRAFT && (
+                <>
+                  <AppButton variant="secondary" onClick={() => void handleFinalizeInvoice()}>
+                    Finalisieren
+                  </AppButton>
+                  <AppButton onClick={() => setShowSendModal(true)}>
+                    Finalisieren & Senden
+                  </AppButton>
+                </>
+              )}
+
+              {showStatusActions && isInvoice && formData.status !== InvoiceStatus.DRAFT && (
+                <AppButton onClick={() => setShowSendModal(true)}>
+                  <Mail size={16} /> Per E-Mail senden
+                </AppButton>
+              )}
+            </div>
           </div>
-        </div>
+        )}
           </>
         )}
       </div>
