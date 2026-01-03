@@ -438,10 +438,19 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{isInvoice ? "Rechnungen" : "Angebote"}</h1>
 
-        <Button onClick={openNewEditor} disabled={loading} className="w-full sm:w-auto justify-center">
-          <Plus size={16} />
-          Erstellen
-        </Button>
+        {isInvoice ? (
+          <Button onClick={openNewEditor} disabled={loading} className="w-full sm:w-auto justify-center">
+            <Plus size={16} />
+            Erstellen
+          </Button>
+        ) : (
+          <Link to="/app/offers/new" className="w-full sm:w-auto">
+            <Button disabled={loading} className="w-full justify-center">
+              <Plus size={16} />
+              Erstellen
+            </Button>
+          </Link>
+        )}
       </div>
 
       {error && (

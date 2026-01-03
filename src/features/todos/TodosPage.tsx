@@ -386,6 +386,11 @@ export default function TodosPage() {
   };
 
   const openNewEditor = async (type: "invoice" | "offer") => {
+    if (type === "offer") {
+      setFabOpen(false);
+      navigate("/app/offers/new");
+      return;
+    }
     try {
       const nextSettings = settings ?? (await fetchSettings());
       setSettings(nextSettings);
@@ -506,7 +511,7 @@ export default function TodosPage() {
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/app/documents?mode=offers">
+            <Link to="/app/offers/new">
               <AppButton>Neues Angebot</AppButton>
             </Link>
             <Link to="/app/documents?mode=invoices">

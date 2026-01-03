@@ -7,6 +7,7 @@ import Projects from "@/features/projects/Projects";
 import DocumentsPage from "@/features/documents/DocumentsPage";
 import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
 import DocumentDetailPage from "@/features/documents/DocumentDetailPage";
+import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
 import OfferEditPage from "@/features/documents/edit/OfferEditPage";
 import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
 import TodosPage from "@/features/todos/TodosPage";
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="clients" element={<Clients />} />
         <Route path="projects" element={<Projects />} />
         <Route path="offers" element={<DocumentsPage type="offer" />} />
+        <Route path="offers/new" element={<OfferCreatePage />} />
         <Route path="invoices" element={<DocumentsPage type="invoice" />} />
         <Route path="documents/offer/:id/edit" element={<OfferEditPage />} />
         <Route path="documents/invoice/:id/edit" element={<InvoiceEditPage />} />
