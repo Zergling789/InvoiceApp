@@ -9,7 +9,7 @@ import SettingsView from "@/features/settings/SettingsView";
 import VerifyEmailResult from "@/features/settings/VerifyEmailResult";
 import AppShell from "@/components/Layout/AppShell";
 import type { NavItem } from "@/components/Layout/Sidebar";
-import HomePage from "@/pages/HomePage";
+import AngebotDetailsPage from "@/pages/AngebotDetailsPage";
 import LoginPage from "@/pages/LoginPage";
 import RequireAuth from "@/components/Auth/RequireAuth";
 
@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<AngebotDetailsPage />} />
       <Route path="/login" element={<LoginPage />} />
 
       <Route
