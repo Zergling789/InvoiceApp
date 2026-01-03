@@ -1,5 +1,6 @@
 import { readApiError } from "@/app/api/apiError";
 import { apiFetch } from "@/app/api/apiClient";
+import { ApiRequestError } from "@/utils/errors";
 
 type PdfPayload = {
   type: "offer" | "invoice";
@@ -20,7 +21,7 @@ export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blo
 
   if (!res.ok) {
     const err = await readApiError(res);
-    throw new Error(err.message || "PDF konnte nicht erstellt werden.");
+    throw new ApiRequestError(err.message || "PDF konnte nicht erstellt werden.", res.status, err.code);
   }
 
   const blob = await res.blob();
@@ -41,4 +42,3 @@ export async function downloadDocumentPdf(payload: PdfPayload) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-

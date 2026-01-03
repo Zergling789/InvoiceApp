@@ -1,6 +1,6 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
@@ -8,6 +8,7 @@ import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
 import { formatMoney } from "@/utils/money";
 
 import { AppButton } from "@/ui/AppButton";
+import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
@@ -20,6 +21,7 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
+import { ApiRequestError, getErrorMessage, logError } from "@/utils/errors";
 
 export type EditorSeed = {
   id: string;
@@ -160,6 +162,7 @@ export function DocumentEditor({
   const navigate = useNavigate();
   const [showPrint, setShowPrint] = useState(startInPrint);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [pdfError, setPdfError] = useState<{ status?: number; message: string } | null>(null);
 
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice, settings.currency)
@@ -334,14 +337,24 @@ export function DocumentEditor({
   };
 
   const handleDownloadPdf = async () => {
+    setPdfError(null);
     try {
       await downloadDocumentPdf({
         type: isInvoice ? "invoice" : "offer",
         docId: formData.id,
       });
     } catch (error) {
+      logError(error);
+      const status = error instanceof ApiRequestError ? error.status : undefined;
       const message =
-        error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
+        status === 401
+          ? "Session abgelaufen – bitte neu einloggen."
+          : status === 403
+          ? "Kein Zugriff auf dieses Dokument."
+          : status === 404
+          ? "Dokument nicht gefunden."
+          : getErrorMessage(error, "PDF konnte nicht erstellt werden.");
+      setPdfError({ status, message });
       toast.error(message);
     }
   };
@@ -566,6 +579,21 @@ export function DocumentEditor({
                   </AppButton>
                 </div>
               </div>
+              {pdfError && (
+                <div className="no-print mb-6">
+                  <Alert
+                    tone="error"
+                    message={pdfError.message}
+                    action={
+                      pdfError.status === 401 ? (
+                        <Link to="/login">
+                          <AppButton variant="secondary">Zum Login</AppButton>
+                        </Link>
+                      ) : undefined
+                    }
+                  />
+                </div>
+              )}
 
               <div className="flex justify-between mb-12">
                 <div>

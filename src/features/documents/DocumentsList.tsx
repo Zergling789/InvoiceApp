@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { AppButton as Button } from "@/ui/AppButton";
 import { AppBadge as Badge } from "@/ui/AppBadge";
+import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 
@@ -23,6 +24,7 @@ import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { DocumentEditor } from "./DocumentEditor";
 import { formatDocumentStatus, formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
+import { getErrorMessage, logError } from "@/utils/errors";
 
 type EditorSeed = {
   id: string;
@@ -97,6 +99,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [editorInitial, setEditorInitial] = useState<any>(null);
 
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const showEmptyState = !loading && items.length === 0 && !error;
 
   const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
     const label = formatInvoiceStatus(status, overdue);
@@ -201,8 +204,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         );
       }
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -247,8 +250,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       setEditorSeed(seed);
       setEditorOpen(true);
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -309,8 +312,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       setEditorOpen(true);
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -334,8 +337,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       else await offerService.deleteOffer(id);
       await refresh();
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -393,8 +396,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       toast.success("Rechnung erstellt!");
       await refresh();
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -426,8 +429,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       await refresh();
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -453,8 +456,34 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         )}
       </div>
 
-      {error && (
-        <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3 text-sm">{error}</div>
+      {error && <Alert tone="error" message={error} />}
+
+      {showEmptyState && (
+        <div className="rounded-lg border border-dashed border-gray-200 bg-white p-8 text-center">
+          <p className="text-lg font-semibold text-gray-900">
+            {isInvoice ? "Noch keine Rechnungen" : "Noch keine Angebote"}
+          </p>
+          <p className="mt-2 text-sm text-gray-500">
+            {isInvoice
+              ? "Erstellen Sie Ihre erste Rechnung, um den Überblick zu behalten."
+              : "Erstellen Sie Ihr erstes Angebot, um loszulegen."}
+          </p>
+          <div className="mt-4 flex justify-center">
+            {isInvoice ? (
+              <Button onClick={openNewEditor}>
+                <Plus size={16} />
+                Rechnung erstellen
+              </Button>
+            ) : (
+              <Link to="/app/offers/new">
+                <Button>
+                  <Plus size={16} />
+                  Angebot erstellen
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
       )}
 
       {editorOpen && editorSeed && settings && (
@@ -602,7 +631,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           );
         })}
 
-        {items.length === 0 && !loading && (
+        {!showEmptyState && items.length === 0 && !loading && (
           <div className="app-card text-center text-gray-500">Keine Dokumente gefunden.</div>
         )}
 
