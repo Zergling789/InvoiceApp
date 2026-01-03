@@ -48,6 +48,7 @@ export async function dbListOffers(): Promise<Offer[]> {
     number: r.number,
     clientId: r.client_id,
     projectId: r.project_id ?? undefined,
+    currency: r.currency ?? "EUR",
     date: r.date,
     validUntil: r.valid_until ?? "",
     positions: r.positions ?? [],
@@ -82,6 +83,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
     number: data.number,
     clientId: data.client_id,
     projectId: data.project_id ?? undefined,
+    currency: data.currency ?? "EUR",
     date: data.date,
     validUntil: data.valid_until ?? "",
     positions: data.positions ?? [],
@@ -109,6 +111,7 @@ export async function dbUpsertOffer(o: Offer): Promise<void> {
     number: o.number,
     client_id: o.clientId,
     project_id: o.projectId ?? null,
+    currency: o.currency ?? "EUR",
 
     date: o.date,
     valid_until: o.validUntil ?? null,

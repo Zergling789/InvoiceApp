@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { MoreVertical } from "lucide-react";
 
 import type { Client, Invoice, Offer, Position, UserSettings } from "@/types";
-import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
+import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
+import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -46,6 +47,7 @@ const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): Edito
   vatRate: Number(doc.vatRate ?? 0),
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
+  currency: type === "offer" ? (doc as Offer).currency ?? undefined : undefined,
 });
 
 export default function DocumentDetailPage() {
@@ -411,6 +413,7 @@ export default function DocumentDetailPage() {
       sentCount: doc.sentCount ?? 0,
       sentVia: doc.sentVia ?? null,
       invoiceId: "invoiceId" in doc ? doc.invoiceId ?? null : null,
+      currency: "currency" in doc ? doc.currency ?? undefined : undefined,
     });
     setEditorOpen(true);
   };
@@ -440,6 +443,9 @@ export default function DocumentDetailPage() {
 
   const docStatus = doc.status;
   const overdue = phase === "overdue";
+  const locale = settings.locale ?? "de-DE";
+  const documentCurrency =
+    docType === "offer" ? (doc as Offer).currency ?? settings.currency ?? "EUR" : settings.currency ?? "EUR";
   const primaryAction =
     docType === "invoice" && capabilities?.canMarkPaid
       ? {
@@ -499,15 +505,15 @@ export default function DocumentDetailPage() {
               {docType === "invoice" ? "Rechnung" : "Angebot"} #{doc.number}
             </h1>
             <div className="mt-1 text-sm text-gray-600">
-              {client?.companyName ?? "Unbekannter Kunde"} · {formatDate(doc.date, "de-DE")}
+              {client?.companyName ?? "Unbekannter Kunde"} · {formatDate(doc.date, locale)}
               {docType === "invoice" && (doc as Invoice).dueDate && (
                 <>
-                  {" "}· Fällig: {formatDate((doc as Invoice).dueDate ?? "", "de-DE")}
+                  {" "}· Fällig: {formatDate((doc as Invoice).dueDate ?? "", locale)}
                 </>
               )}
               {docType === "offer" && (doc as Offer).validUntil && (
                 <>
-                  {" "}· Gültig bis: {formatDate((doc as Offer).validUntil ?? "", "de-DE")}
+                  {" "}· Gültig bis: {formatDate((doc as Offer).validUntil ?? "", locale)}
                 </>
               )}
             </div>
@@ -535,11 +541,11 @@ export default function DocumentDetailPage() {
                 <div>
                   <div className="font-medium text-gray-900">{pos.description}</div>
                   <div className="text-xs text-gray-500">
-                    {toNumberOrZero(pos.quantity)} {pos.unit} · {formatCurrency(toNumberOrZero(pos.price), "de-DE", settings.currency ?? "EUR")}
+                    {toNumberOrZero(pos.quantity)} {pos.unit} · {formatMoney(toNumberOrZero(pos.price), documentCurrency, locale)}
                   </div>
                 </div>
                 <div className="text-sm font-medium text-gray-900">
-                  {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), "de-DE", settings.currency ?? "EUR")}
+                  {formatMoney(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), documentCurrency, locale)}
                 </div>
               </div>
             ))
@@ -551,15 +557,15 @@ export default function DocumentDetailPage() {
         <h2 className="text-lg font-semibold text-gray-900">Summen</h2>
         <div className="flex items-center justify-between text-sm text-gray-600">
           <span>Netto</span>
-          <span>{formatCurrency(totals.net, "de-DE", settings.currency ?? "EUR")}</span>
+          <span>{formatMoney(totals.net, documentCurrency, locale)}</span>
         </div>
         <div className="flex items-center justify-between text-sm text-gray-600">
           <span>MwSt ({toNumberOrZero(doc.vatRate)}%)</span>
-          <span>{formatCurrency(totals.vat, "de-DE", settings.currency ?? "EUR")}</span>
+          <span>{formatMoney(totals.vat, documentCurrency, locale)}</span>
         </div>
         <div className="flex items-center justify-between text-base font-semibold text-gray-900">
           <span>Brutto</span>
-          <span>{formatCurrency(totals.gross, "de-DE", settings.currency ?? "EUR")}</span>
+          <span>{formatMoney(totals.gross, documentCurrency, locale)}</span>
         </div>
       </AppCard>
 

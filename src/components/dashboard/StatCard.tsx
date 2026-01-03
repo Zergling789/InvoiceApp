@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AppCard } from "@/ui/AppCard";
 
 type StatCardTone = "default" | "warning" | "critical";
@@ -10,7 +11,7 @@ const toneStyles: Record<StatCardTone, string> = {
 
 interface StatCardProps {
   title: string;
-  value: string;
+  value: ReactNode;
   subtitle?: string;
   meta?: string;
   tone?: StatCardTone;
@@ -25,6 +26,7 @@ export function StatCard({
   tone = "default",
   isLoading,
 }: StatCardProps) {
+  const isSimpleValue = typeof value === "string" || typeof value === "number";
   return (
     <AppCard className={`space-y-2 border ${toneStyles[tone]}`}>
       <div className="text-xs uppercase tracking-wide text-gray-500">{title}</div>
@@ -35,7 +37,11 @@ export function StatCard({
         </div>
       ) : (
         <>
-          <div className="text-3xl font-semibold text-gray-900">{value}</div>
+          {isSimpleValue ? (
+            <div className="text-3xl font-semibold text-gray-900">{value}</div>
+          ) : (
+            <div className="text-gray-900">{value}</div>
+          )}
           {subtitle && <div className="text-sm text-gray-600">{subtitle}</div>}
           {meta && <div className="text-xs text-gray-500">{meta}</div>}
         </>

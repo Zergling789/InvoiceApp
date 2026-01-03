@@ -18,6 +18,7 @@ const baseOffer: Offer = {
   id: "offer-1",
   number: "OFF-1",
   clientId: "client-1",
+  currency: "EUR",
   date: "2024-01-01",
   positions: [],
   vatRate: 0,

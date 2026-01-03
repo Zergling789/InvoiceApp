@@ -10,11 +10,11 @@ import { ActionList, type ActionItem } from "@/components/dashboard/ActionList";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
-import type { Client, Invoice, Offer } from "@/types";
+import type { Client, Invoice, Offer, UserSettings } from "@/types";
+import { formatMoney } from "@/utils/money";
 import {
   bucketOfferAge,
   calculateDocumentTotal,
-  formatCurrencyEur,
   getDaysSince,
   getInvoiceReferenceDate,
   getOfferReferenceDate,
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
   const [company, setCompany] = useState<string | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -48,6 +49,7 @@ export default function Dashboard() {
         const [dashboard, settings] = await Promise.all([loadDashboardData(), fetchSettings()]);
         setData(dashboard);
         setCompany(settings.companyName || null);
+        setSettings(settings);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -59,23 +61,40 @@ export default function Dashboard() {
   const derived = useMemo(() => {
     const today = new Date();
     const clientMap = new Map(data.clients.map((client) => [client.id, client.companyName]));
+    const locale = settings?.locale ?? "de-DE";
+    const settingsCurrency = settings?.currency ?? "EUR";
 
     const openInvoices = data.invoices.filter(isInvoiceOpen);
     const overdueInvoices = openInvoices.filter((invoice) => isInvoiceOverdue(invoice, today));
     const openOffers = data.offers.filter(isOfferOpen);
 
-    const openInvoiceTotal = openInvoices.reduce(
-      (sum, invoice) => sum + calculateDocumentTotal(invoice.positions, invoice.vatRate),
-      0
-    );
-    const overdueInvoiceTotal = overdueInvoices.reduce(
-      (sum, invoice) => sum + calculateDocumentTotal(invoice.positions, invoice.vatRate),
-      0
-    );
-    const openOfferTotal = openOffers.reduce(
-      (sum, offer) => sum + calculateDocumentTotal(offer.positions, offer.vatRate),
-      0
-    );
+    const addTotal = (acc: Record<string, number>, currency: string, amount: number) => {
+      acc[currency] = (acc[currency] ?? 0) + amount;
+      return acc;
+    };
+
+    const openInvoiceTotals = openInvoices.reduce((acc, invoice) => {
+      return addTotal(
+        acc,
+        settingsCurrency,
+        calculateDocumentTotal(invoice.positions, invoice.vatRate)
+      );
+    }, {} as Record<string, number>);
+
+    const overdueInvoiceTotals = overdueInvoices.reduce((acc, invoice) => {
+      return addTotal(
+        acc,
+        settingsCurrency,
+        calculateDocumentTotal(invoice.positions, invoice.vatRate)
+      );
+    }, {} as Record<string, number>);
+
+    const openOfferTotals = openOffers.reduce((acc, offer) => {
+      const currency = offer.currency ?? settingsCurrency;
+      return addTotal(acc, currency, calculateDocumentTotal(offer.positions, offer.vatRate));
+    }, {} as Record<string, number>);
+
+    const formatAmount = (amount: number, currency: string) => formatMoney(amount, currency, locale);
 
     const overdueActions = overdueInvoices
       .slice()
@@ -87,7 +106,10 @@ export default function Dashboard() {
           id: `invoice-overdue-${invoice.id}`,
           title: `${clientName} · Rechnung ${invoice.number}`,
           subtitle: "Zahlung überfällig – mahnen, bevor es eskaliert.",
-          amountLabel: formatCurrencyEur(calculateDocumentTotal(invoice.positions, invoice.vatRate)),
+          amountLabel: formatAmount(
+            calculateDocumentTotal(invoice.positions, invoice.vatRate),
+            settingsCurrency
+          ),
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Überfällig",
           tone: "critical",
@@ -107,7 +129,10 @@ export default function Dashboard() {
           id: `invoice-open-${invoice.id}`,
           title: `${clientName} · Rechnung ${invoice.number}`,
           subtitle: "Rechnung offen – sende jetzt die Erinnerung.",
-          amountLabel: formatCurrencyEur(calculateDocumentTotal(invoice.positions, invoice.vatRate)),
+          amountLabel: formatAmount(
+            calculateDocumentTotal(invoice.positions, invoice.vatRate),
+            settingsCurrency
+          ),
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Offen",
           tone: "warning",
@@ -123,11 +148,15 @@ export default function Dashboard() {
       .map<ActionItem>((offer) => {
         const clientName = clientMap.get(offer.clientId) ?? "Unbekannter Kunde";
         const ageDays = getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today);
+        const currency = offer.currency ?? settingsCurrency;
         return {
           id: `offer-followup-${offer.id}`,
           title: `${clientName} · Angebot ${offer.number}`,
           subtitle: "Follow-up fällig – antworte, bevor es kalt wird.",
-          amountLabel: formatCurrencyEur(calculateDocumentTotal(offer.positions, offer.vatRate)),
+          amountLabel: formatAmount(
+            calculateDocumentTotal(offer.positions, offer.vatRate),
+            currency
+          ),
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Follow-up fällig",
           tone: "neutral",
@@ -156,9 +185,9 @@ export default function Dashboard() {
       : 0;
 
     return {
-      openInvoiceTotal,
-      overdueInvoiceTotal,
-      openOfferTotal,
+      openInvoiceTotals,
+      overdueInvoiceTotals,
+      openOfferTotals,
       actionItems,
       offerBuckets,
       oldestOfferAge,
@@ -168,11 +197,45 @@ export default function Dashboard() {
         overdue: overdueInvoices.length,
       },
     };
-  }, [data]);
+  }, [data, settings]);
 
   const headerSubtitle = loading
     ? "Lade aktuelle Prioritäten …"
-    : `Heute: ${derived.actionItems.length} Aktionen, ${formatCurrencyEur(derived.openInvoiceTotal)} offen`;
+    : `Heute: ${derived.actionItems.length} Aktionen, ${
+        formatMoney(
+          derived.openInvoiceTotals[settings?.currency ?? "EUR"] ?? 0,
+          settings?.currency ?? "EUR",
+          settings?.locale ?? "de-DE"
+        )
+      } offen`;
+
+  const renderCurrencyTotals = (totals: Record<string, number>) => {
+    const primaryCurrency = settings?.currency ?? "EUR";
+    const locale = settings?.locale ?? "de-DE";
+    const entries = Object.entries(totals);
+    if (entries.length === 0) return "—";
+    const ordered = entries.sort(([a], [b]) => {
+      if (a === primaryCurrency) return -1;
+      if (b === primaryCurrency) return 1;
+      return a.localeCompare(b);
+    });
+    if (ordered.length === 1) {
+      const [currency, amount] = ordered[0];
+      return formatMoney(amount, currency, locale);
+    }
+    return (
+      <div className="space-y-1 text-lg font-semibold">
+        {ordered.map(([currency, amount]) => (
+          <div key={currency} className="flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {currency}
+            </span>
+            <span>{formatMoney(amount, currency, locale)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-10">
@@ -191,21 +254,21 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <StatCard
             title="Offen"
-            value={loading ? "" : formatCurrencyEur(derived.openInvoiceTotal)}
+            value={loading ? "" : renderCurrencyTotals(derived.openInvoiceTotals)}
             subtitle="Summe offener Rechnungen"
             meta={`Rechnungen: ${derived.invoiceBucketCounts.open}`}
             isLoading={loading}
           />
           <StatCard
             title="Potenzial"
-            value={loading ? "" : formatCurrencyEur(derived.openOfferTotal)}
+            value={loading ? "" : renderCurrencyTotals(derived.openOfferTotals)}
             subtitle="Summe offener Angebote"
             meta={`Angebote offen: ${data.offers.filter(isOfferOpen).length}`}
             isLoading={loading}
           />
           <StatCard
             title="Überfällig"
-            value={loading ? "" : formatCurrencyEur(derived.overdueInvoiceTotal)}
+            value={loading ? "" : renderCurrencyTotals(derived.overdueInvoiceTotals)}
             subtitle="Summe überfälliger Rechnungen"
             meta={`Überfällig: ${derived.invoiceBucketCounts.overdue}`}
             tone="critical"

@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { formatDate } from "@/types";
-import { calculateDocumentTotal, formatCurrencyEur } from "@/utils/dashboard";
+import { calculateDocumentTotal } from "@/utils/dashboard";
+import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -118,14 +119,16 @@ export default function DocumentsHubPage() {
     setLoading(true);
     setError(null);
     try {
-      const [clientData, offerData, invoiceData] = await Promise.all([
+      const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
         clientService.list(),
         offerService.listOffers(),
         invoiceService.listInvoices(),
+        fetchSettings(),
       ]);
       setClients(clientData);
       setOffers(offerData);
       setInvoices(invoiceData);
+      setSettings(settingsData);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -139,15 +142,17 @@ export default function DocumentsHubPage() {
       setLoading(true);
       setError(null);
       try {
-        const [clientData, offerData, invoiceData] = await Promise.all([
+        const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
           clientService.list(),
           offerService.listOffers(),
           invoiceService.listInvoices(),
+          fetchSettings(),
         ]);
         if (!mounted) return;
         setClients(clientData);
         setOffers(offerData);
         setInvoices(invoiceData);
+        setSettings(settingsData);
       } catch (e) {
         if (mounted) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -221,6 +226,8 @@ export default function DocumentsHubPage() {
   }, []);
 
   const rows = useMemo(() => {
+    const locale = settings?.locale ?? "de-DE";
+    const invoiceCurrency = settings?.currency ?? "EUR";
     const today = new Date();
     const invoiceRows: DocumentRow[] =
       mode === "offer"
@@ -234,8 +241,10 @@ export default function DocumentsHubPage() {
               clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
               date: invoice.date,
               createdAt: (invoice as { createdAt?: string }).createdAt,
-              amountLabel: formatCurrencyEur(
-                calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0))
+              amountLabel: formatMoney(
+                calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0)),
+                invoiceCurrency,
+                locale
               ),
               statusLabel: formatInvoicePhaseLabel(phase),
               statusTone: invoiceStatusTone(phase),
@@ -250,6 +259,7 @@ export default function DocumentsHubPage() {
         ? []
         : offers.map((offer) => {
             const phase = getOfferPhase(offer);
+            const currency = offer.currency ?? settings?.currency ?? "EUR";
             return {
               id: offer.id,
               type: "offer",
@@ -257,8 +267,10 @@ export default function DocumentsHubPage() {
               clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
               date: offer.date,
               createdAt: (offer as { createdAt?: string }).createdAt,
-              amountLabel: formatCurrencyEur(
-                calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0))
+              amountLabel: formatMoney(
+                calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0)),
+                currency,
+                locale
               ),
               statusLabel: formatOfferPhaseLabel(phase),
               statusTone: offerStatusTone(phase),
@@ -268,7 +280,7 @@ export default function DocumentsHubPage() {
           });
 
     return [...offerRows, ...invoiceRows];
-  }, [clientNameById, invoices, offers, mode]);
+  }, [clientNameById, invoices, offers, mode, settings]);
 
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -346,6 +358,7 @@ export default function DocumentsHubPage() {
         footerText: isInvoice
           ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
           : "Ich freue mich auf Ihre Rückmeldung.",
+        currency: !isInvoice ? nextSettings.currency ?? "EUR" : undefined,
       };
       setEditorType(type);
       setEditorSeed(seed);
