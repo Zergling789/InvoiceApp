@@ -1,7 +1,7 @@
 // src/features/documents/DocumentsList.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, ReceiptEuro, Check, Eye } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { AppButton as Button } from "@/ui/AppButton";
 import { AppBadge as Badge } from "@/ui/AppBadge";
@@ -21,6 +21,7 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { DocumentEditor } from "./DocumentEditor";
+import { formatDocumentStatus, formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
 
 type EditorSeed = {
   id: string;
@@ -78,6 +79,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [items, setItems] = useState<DocListItem[]>([]);
   const { confirm } = useConfirm();
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,31 +96,33 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [openingId, setOpeningId] = useState<string | null>(null);
 
   const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
+    const label = formatInvoiceStatus(status, overdue);
     if (overdue || status === InvoiceStatus.OVERDUE) {
-      return { label: "Überfällig", tone: "red" as const };
+      return { label, tone: "red" as const };
     }
 
     if (status === InvoiceStatus.PAID) {
-      return { label: "Bezahlt", tone: "green" as const };
+      return { label, tone: "green" as const };
     }
 
-    return { label: "Offen", tone: "yellow" as const };
+    return { label, tone: "yellow" as const };
   };
 
   const getOfferStatusMeta = (status: OfferStatus) => {
+    const label = formatOfferStatus(status);
     switch (status) {
       case OfferStatus.DRAFT:
-        return { label: "Entwurf – nicht gesendet", tone: "gray" as const };
+        return { label, tone: "gray" as const };
       case OfferStatus.SENT:
-        return { label: "Gesendet – wartet auf Antwort", tone: "blue" as const };
+        return { label, tone: "blue" as const };
       case OfferStatus.ACCEPTED:
-        return { label: "Angenommen", tone: "green" as const };
+        return { label, tone: "green" as const };
       case OfferStatus.REJECTED:
-        return { label: "Abgelehnt", tone: "red" as const };
+        return { label, tone: "red" as const };
       case OfferStatus.INVOICED:
-        return { label: "In Rechnung gestellt", tone: "blue" as const };
+        return { label, tone: "blue" as const };
       default:
-        return { label: status, tone: "gray" as const };
+        return { label, tone: "gray" as const };
     }
   };
 
@@ -304,6 +309,14 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       setOpeningId(null);
     }
   };
+
+  useEffect(() => {
+    if (!isInvoice) return;
+    const openId = (location.state as { openId?: string } | null)?.openId;
+    if (!openId || typeof openId !== "string") return;
+    void openView(openId);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [isInvoice, location.pathname, location.state, navigate, openView]);
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({ title: "Dokument loeschen", message: "Wirklich loeschen?" });
@@ -521,7 +534,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 <div className="space-y-1 text-xs text-gray-500 dark:text-slate-400">
                   {item.invoiceId && (
                     <div>
-                      <Link to="/app/invoices" className="underline">
+                      <Link to={`/app/documents/invoice/${item.invoiceId}`} className="underline">
                         Rechnung erstellt
                       </Link>{" "}
                       <span className="text-gray-400">- {item.invoiceId}</span>
@@ -617,19 +630,21 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                             item.status === OfferStatus.ACCEPTED ||
                             item.status === OfferStatus.INVOICED
                               ? "green"
-                              : item.status === OfferStatus.SENT || item.status === InvoiceStatus.SENT
+                              : item.status === OfferStatus.SENT ||
+                                item.status === InvoiceStatus.SENT ||
+                                item.status === InvoiceStatus.ISSUED
                               ? "blue"
                               : item.status === OfferStatus.REJECTED
                               ? "red"
                               : "gray"
                           }
                         >
-                          {item.status}
+                          {formatDocumentStatus(type, item.status, { isOverdue: overdue })}
                         </Badge>
 
                         {!isInvoice && item.invoiceId && (
                           <div className="text-xs text-gray-600">
-                            <Link to="/app/invoices" className="underline">
+                            <Link to={`/app/documents/invoice/${item.invoiceId}`} className="underline">
                               Invoice created
                             </Link>{" "}
                             <span className="text-gray-400">- {item.invoiceId}</span>

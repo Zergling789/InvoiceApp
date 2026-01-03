@@ -1,11 +1,12 @@
 // src/features/clients/Clients.tsx
 import { useMemo, useState } from "react";
-import { Plus, Save, Trash2, X } from "lucide-react";
+import { MoreVertical, Plus, Save, Trash2 } from "lucide-react";
 
 import type { Client } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { ActionSheet } from "@/components/ui/ActionSheet";
 import { createEmptyClient } from "@/app/clients/clientService";
 import { useClients, useDeleteClient, useSaveClient } from "@/app/clients/clientQueries";
 
@@ -22,6 +23,7 @@ export default function Clients() {
   const { remove, deleting } = useDeleteClient(refresh);
 
   const [editing, setEditing] = useState<Client | null>(null);
+  const [showActions, setShowActions] = useState(false);
 
   const startNew = () => setEditing(createEmptyClient(newId()));
   const startEdit = (c: Client) => setEditing({ ...c });
@@ -59,6 +61,10 @@ export default function Clients() {
   };
 
   const isBusy = useMemo(() => saving || deleting, [saving, deleting]);
+  const isExisting = useMemo(
+    () => (editing ? clients.some((client) => client.id === editing.id) : false),
+    [clients, editing]
+  );
 
   return (
     <div className="space-y-6">
@@ -74,40 +80,83 @@ export default function Clients() {
       )}
 
       {editing && (
-        <AppCard className="bg-gray-50">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4 bottom-action-spacer">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Firma *</label>
-              <input
-                className="w-full border rounded p-2"
-                value={editing.companyName}
-                onChange={(e) => setEditing({ ...editing, companyName: e.target.value })}
-                autoComplete="organization"
-              />
+              <h2 className="text-lg font-semibold text-gray-900">
+                {isExisting ? "Kunde bearbeiten" : "Neuer Kunde"}
+              </h2>
+              <p className="text-sm text-gray-500">Pflichtfeld: Firma</p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kontaktperson</label>
-              <input
-                className="w-full border rounded p-2"
-                value={editing.contactPerson}
-                onChange={(e) => setEditing({ ...editing, contactPerson: e.target.value })}
-                autoComplete="name"
-              />
+            <div className="flex items-center gap-2">
+              {isExisting && (
+                <AppButton variant="ghost" onClick={() => setShowActions(true)}>
+                  <MoreVertical size={16} /> Mehr
+                </AppButton>
+              )}
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
-              <input
-                type="email"
-                className="w-full border rounded p-2"
-                value={editing.email}
-                onChange={(e) => setEditing({ ...editing, email: e.target.value })}
-                autoComplete="email"
-                inputMode="email"
-              />
+          <ActionSheet
+            isOpen={showActions}
+            onClose={() => setShowActions(false)}
+            title="Kundenaktionen"
+            actions={[
+              {
+                label: "Löschen",
+                variant: "danger",
+                onSelect: () => {
+                  setShowActions(false);
+                  void deleteClient(editing.id);
+                  setEditing(null);
+                },
+              },
+            ]}
+          />
+
+          <AppCard className="space-y-4">
+            <div className="border-b pb-3">
+              <h3 className="text-sm font-semibold text-gray-700">Kontakt</h3>
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Firma *</label>
+                <input
+                  className="w-full border rounded p-2"
+                  value={editing.companyName}
+                  onChange={(e) => setEditing({ ...editing, companyName: e.target.value })}
+                  autoComplete="organization"
+                />
+              </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kontaktperson</label>
+                <input
+                  className="w-full border rounded p-2"
+                  value={editing.contactPerson}
+                  onChange={(e) => setEditing({ ...editing, contactPerson: e.target.value })}
+                  autoComplete="name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
+                <input
+                  type="email"
+                  className="w-full border rounded p-2"
+                  value={editing.email}
+                  onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                  autoComplete="email"
+                  inputMode="email"
+                />
+              </div>
+            </div>
+          </AppCard>
+
+          <AppCard className="space-y-4">
+            <div className="border-b pb-3">
+              <h3 className="text-sm font-semibold text-gray-700">Adresse</h3>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
               <textarea
@@ -117,27 +166,34 @@ export default function Clients() {
                 onChange={(e) => setEditing({ ...editing, address: e.target.value })}
               />
             </div>
+          </AppCard>
 
-            <div className="md:col-span-2">
+          <AppCard className="space-y-4">
+            <div className="border-b pb-3">
+              <h3 className="text-sm font-semibold text-gray-700">Notizen</h3>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notizen</label>
               <textarea
                 className="w-full border rounded p-2"
-                rows={2}
+                rows={3}
                 value={editing.notes}
                 onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
               />
             </div>
-          </div>
+          </AppCard>
 
-          <div className="flex justify-end gap-2 mt-4">
-            <AppButton variant="ghost" onClick={cancel} disabled={isBusy}>
-              <X size={16} /> Abbrechen
-            </AppButton>
-            <AppButton onClick={saveClient} disabled={isBusy}>
-              <Save size={16} /> {saving ? "Speichere..." : "Speichern"}
-            </AppButton>
+          <div className="bottom-action-bar safe-area-container">
+            <div className="flex flex-wrap gap-2">
+              <AppButton variant="secondary" onClick={cancel} disabled={isBusy} className="flex-1 justify-center">
+                Abbrechen
+              </AppButton>
+              <AppButton onClick={saveClient} disabled={isBusy} className="flex-1 justify-center">
+                <Save size={16} /> {saving ? "Speichere..." : "Speichern"}
+              </AppButton>
+            </div>
           </div>
-        </AppCard>
+        </div>
       )}
 
       <AppCard>
