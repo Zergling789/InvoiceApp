@@ -1,4 +1,5 @@
-import { formatCurrency, Invoice, InvoiceStatus, Offer, OfferStatus, Position } from "@/types";
+import { Invoice, InvoiceStatus, Offer, OfferStatus, Position } from "@/types";
+import { formatMoney } from "@/utils/money";
 
 const DAY_MS = 86400000;
 
@@ -7,7 +8,7 @@ export type OfferWithFollowUp = Offer & {
   lastInteractionAt?: string | null;
 };
 
-export const formatCurrencyEur = (amount: number) => formatCurrency(amount, "de-DE", "EUR");
+export const formatCurrencyEur = (amount: number) => formatMoney(amount, "EUR", "de-DE");
 
 export const calculatePositionsTotal = (positions: Position[]) =>
   positions.reduce((total, position) => total + position.quantity * position.price, 0);

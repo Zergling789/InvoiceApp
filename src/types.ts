@@ -1,3 +1,5 @@
+import { formatMoney } from "@/utils/money";
+
 export interface UserSettings {
   name: string;
   companyName: string;
@@ -72,6 +74,7 @@ export interface Offer {
   number: string;
   clientId: string;
   projectId?: string;
+  currency: string;
   date: string;
   validUntil?: string;
   positions: Position[];
@@ -120,15 +123,8 @@ export interface Invoice {
 
 export type DocumentType = "offer" | "invoice";
 
-export const formatCurrency = (
-  amount: number,
-  locale = "de-DE",
-  currency = "EUR"
-) => {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-  }).format(amount);
+export const formatCurrency = (amount: number, locale = "de-DE", currency = "EUR") => {
+  return formatMoney(amount, currency, locale);
 };
 
 export const formatDate = (dateStr: string, locale = "de-DE") => {

@@ -7,6 +7,7 @@ export function createEmptyOffer(id: string, clientId = ""): Offer {
     number: "",
     clientId,
     projectId: undefined,
+    currency: "EUR",
     date: new Date().toISOString().slice(0, 10),
     validUntil: undefined,
     positions: [],
@@ -27,6 +28,7 @@ export function normalizeOffer(offer: Offer): Offer {
   return {
     ...offer,
     clientId: offer.clientId ?? "",
+    currency: offer.currency ?? "EUR",
     date: offer.date ?? new Date().toISOString().slice(0, 10),
     positions: offer.positions ?? [],
     vatRate: Number(offer.vatRate ?? 0),

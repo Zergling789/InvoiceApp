@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
-import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
+import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
+import { formatMoney } from "@/utils/money";
 
 import { AppButton } from "@/ui/AppButton";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
@@ -29,6 +30,7 @@ export type EditorSeed = {
   vatRate: number;
   introText: string;
   footerText: string;
+  currency?: string;
 };
 
 type FormData = {
@@ -43,6 +45,7 @@ type FormData = {
   footerText: string;
   status: InvoiceStatus | OfferStatus;
   vatRate: number;
+  currency?: string;
   paymentDate?: string;
   offerId?: string;
   projectId?: string;
@@ -74,7 +77,8 @@ function applyTemplate(template: string, data: Record<string, string>) {
 function buildFormData(
   seed: EditorSeed,
   initial: Partial<FormData> | undefined,
-  isInvoice: boolean
+  isInvoice: boolean,
+  defaultCurrency?: string
 ): FormData {
   const base: FormData = {
     id: seed.id,
@@ -88,6 +92,7 @@ function buildFormData(
     footerText: seed.footerText ?? "",
     status: isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT,
     vatRate: seed.vatRate ?? 0,
+    currency: isInvoice ? undefined : defaultCurrency ?? "EUR",
     paymentDate: undefined,
     offerId: undefined,
     projectId: undefined,
@@ -110,6 +115,7 @@ function buildFormData(
     introText: merged.introText ?? "",
     footerText: merged.footerText ?? "",
     vatRate: Number(merged.vatRate ?? 0),
+    currency: isInvoice ? undefined : merged.currency ?? defaultCurrency ?? "EUR",
   };
 }
 
@@ -156,28 +162,35 @@ export function DocumentEditor({
   const [showSendModal, setShowSendModal] = useState(false);
 
   const [formData, setFormData] = useState<FormData>(() =>
-    buildFormData(seed, initial, isInvoice)
+    buildFormData(seed, initial, isInvoice, settings.currency)
   );
   const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
 
   // ✅ WICHTIG: wenn seed/initial wechseln (Viewer lädt async), state neu setzen
   useEffect(() => {
-    setFormData(buildFormData(seed, initial, isInvoice));
+    setFormData(buildFormData(seed, initial, isInvoice, settings.currency));
     setActiveTab("details");
     setShowPrint(startInPrint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed.id, startInPrint]);
+  }, [seed.id, startInPrint, settings.currency]);
 
   useEffect(() => {
     // initial kann nachträglich gesetzt werden (async)
     if (initial) {
-      setFormData((prev) => buildFormData({ ...seed }, { ...prev, ...initial }, isInvoice));
+      setFormData((prev) =>
+        buildFormData({ ...seed }, { ...prev, ...initial }, isInvoice, settings.currency)
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial]);
+  }, [initial, settings.currency]);
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+  const currencyOptions = ["EUR", "USD", "CHF", "GBP"];
+  const documentCurrency = isInvoice
+    ? settings.currency ?? "EUR"
+    : formData.currency ?? settings.currency ?? "EUR";
+  const locale = settings.locale ?? "de-DE";
   const showOfferWizard =
     !disableOfferWizard &&
     !isInvoice &&
@@ -294,6 +307,7 @@ export function DocumentEditor({
           number: data.number,
           clientId: data.clientId,
           projectId: data.projectId,
+          currency: data.currency ?? settings.currency ?? "EUR",
           date: data.date,
           validUntil: data.validUntil!,
           positions: data.positions ?? [],
@@ -563,12 +577,12 @@ export function DocumentEditor({
                     {isInvoice ? "RECHNUNG" : "ANGEBOT"}
                   </h2>
                   <p className="text-gray-500">Nr: {formData.number}</p>
-                  <p className="text-gray-500">Datum: {formatDate(formData.date, settings.locale ?? "de-DE")}</p>
+                  <p className="text-gray-500">Datum: {formatDate(formData.date, locale)}</p>
                   {isInvoice && formData.dueDate && (
-                    <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, settings.locale ?? "de-DE")}</p>
+                    <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, locale)}</p>
                   )}
                   {!isInvoice && formData.validUntil && (
-                    <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil, settings.locale ?? "de-DE")}</p>
+                    <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil, locale)}</p>
                   )}
                 </div>
               </div>
@@ -622,9 +636,13 @@ export function DocumentEditor({
                         <td className="py-3 text-right">
                           {toNumberOrZero(pos.quantity)} {pos.unit}
                         </td>
-                        <td className="py-3 text-right">{formatCurrency(toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
+                        <td className="py-3 text-right">{formatMoney(toNumberOrZero(pos.price), documentCurrency, locale)}</td>
                         <td className="py-3 text-right font-medium">
-                          {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}
+                          {formatMoney(
+                            toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price),
+                            documentCurrency,
+                            locale
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -642,19 +660,19 @@ export function DocumentEditor({
                       <td colSpan={3} className="pt-4 text-right">
                         Zwischensumme:
                       </td>
-                      <td className="pt-4 text-right">{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
+                      <td className="pt-4 text-right">{formatMoney(totals.subtotal, documentCurrency, locale)}</td>
                     </tr>
                     <tr>
                       <td colSpan={3} className="text-right text-gray-500">
                         Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
                       </td>
-                      <td className="text-right text-gray-500">{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
+                      <td className="text-right text-gray-500">{formatMoney(totals.tax, documentCurrency, locale)}</td>
                     </tr>
                     <tr>
                       <td colSpan={3} className="pt-2 text-right font-bold text-lg">
                         Gesamtsumme:
                       </td>
-                      <td className="pt-2 text-right font-bold text-lg">{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
+                      <td className="pt-2 text-right font-bold text-lg">{formatMoney(totals.total, documentCurrency, locale)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -862,6 +880,29 @@ export function DocumentEditor({
                         inputMode="decimal"
                       />
                     </div>
+                    {!isInvoice && (
+                      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label
+                          className="text-sm font-medium text-gray-700"
+                          htmlFor="document-currency"
+                        >
+                          Währung
+                        </label>
+                        <select
+                          id="document-currency"
+                          className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                          value={formData.currency ?? documentCurrency}
+                          disabled={disabled}
+                          onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                        >
+                          {currencyOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -895,15 +936,22 @@ export function DocumentEditor({
                             disabled={disabled}
                             onChange={(e) => updatePosition(idx, "unit", e.target.value)}
                           />
-                          <input
-                            type="number"
-                            className="w-full border rounded-lg p-2 text-sm"
-                            placeholder="Preis"
-                            value={pos.price ?? 0}
-                            disabled={disabled}
-                            onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
-                            inputMode="decimal"
-                          />
+                          <div className="relative">
+                            <input
+                              type="number"
+                              className="w-full border rounded-lg p-2 pr-12 text-sm"
+                              placeholder="Preis/Std"
+                              value={pos.price ?? 0}
+                              disabled={disabled}
+                              onChange={(e) =>
+                                updatePosition(idx, "price", toNumberOrZero(e.target.value))
+                              }
+                              inputMode="decimal"
+                            />
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                              {documentCurrency}
+                            </span>
+                          </div>
                           {!readOnly && (
                             <button
                               onClick={() => removePosition(idx)}
@@ -937,31 +985,19 @@ export function DocumentEditor({
                     <div className="flex justify-between text-gray-600">
                       <span>Zwischensumme:</span>
                       <span>
-                        {formatCurrency(
-                          totals.subtotal,
-                          settings.locale ?? "de-DE",
-                          settings.currency ?? "EUR"
-                        )}
+                        {formatMoney(totals.subtotal, documentCurrency, locale)}
                       </span>
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>zzgl. MwSt. ({toNumberOrZero(formData.vatRate)}%):</span>
                       <span>
-                        {formatCurrency(
-                          totals.tax,
-                          settings.locale ?? "de-DE",
-                          settings.currency ?? "EUR"
-                        )}
+                        {formatMoney(totals.tax, documentCurrency, locale)}
                       </span>
                     </div>
                     <div className="flex justify-between text-base font-semibold text-blue-700 pt-2 border-t">
                       <span>Gesamtbetrag:</span>
                       <span>
-                        {formatCurrency(
-                          totals.total,
-                          settings.locale ?? "de-DE",
-                          settings.currency ?? "EUR"
-                        )}
+                        {formatMoney(totals.total, documentCurrency, locale)}
                       </span>
                     </div>
                   </div>
@@ -1221,6 +1257,27 @@ export function DocumentEditor({
                       inputMode="decimal"
                     />
                   </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-currency"
+                    >
+                      Währung
+                    </label>
+                    <select
+                      id="document-currency"
+                      className="w-full border rounded p-2"
+                      value={formData.currency ?? documentCurrency}
+                      disabled={disabled}
+                      onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                    >
+                      {currencyOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 
@@ -1282,7 +1339,7 @@ export function DocumentEditor({
                   )}
                   {formData.sentCount && formData.lastSentAt ? (
                     <div className="text-gray-500">
-                      Sent {formData.sentCount}x - zuletzt {formatDate(formData.lastSentAt, settings.locale ?? "de-DE")}
+                      Sent {formData.sentCount}x - zuletzt {formatDate(formData.lastSentAt, locale)}
                     </div>
                   ) : (
                     <div className="text-gray-500">Not sent yet</div>
@@ -1349,16 +1406,19 @@ export function DocumentEditor({
                     />
                   </div>
 
-                  <div className="w-full sm:w-24">
+                  <div className="relative w-full sm:w-28">
                     <input
                       type="number"
-                      className="w-full border rounded p-2"
-                      placeholder="Preis"
+                      className="w-full border rounded p-2 pr-12"
+                      placeholder="Preis/Std"
                       value={pos.price ?? 0}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
                       inputMode="decimal"
                     />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                      {documentCurrency}
+                    </span>
                   </div>
 
                   {!readOnly && (
@@ -1388,14 +1448,14 @@ export function DocumentEditor({
           <div className="flex justify-end pt-4 border-t">
             <div className="w-full sm:w-64 space-y-2 text-right">
               <div className="flex justify-between">
-                <span>Netto:</span> <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                <span>Netto:</span> <span>{formatMoney(totals.subtotal, documentCurrency, locale)}</span>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
-                <span>{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                <span>{formatMoney(totals.tax, documentCurrency, locale)}</span>
               </div>
               <div className="flex justify-between font-bold text-lg">
-                <span>Gesamt:</span> <span>{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
+                <span>Gesamt:</span> <span>{formatMoney(totals.total, documentCurrency, locale)}</span>
               </div>
             </div>
           </div>

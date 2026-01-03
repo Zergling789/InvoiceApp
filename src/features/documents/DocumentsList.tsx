@@ -9,7 +9,8 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 
 import type { Client, UserSettings, Position, Invoice, Offer } from "@/types";
-import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
+import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
+import { formatMoney } from "@/utils/money";
 
 import * as clientService from "@/app/clients/clientService";
 import * as settingsService from "@/app/settings/settingsService";
@@ -32,6 +33,7 @@ type EditorSeed = {
   vatRate: number;
   introText: string;
   footerText: string;
+  currency?: string;
 };
 
 type DocListItem = {
@@ -44,6 +46,7 @@ type DocListItem = {
   validUntil?: string;
   positions: Position[];
   vatRate: number;
+  currency?: string;
   status: InvoiceStatus | OfferStatus;
   offerId?: string;
   paymentDate?: string;
@@ -160,6 +163,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             validUntil: undefined,
             positions: (inv.positions ?? []) as Position[],
             vatRate: Number(inv.vatRate ?? 0),
+            currency: s.currency ?? "EUR",
             status: inv.status,
             offerId: inv.offerId,
             paymentDate: inv.paymentDate,
@@ -182,6 +186,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             validUntil: o.validUntil,
             positions: (o.positions ?? []) as Position[],
             vatRate: Number(o.vatRate ?? 0),
+            currency: o.currency ?? s.currency ?? "EUR",
             status: o.status,
             offerId: undefined,
             paymentDate: undefined,
@@ -236,6 +241,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         footerText: isInvoice
           ? `Zahlbar innerhalb von ${Number(s.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
           : "Ich freue mich auf Ihre Rückmeldung.",
+        currency: !isInvoice ? s.currency ?? "EUR" : undefined,
       };
 
       setEditorSeed(seed);
@@ -273,6 +279,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         vatRate: Number((doc as any).vatRate ?? 0),
         introText: (doc as any).introText ?? "",
         footerText: (doc as any).footerText ?? "",
+        currency: (doc as any).currency ?? undefined,
       });
 
       setEditorInitial({
@@ -297,6 +304,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         sentCount: (doc as any).sentCount ?? 0,
         sentVia: (doc as any).sentVia ?? null,
         invoiceId: (doc as any).invoiceId ?? null,
+        currency: (doc as any).currency ?? undefined,
       });
 
       setEditorOpen(true);
@@ -464,6 +472,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           const net = calcNet(item.positions ?? []);
           const vat = calcVat(net, item.vatRate);
           const total = calcGross(net, vat);
+          const locale = settings?.locale ?? "de-DE";
+          const invoiceCurrency = settings?.currency ?? "EUR";
+          const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
           const overdue =
             isInvoice &&
             item.status !== InvoiceStatus.PAID &&
@@ -479,7 +490,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 documentLabel="Rechnung"
                 number={item.number}
                 date={item.date ? formatDate(item.date, settings?.locale) : "—"}
-                amount={formatCurrency(total, settings?.locale, settings?.currency)}
+                amount={formatMoney(total, invoiceCurrency, locale)}
                 clientName={getClientName(item.clientId)}
                 statusLabel={statusMeta.label}
                 statusTone={statusMeta.tone}
@@ -526,7 +537,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               documentLabel="Angebot"
               number={item.number}
               date={item.date ? formatDate(item.date, settings?.locale) : "—"}
-              amount={formatCurrency(total, settings?.locale, settings?.currency)}
+              amount={formatMoney(total, offerCurrency, locale)}
               clientName={getClientName(item.clientId)}
               statusLabel={offerMeta.label}
               statusTone={offerMeta.tone}
@@ -607,6 +618,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               const net = calcNet(item.positions ?? []);
               const vat = calcVat(net, item.vatRate);
               const total = calcGross(net, vat);
+              const locale = settings?.locale ?? "de-DE";
+              const invoiceCurrency = settings?.currency ?? "EUR";
+              const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
 
               const overdue =
                 isInvoice &&
@@ -618,7 +632,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                   <td className="p-4 font-medium">{item.number}</td>
                   <td className="p-4">{getClientName(item.clientId)}</td>
                   <td className="p-4 text-sm text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</td>
-                  <td className="p-4 font-mono">{formatCurrency(total, settings?.locale, settings?.currency)}</td>
+                  <td className="p-4 font-mono">
+                    {formatMoney(total, isInvoice ? invoiceCurrency : offerCurrency, locale)}
+                  </td>
 
                   <td className="p-4">
                     {overdue && <Badge color="red">Overdue</Badge>}
