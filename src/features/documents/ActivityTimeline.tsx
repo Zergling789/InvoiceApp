@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { supabase } from "@/supabaseClient";
 import { formatDate } from "@/types";
+import { dbListDocumentActivity } from "@/db/documentActivityDb";
 
-type ActivityEvent = {
-  id: string;
-  event_type: string;
-  meta: Record<string, unknown>;
-  created_at: string;
-};
+type ActivityEvent = Awaited<ReturnType<typeof dbListDocumentActivity>>[number];
 
 const EVENT_LABELS: Record<string, string> = {
   CREATED: "Erstellt",
@@ -48,19 +43,15 @@ export function ActivityTimeline({
     const load = async () => {
       setLoading(true);
       setError(null);
-      const { data, error } = await supabase
-        .from("document_activity")
-        .select("id, event_type, meta, created_at")
-        .eq("doc_type", docType)
-        .eq("doc_id", docId)
-        .order("created_at", { ascending: false });
-
-      if (!active) return;
-      if (error) {
-        setError(error.message);
+      try {
+        const data = await dbListDocumentActivity(docType, docId);
+        if (!active) return;
+        setEvents(data);
+      } catch (err) {
+        if (!active) return;
+        const message = err instanceof Error ? err.message : "Unbekannter Fehler";
+        setError(message);
         setEvents([]);
-      } else {
-        setEvents((data ?? []) as ActivityEvent[]);
       }
       setLoading(false);
     };

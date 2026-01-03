@@ -1,6 +1,33 @@
 import { supabase } from "@/supabaseClient";
+import type { Database } from "@/lib/supabase.types";
 import { InvoiceStatus } from "@/types";
 import type { Invoice } from "@/types";
+
+type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
+type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
+
+const INVOICE_FIELDS = [
+  "id",
+  "number",
+  "offer_id",
+  "client_id",
+  "project_id",
+  "date",
+  "due_date",
+  "payment_date",
+  "positions",
+  "intro_text",
+  "footer_text",
+  "vat_rate",
+  "status",
+  "is_locked",
+  "finalized_at",
+  "sent_at",
+  "last_sent_at",
+  "last_sent_to",
+  "sent_count",
+  "sent_via",
+] as const satisfies readonly (keyof DbInvoiceRow)[];
 
 const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -37,13 +64,13 @@ export async function dbListInvoices(): Promise<Invoice[]> {
 
   const { data, error } = await supabase
     .from("invoices")
-    .select("*")
+    .select(INVOICE_FIELDS.join(","))
     .eq("user_id", uid)
     .order("date", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((r: any) => ({
+  return (data ?? []).map((r) => ({
     id: r.id,
     number: r.number,
     offerId: r.offer_id ?? undefined,
@@ -73,7 +100,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 
   const { data, error } = await supabase
     .from("invoices")
-    .select("*")
+    .select(INVOICE_FIELDS.join(","))
     .eq("id", id)
     .eq("user_id", uid)
     .single();
@@ -108,7 +135,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
   const uid = await requireUserId();
 
-  const payload = {
+  const payload: DbInvoiceInsert = {
     id: inv.id,
     user_id: uid,
 

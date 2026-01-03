@@ -2,6 +2,8 @@
 // src/lib/supabaseClient.ts
 import { createClient } from '@supabase/supabase-js';
 
+import type { Database } from '@/lib/supabase.types';
+
 const VITE_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const VITE_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const isTest = import.meta.env.MODE === 'test';
@@ -15,4 +17,4 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Supabase URL oder Anon Key fehlt. Check .env.local');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);

@@ -1,6 +1,37 @@
 // src/db/settingsDb.ts
 import { supabase } from "../supabaseClient";
+import type { Database } from "@/lib/supabase.types";
 import type { UserSettings } from "@/types";
+
+type DbSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
+type DbSettingsInsert = Database["public"]["Tables"]["user_settings"]["Insert"];
+
+const SETTINGS_FIELDS = [
+  "user_id",
+  "name",
+  "company_name",
+  "address",
+  "tax_id",
+  "default_vat_rate",
+  "default_payment_terms",
+  "iban",
+  "bic",
+  "bank_name",
+  "email",
+  "email_default_subject",
+  "email_default_text",
+  "logo_url",
+  "primary_color",
+  "template_id",
+  "locale",
+  "currency",
+  "prefix_invoice",
+  "prefix_offer",
+  "number_padding",
+  "footer_text",
+  "default_sender_identity_id",
+  "updated_at",
+] as const satisfies readonly (keyof DbSettingsRow)[];
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -14,45 +45,43 @@ export async function dbGetSettings(): Promise<UserSettings> {
 
   const { data, error } = await supabase
     .from("user_settings")
-    .select("*")
+    .select(SETTINGS_FIELDS.join(","))
     .eq("user_id", uid)
     .order("updated_at", { ascending: false })
     .limit(1);
 
   if (error) throw new Error(error.message);
-  const row = data?.[0] ?? null;
+  const row: DbSettingsRow | null = data?.[0] ?? null;
 
   if (!row) {
+    const defaults: DbSettingsInsert = {
+      user_id: uid,
+      name: "",
+      company_name: "",
+      address: "",
+      tax_id: "",
+      default_vat_rate: 19,
+      default_payment_terms: 14,
+      iban: "",
+      bic: "",
+      bank_name: "",
+      email: "",
+      email_default_subject: "Dokument {nummer}",
+      email_default_text: "Bitte im Anhang finden Sie das Dokument.",
+      logo_url: "",
+      primary_color: "#4f46e5",
+      template_id: "default",
+      locale: "de-DE",
+      currency: "EUR",
+      prefix_invoice: "RE",
+      prefix_offer: "ANG",
+      number_padding: 4,
+      footer_text: "",
+      updated_at: new Date().toISOString(),
+    };
     const { error: upErr } = await supabase
       .from("user_settings")
-      .upsert(
-        {
-          user_id: uid,
-          name: "",
-          company_name: "",
-          address: "",
-          tax_id: "",
-          default_vat_rate: 19,
-          default_payment_terms: 14,
-          iban: "",
-          bic: "",
-          bank_name: "",
-          email: "",
-          email_default_subject: "Dokument {nummer}",
-          email_default_text: "Bitte im Anhang finden Sie das Dokument.",
-          logo_url: "",
-          primary_color: "#4f46e5",
-          template_id: "default",
-          locale: "de-DE",
-          currency: "EUR",
-          prefix_invoice: "RE",
-          prefix_offer: "ANG",
-          number_padding: 4,
-          footer_text: "",
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
+      .upsert(defaults, { onConflict: "user_id" });
 
     if (upErr) throw new Error(upErr.message);
 
@@ -93,25 +122,25 @@ export async function dbGetSettings(): Promise<UserSettings> {
     bic: row.bic ?? "",
     bankName: row.bank_name ?? "",
     email: row.email ?? "",
-    emailDefaultSubject: (row as any).email_default_subject ?? "Dokument {nummer}",
-    emailDefaultText: (row as any).email_default_text ?? "Bitte im Anhang finden Sie das Dokument.",
-    logoUrl: (row as any).logo_url ?? "",
-    primaryColor: (row as any).primary_color ?? "#4f46e5",
-    templateId: (row as any).template_id ?? "default",
-    locale: (row as any).locale ?? "de-DE",
-    currency: (row as any).currency ?? "EUR",
-    prefixInvoice: (row as any).prefix_invoice ?? "RE",
-    prefixOffer: (row as any).prefix_offer ?? "ANG",
-    numberPadding: Number((row as any).number_padding ?? 4),
-    footerText: (row as any).footer_text ?? "",
-    defaultSenderIdentityId: (row as any).default_sender_identity_id ?? null,
+    emailDefaultSubject: row.email_default_subject ?? "Dokument {nummer}",
+    emailDefaultText: row.email_default_text ?? "Bitte im Anhang finden Sie das Dokument.",
+    logoUrl: row.logo_url ?? "",
+    primaryColor: row.primary_color ?? "#4f46e5",
+    templateId: row.template_id ?? "default",
+    locale: row.locale ?? "de-DE",
+    currency: row.currency ?? "EUR",
+    prefixInvoice: row.prefix_invoice ?? "RE",
+    prefixOffer: row.prefix_offer ?? "ANG",
+    numberPadding: Number(row.number_padding ?? 4),
+    footerText: row.footer_text ?? "",
+    defaultSenderIdentityId: row.default_sender_identity_id ?? null,
   };
 }
 
 export async function dbSaveSettings(s: UserSettings): Promise<void> {
   const uid = await requireUserId();
 
-  const payload = {
+  const payload: DbSettingsInsert = {
     user_id: uid,
     name: s.name ?? "",
     company_name: s.companyName ?? "",

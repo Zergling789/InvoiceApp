@@ -1,6 +1,31 @@
 import { supabase } from "@/supabaseClient";
+import type { Database } from "@/lib/supabase.types";
 import { OfferStatus } from "@/types";
 import type { Offer } from "@/types";
+
+type DbOfferRow = Database["public"]["Tables"]["offers"]["Row"];
+type DbOfferInsert = Database["public"]["Tables"]["offers"]["Insert"];
+
+const OFFER_FIELDS = [
+  "id",
+  "number",
+  "client_id",
+  "project_id",
+  "currency",
+  "date",
+  "valid_until",
+  "positions",
+  "intro_text",
+  "footer_text",
+  "vat_rate",
+  "status",
+  "sent_at",
+  "last_sent_at",
+  "last_sent_to",
+  "sent_count",
+  "sent_via",
+  "invoice_id",
+] as const satisfies readonly (keyof DbOfferRow)[];
 
 const normalizeOfferStatus = (status: string | null | undefined): OfferStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -37,13 +62,13 @@ export async function dbListOffers(): Promise<Offer[]> {
 
   const { data, error } = await supabase
     .from("offers")
-    .select("*")
+    .select(OFFER_FIELDS.join(","))
     .eq("user_id", uid)
     .order("date", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((r: any) => ({
+  return (data ?? []).map((r) => ({
     id: r.id,
     number: r.number,
     clientId: r.client_id,
@@ -71,7 +96,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
 
   const { data, error } = await supabase
     .from("offers")
-    .select("*")
+    .select(OFFER_FIELDS.join(","))
     .eq("id", id)
     .eq("user_id", uid)
     .single();
@@ -104,7 +129,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
 export async function dbUpsertOffer(o: Offer): Promise<void> {
   const uid = await requireUserId();
 
-  const payload = {
+  const payload: DbOfferInsert = {
     id: o.id,
     user_id: uid,
 
