@@ -18,6 +18,7 @@ import * as invoiceService from "@/app/invoices/invoiceService";
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
+import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
 
 export type EditorSeed = {
   id: string;
@@ -59,9 +60,6 @@ function toNumberOrZero(v: unknown): number {
   const n = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
   return Number.isFinite(n) ? n : 0;
 }
-
-const formatStatusLabel = (status: InvoiceStatus | OfferStatus) =>
-  status ? `${status.slice(0, 1)}${status.slice(1).toLowerCase()}` : "—";
 
 function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -483,7 +481,7 @@ export function DocumentEditor({
 
     await onSaved();
     onClose();
-    navigate("/app/invoices", { state: { openId: invoiceId } });
+    navigate("/app/documents?mode=invoices", { state: { openId: invoiceId } });
   };
 
   const sendModal = (
@@ -1013,7 +1011,7 @@ export function DocumentEditor({
                 {isInvoice && (
                   <div className="flex items-center gap-2 text-xs">
                     <span className="px-2 py-1 rounded border bg-gray-100 text-gray-700">
-                      {formatStatusLabel(formData.status)}
+                      {formatDocumentStatus(type, formData.status)}
                     </span>
                     {locked && (
                       <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { Client, Invoice, Offer } from "@/types";
+import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { InvoiceStatus, OfferStatus } from "@/types";
 import { loadDashboardData } from "@/app/dashboard/dashboardService";
+import { fetchSettings } from "@/app/settings/settingsService";
 import {
   calculateDocumentTotal,
   formatCurrencyEur,
@@ -18,7 +19,11 @@ import {
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
-import { useToast } from "@/ui/FeedbackProvider";
+import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { supabase } from "@/supabaseClient";
+import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import * as invoiceService from "@/app/invoices/invoiceService";
 
 type DashboardData = {
   clients: Client[];
@@ -51,10 +56,16 @@ const daysUntil = (dateStr?: string | null, today = new Date()) => {
 
 export default function TodosPage() {
   const toast = useToast();
+  const { confirm } = useConfirm();
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendIntent, setSendIntent] = useState<"reminder" | "dunning" | "followup" | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<Invoice | Offer | null>(null);
+  const [selectedType, setSelectedType] = useState<"invoice" | "offer" | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -62,9 +73,10 @@ export default function TodosPage() {
       setLoading(true);
       setError(null);
       try {
-        const nextData = await loadDashboardData();
+        const [nextData, settingsData] = await Promise.all([loadDashboardData(), fetchSettings()]);
         if (mounted) {
           setData(nextData);
+          setSettings(settingsData);
         }
       } catch (e) {
         if (mounted) {
@@ -190,7 +202,7 @@ export default function TodosPage() {
       statusLabel: "Follow-up fällig",
       tone: "blue",
       ageLabel: `seit ${getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today)} Tagen`,
-      secondaryLabel: "Follow-up",
+      secondaryLabel: "Follow-up senden",
     })
   );
 
@@ -219,13 +231,118 @@ export default function TodosPage() {
     followUpOfferCards.length +
     draftCards.length;
 
-  const handleSecondary = (label?: string) => {
-    if (!label) return;
-    toast.info(`${label} kommt als Nächstes.`);
+  const getDefaultSubject = (docType: "invoice" | "offer", docNumber: string) => {
+    if (!settings) return "";
+    const label = docType === "invoice" ? "Rechnung" : "Angebot";
+    const template = settings.emailDefaultSubject?.trim() || `${label} {nummer}`;
+    return template.replace("{nummer}", docNumber);
+  };
+
+  const getDefaultMessage = () => {
+    if (!settings) return "";
+    return settings.emailDefaultText?.trim() || "Bitte im Anhang finden Sie das Dokument.";
+  };
+
+  const handleFinalizeInvoice = async () => {
+    if (!selectedDoc || selectedType !== "invoice") return null;
+    const invoice = selectedDoc as Invoice;
+    if (invoice.status !== InvoiceStatus.DRAFT) return invoice;
+
+    const ok = await confirm({
+      title: "Rechnung finalisieren",
+      message:
+        "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+    });
+    if (!ok) return null;
+
+    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
+      invoice_id: invoice.id,
+    });
+
+    if (finalizeError) {
+      toast.error(
+        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
+          "Rechnung konnte nicht finalisiert werden."
+      );
+      return null;
+    }
+
+    const updated = await invoiceService.getInvoice(invoice.id);
+    if (!updated) {
+      toast.error("Rechnung konnte nicht geladen werden.");
+      return null;
+    }
+
+    setSelectedDoc(updated);
+    setData((prev) => ({
+      ...prev,
+      invoices: prev.invoices.map((entry) => (entry.id === updated.id ? updated : entry)),
+    }));
+    return updated;
+  };
+
+  const handleSecondary = (card: TodoCard) => {
+    if (!settings) {
+      toast.error("E-Mail-Einstellungen fehlen.");
+      return;
+    }
+    if (!card.secondaryLabel) return;
+
+    if (card.type === "invoice") {
+      const invoice = data.invoices.find((entry) => entry.id === card.id);
+      if (!invoice) return;
+      const intent = card.secondaryLabel.includes("Mahnung") ? "dunning" : "reminder";
+      setSelectedDoc(invoice);
+      setSelectedType("invoice");
+      setSendIntent(intent);
+      setSendOpen(true);
+      return;
+    }
+
+    if (card.type === "offer" && card.secondaryLabel.includes("Follow-up")) {
+      const offer = data.offers.find((entry) => entry.id === card.id);
+      if (!offer) return;
+      setSelectedDoc(offer);
+      setSelectedType("offer");
+      setSendIntent("followup");
+      setSendOpen(true);
+      return;
+    }
+
+    toast.info(`${card.secondaryLabel} kommt als Nächstes.`);
   };
 
   return (
     <div className="space-y-6">
+      {sendOpen && selectedDoc && selectedType && settings && (
+        <SendDocumentModal
+          isOpen={sendOpen}
+          onClose={() => setSendOpen(false)}
+          documentType={selectedType}
+          document={selectedDoc}
+          client={data.clients.find((entry) => entry.id === selectedDoc.clientId)}
+          settings={settings}
+          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number)}
+          defaultMessage={getDefaultMessage()}
+          templateType={sendIntent ?? undefined}
+          onFinalize={selectedType === "invoice" ? handleFinalizeInvoice : undefined}
+          onSent={async (nextData) => {
+            if (selectedType === "invoice") {
+              const invoice = nextData as Invoice;
+              setData((prev) => ({
+                ...prev,
+                invoices: prev.invoices.map((entry) => (entry.id === invoice.id ? invoice : entry)),
+              }));
+            } else {
+              const offer = nextData as Offer;
+              setData((prev) => ({
+                ...prev,
+                offers: prev.offers.map((entry) => (entry.id === offer.id ? offer : entry)),
+              }));
+            }
+          }}
+        />
+      )}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-gray-900">To-dos</h1>
         <p className="text-sm text-gray-600">Deine nächsten Schritte auf einen Blick.</p>
@@ -271,10 +388,10 @@ export default function TodosPage() {
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/app/offers">
+            <Link to="/app/documents?mode=offers">
               <AppButton>Neues Angebot</AppButton>
             </Link>
-            <Link to="/app/invoices">
+            <Link to="/app/documents?mode=invoices">
               <AppButton variant="secondary">Neue Rechnung</AppButton>
             </Link>
           </div>
@@ -307,10 +424,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -347,10 +461,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -387,10 +498,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}
@@ -429,10 +537,7 @@ export default function TodosPage() {
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryLabel && (
-                    <AppButton
-                      variant="secondary"
-                      onClick={() => handleSecondary(card.secondaryLabel)}
-                    >
+                    <AppButton variant="secondary" onClick={() => handleSecondary(card)}>
                       {card.secondaryLabel}
                     </AppButton>
                   )}

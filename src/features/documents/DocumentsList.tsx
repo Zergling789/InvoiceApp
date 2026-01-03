@@ -21,6 +21,7 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { DocumentEditor } from "./DocumentEditor";
+import { formatDocumentStatus, formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
 
 type EditorSeed = {
   id: string;
@@ -95,36 +96,35 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [openingId, setOpeningId] = useState<string | null>(null);
 
   const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
+    const label = formatInvoiceStatus(status, overdue);
     if (overdue || status === InvoiceStatus.OVERDUE) {
-      return { label: "Überfällig", tone: "red" as const };
+      return { label, tone: "red" as const };
     }
 
     if (status === InvoiceStatus.PAID) {
-      return { label: "Bezahlt", tone: "green" as const };
+      return { label, tone: "green" as const };
     }
 
-    return { label: "Offen", tone: "yellow" as const };
+    return { label, tone: "yellow" as const };
   };
 
   const getOfferStatusMeta = (status: OfferStatus) => {
+    const label = formatOfferStatus(status);
     switch (status) {
       case OfferStatus.DRAFT:
-        return { label: "Entwurf – nicht gesendet", tone: "gray" as const };
+        return { label, tone: "gray" as const };
       case OfferStatus.SENT:
-        return { label: "Gesendet – wartet auf Antwort", tone: "blue" as const };
+        return { label, tone: "blue" as const };
       case OfferStatus.ACCEPTED:
-        return { label: "Angenommen", tone: "green" as const };
+        return { label, tone: "green" as const };
       case OfferStatus.REJECTED:
-        return { label: "Abgelehnt", tone: "red" as const };
+        return { label, tone: "red" as const };
       case OfferStatus.INVOICED:
-        return { label: "In Rechnung gestellt", tone: "blue" as const };
+        return { label, tone: "blue" as const };
       default:
-        return { label: status, tone: "gray" as const };
+        return { label, tone: "gray" as const };
     }
   };
-
-  const formatStatusLabel = (status: OfferStatus | InvoiceStatus) =>
-    status ? `${status.slice(0, 1)}${status.slice(1).toLowerCase()}` : "—";
 
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -534,7 +534,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 <div className="space-y-1 text-xs text-gray-500 dark:text-slate-400">
                   {item.invoiceId && (
                     <div>
-                      <Link to="/app/invoices" className="underline">
+                      <Link to={`/app/documents/invoice/${item.invoiceId}`} className="underline">
                         Rechnung erstellt
                       </Link>{" "}
                       <span className="text-gray-400">- {item.invoiceId}</span>
@@ -639,12 +639,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                               : "gray"
                           }
                         >
-                          {formatStatusLabel(item.status)}
+                          {formatDocumentStatus(type, item.status, { isOverdue: overdue })}
                         </Badge>
 
                         {!isInvoice && item.invoiceId && (
                           <div className="text-xs text-gray-600">
-                            <Link to="/app/invoices" className="underline">
+                            <Link to={`/app/documents/invoice/${item.invoiceId}`} className="underline">
                               Invoice created
                             </Link>{" "}
                             <span className="text-gray-400">- {item.invoiceId}</span>

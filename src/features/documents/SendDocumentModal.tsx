@@ -20,6 +20,7 @@ type SendDocumentModalProps = {
   settings: UserSettings;
   defaultSubject: string;
   defaultMessage: string;
+  templateType?: "reminder" | "dunning" | "followup";
   onFinalize?: () => Promise<Offer | Invoice | null>;
   onSent: (nextData: Offer | Invoice) => Promise<void>;
 };
@@ -32,6 +33,43 @@ const parseEmails = (value: string) =>
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
+const buildTemplate = ({
+  templateType,
+  documentType,
+  documentNumber,
+  client,
+}: {
+  templateType: SendDocumentModalProps["templateType"];
+  documentType: "offer" | "invoice";
+  documentNumber: string;
+  client?: Client;
+}) => {
+  const name = client?.contactPerson || client?.companyName || "Hallo";
+
+  if (templateType === "reminder" && documentType === "invoice") {
+    return {
+      subject: `Rechnung ${documentNumber} – Zahlungserinnerung`,
+      message: `Hallo ${name},\n\nwir möchten freundlich an die offene Rechnung ${documentNumber} erinnern. Bitte begleichen Sie den Betrag, sobald es passt.\n\nVielen Dank und beste Grüße`,
+    };
+  }
+
+  if (templateType === "dunning" && documentType === "invoice") {
+    return {
+      subject: `Rechnung ${documentNumber} – Mahnung`,
+      message: `Hallo ${name},\n\nleider ist unsere Rechnung ${documentNumber} bereits überfällig. Bitte begleichen Sie den offenen Betrag zeitnah.\n\nVielen Dank für Ihre Rückmeldung.`,
+    };
+  }
+
+  if (templateType === "followup" && documentType === "offer") {
+    return {
+      subject: `Angebot ${documentNumber} – kurze Rückfrage`,
+      message: `Hallo ${name},\n\nkurze Nachfrage zu unserem Angebot ${documentNumber}. Gibt es Rückfragen oder können wir Sie dabei unterstützen?\n\nViele Grüße`,
+    };
+  }
+
+  return null;
+};
+
 export function SendDocumentModal({
   isOpen,
   onClose,
@@ -41,6 +79,7 @@ export function SendDocumentModal({
   settings,
   defaultSubject,
   defaultMessage,
+  templateType,
   onFinalize,
   onSent,
 }: SendDocumentModalProps) {
@@ -62,9 +101,15 @@ export function SendDocumentModal({
     setTo(client?.email ?? "");
     setCc("");
     setBcc("");
-    setSubject(defaultSubject);
-    setMessage(defaultMessage);
-  }, [isOpen, client?.email, defaultMessage, defaultSubject, document]);
+    const template = buildTemplate({
+      templateType,
+      documentType,
+      documentNumber: String(document.number ?? ""),
+      client,
+    });
+    setSubject(template?.subject ?? defaultSubject);
+    setMessage(template?.message ?? defaultMessage);
+  }, [client, defaultMessage, defaultSubject, document, documentType, isOpen, templateType]);
 
   useEffect(() => {
     if (!isOpen || !client?.id) return;

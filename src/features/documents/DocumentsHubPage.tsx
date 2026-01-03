@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import type { Client, Invoice, Offer } from "@/types";
 import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
@@ -10,6 +10,7 @@ import { AppCard } from "@/ui/AppCard";
 import * as clientService from "@/app/clients/clientService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
+import { formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
 
 type FilterMode = "all" | "offer" | "invoice";
 type InvoiceFilterStatus = "DRAFT" | "OPEN" | "OVERDUE" | "PAID";
@@ -21,40 +22,24 @@ type DocumentRow = {
   number: string;
   clientName: string;
   date: string;
+  createdAt?: string;
   amountLabel: string;
   statusLabel: string;
   statusTone: "gray" | "blue" | "green" | "red" | "yellow";
   statusKey: CombinedStatus;
   dueDate?: string;
+  validUntil?: string;
   isOverdue?: boolean;
 };
 
 const invoiceStatusLabel = (status: InvoiceFilterStatus) => {
-  switch (status) {
-    case "OPEN":
-      return "Offen";
-    case "OVERDUE":
-      return "Überfällig";
-    case "PAID":
-      return "Bezahlt";
-    default:
-      return "Entwurf";
+  if (status === "OPEN") {
+    return formatInvoiceStatus(InvoiceStatus.ISSUED);
   }
-};
-
-const offerStatusLabel = (status: OfferStatus) => {
-  switch (status) {
-    case OfferStatus.SENT:
-      return "Gesendet";
-    case OfferStatus.ACCEPTED:
-      return "Angenommen";
-    case OfferStatus.REJECTED:
-      return "Abgelehnt";
-    case OfferStatus.INVOICED:
-      return "In Rechnung gestellt";
-    default:
-      return "Entwurf";
+  if (status === "OVERDUE") {
+    return formatInvoiceStatus(InvoiceStatus.OVERDUE, true);
   }
+  return formatInvoiceStatus(status as InvoiceStatus);
 };
 
 const offerStatusTone = (status: OfferStatus): DocumentRow["statusTone"] => {
@@ -92,6 +77,15 @@ const buildInvoiceStatus = (invoice: Invoice, today: Date): InvoiceFilterStatus 
   return "OPEN";
 };
 
+const getTimestamp = (value?: string) => {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+};
+
+const getRowDocumentTimestamp = (row: DocumentRow) =>
+  getTimestamp(row.date) ?? getTimestamp(row.createdAt) ?? 0;
+
 export default function DocumentsHubPage() {
   const [mode, setMode] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
@@ -102,6 +96,7 @@ export default function DocumentsHubPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     let mounted = true;
@@ -128,6 +123,19 @@ export default function DocumentsHubPage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const param = searchParams.get("mode") ?? searchParams.get("type");
+    if (!param) return;
+    const normalized = param.toLowerCase();
+    if (normalized === "invoice" || normalized === "invoices") {
+      setMode("invoice");
+    } else if (normalized === "offer" || normalized === "offers") {
+      setMode("offer");
+    } else if (normalized === "all") {
+      setMode("all");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -174,7 +182,7 @@ export default function DocumentsHubPage() {
     const invoiceStatusValues = new Set<InvoiceFilterStatus>(["DRAFT", "OPEN", "OVERDUE", "PAID"]);
     return (status: CombinedStatus) => {
       if (offerStatusValues.has(status as OfferStatus)) {
-        return offerStatusLabel(status as OfferStatus);
+        return formatOfferStatus(status as OfferStatus);
       }
       if (invoiceStatusValues.has(status as InvoiceFilterStatus)) {
         return invoiceStatusLabel(status as InvoiceFilterStatus);
@@ -196,10 +204,11 @@ export default function DocumentsHubPage() {
               number: invoice.number,
               clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
               date: invoice.date,
+              createdAt: (invoice as { createdAt?: string }).createdAt,
               amountLabel: formatCurrencyEur(
                 calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0))
               ),
-              statusLabel: invoiceStatusLabel(statusKey),
+              statusLabel: formatInvoiceStatus(invoice.status, statusKey === "OVERDUE"),
               statusTone: invoiceStatusTone(statusKey),
               statusKey,
               dueDate: invoice.dueDate,
@@ -216,19 +225,59 @@ export default function DocumentsHubPage() {
             number: offer.number,
             clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
             date: offer.date,
+            createdAt: (offer as { createdAt?: string }).createdAt,
             amountLabel: formatCurrencyEur(
               calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0))
             ),
-            statusLabel: offerStatusLabel(offer.status),
+            statusLabel: formatOfferStatus(offer.status),
             statusTone: offerStatusTone(offer.status),
             statusKey: offer.status,
+            validUntil: offer.validUntil,
           }));
 
     return [...offerRows, ...invoiceRows];
   }, [clientNameById, invoices, offers, mode]);
 
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const aOverdue = a.type === "invoice" && a.isOverdue;
+      const bOverdue = b.type === "invoice" && b.isOverdue;
+
+      if (aOverdue !== bOverdue) {
+        return aOverdue ? -1 : 1;
+      }
+
+      const aInvoiceWithDue = a.type === "invoice" && a.dueDate;
+      const bInvoiceWithDue = b.type === "invoice" && b.dueDate;
+
+      if (aInvoiceWithDue && bInvoiceWithDue) {
+        const dueDiff =
+          (getTimestamp(a.dueDate) ?? 0) - (getTimestamp(b.dueDate) ?? 0);
+        if (dueDiff !== 0) return dueDiff;
+      } else if (aInvoiceWithDue !== bInvoiceWithDue) {
+        return aInvoiceWithDue ? -1 : 1;
+      }
+
+      const aOfferWithValidUntil = a.type === "offer" && a.validUntil;
+      const bOfferWithValidUntil = b.type === "offer" && b.validUntil;
+
+      if (aOfferWithValidUntil && bOfferWithValidUntil) {
+        const validDiff =
+          (getTimestamp(a.validUntil) ?? 0) - (getTimestamp(b.validUntil) ?? 0);
+        if (validDiff !== 0) return validDiff;
+      } else if (aOfferWithValidUntil !== bOfferWithValidUntil) {
+        return aOfferWithValidUntil ? -1 : 1;
+      }
+
+      const dateDiff = getRowDocumentTimestamp(b) - getRowDocumentTimestamp(a);
+      if (dateDiff !== 0) return dateDiff;
+
+      return a.id.localeCompare(b.id);
+    });
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
-    let next = rows;
+    let next = sortedRows;
     if (debouncedSearch) {
       next = next.filter((row) =>
         [row.number, row.clientName].some((value) => value.toLowerCase().includes(debouncedSearch))
@@ -238,7 +287,7 @@ export default function DocumentsHubPage() {
       next = next.filter((row) => selectedStatuses.includes(row.statusKey));
     }
     return next;
-  }, [rows, debouncedSearch, selectedStatuses]);
+  }, [sortedRows, debouncedSearch, selectedStatuses]);
 
   const toggleStatus = (status: CombinedStatus) => {
     setSelectedStatuses((prev) =>
