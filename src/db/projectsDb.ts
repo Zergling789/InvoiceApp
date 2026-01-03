@@ -1,6 +1,21 @@
 // src/db/projectsDb.ts
 import { supabase } from "@/supabaseClient";
+import type { Database } from "@/lib/supabase.types";
 import type { Project } from "@/types";
+
+type DbProjectRow = Database["public"]["Tables"]["projects"]["Row"];
+type DbProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
+
+const PROJECT_FIELDS = [
+  "id",
+  "user_id",
+  "client_id",
+  "name",
+  "budget_type",
+  "hourly_rate",
+  "budget_total",
+  "status",
+] as const satisfies readonly (keyof DbProjectRow)[];
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -14,13 +29,13 @@ export async function dbListProjects(): Promise<Project[]> {
 
   const { data, error } = await supabase
     .from("projects")
-    .select("id, user_id, client_id, name, budget_type, hourly_rate, budget_total, status")
+    .select(PROJECT_FIELDS.join(","))
     .eq("user_id", uid)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((r: any) => ({
+  return (data ?? []).map((r) => ({
     id: r.id,
     clientId: r.client_id,
     name: r.name,
@@ -34,7 +49,7 @@ export async function dbListProjects(): Promise<Project[]> {
 export async function dbUpsertProject(p: Project): Promise<void> {
   const uid = await requireUserId();
 
-  const payload = {
+  const payload: DbProjectInsert = {
     id: p.id,
     user_id: uid,
     client_id: p.clientId,
