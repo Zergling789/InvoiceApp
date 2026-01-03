@@ -340,6 +340,11 @@ export default function DocumentsHubPage() {
   };
 
   const openNewEditor = async (type: "invoice" | "offer") => {
+    if (type === "offer") {
+      setFabOpen(false);
+      navigate("/app/offers/new");
+      return;
+    }
     try {
       const nextSettings = settings ?? (await fetchSettings());
       setSettings(nextSettings);

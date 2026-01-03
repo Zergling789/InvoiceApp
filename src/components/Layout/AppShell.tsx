@@ -8,7 +8,8 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
   const pathname = location.pathname;
   const hideMobileNav =
     /^\/app\/documents\/(offer|invoice)\/[^/]+(?:\/edit)?$/.test(pathname) ||
-    /^\/app\/clients\/[^/]+(?:\/edit)?$/.test(pathname);
+    /^\/app\/clients\/[^/]+(?:\/edit)?$/.test(pathname) ||
+    /^\/app\/offers\/new$/.test(pathname);
 
   return (
     <div
