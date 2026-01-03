@@ -30,20 +30,15 @@ export async function fetchDocumentPdf(payload: PdfPayload): Promise<{ blob: Blo
 }
 
 export async function downloadDocumentPdf(payload: PdfPayload) {
-  const res = await apiFetch("/api/pdf/link", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, { auth: true });
+  const { blob, filename } = await fetchDocumentPdf(payload);
 
-  if (!res.ok) {
-    const err = await readApiError(res);
-    throw new Error(err.message || "PDF konnte nicht erstellt werden.");
-  }
-
-  const data = await res.json();
-  if (!data?.url) {
-    throw new Error("PDF konnte nicht erstellt werden.");
-  }
-
-  window.location.href = data.url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
+
