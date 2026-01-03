@@ -19,18 +19,42 @@ drop policy if exists document_counters_select_own on public.document_counters;
 drop policy if exists document_counters_insert_own on public.document_counters;
 drop policy if exists document_counters_update_own on public.document_counters;
 
-create policy "document_counters_select_own"
-  on public.document_counters for select
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'document_counters' and policyname = 'document_counters_select_own'
+  ) then
+    create policy "document_counters_select_own"
+      on public.document_counters for select
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy "document_counters_insert_own"
-  on public.document_counters for insert
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'document_counters' and policyname = 'document_counters_insert_own'
+  ) then
+    create policy "document_counters_insert_own"
+      on public.document_counters for insert
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy "document_counters_update_own"
-  on public.document_counters for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'document_counters' and policyname = 'document_counters_update_own'
+  ) then
+    create policy "document_counters_update_own"
+      on public.document_counters for update
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
 drop function if exists public.next_document_number(text);
 

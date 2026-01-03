@@ -58,19 +58,51 @@ alter table public.sender_identities enable row level security;
 alter table public.sender_identity_tokens enable row level security;
 alter table public.audit_events enable row level security;
 
-create policy "sender_identities_select_own"
-  on public.sender_identities for select
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'sender_identities' and policyname = 'sender_identities_select_own'
+  ) then
+    create policy "sender_identities_select_own"
+      on public.sender_identities for select
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy "sender_identities_insert_own"
-  on public.sender_identities for insert
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'sender_identities' and policyname = 'sender_identities_insert_own'
+  ) then
+    create policy "sender_identities_insert_own"
+      on public.sender_identities for insert
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy "sender_identities_update_own"
-  on public.sender_identities for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'sender_identities' and policyname = 'sender_identities_update_own'
+  ) then
+    create policy "sender_identities_update_own"
+      on public.sender_identities for update
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy "sender_identities_delete_own"
-  on public.sender_identities for delete
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'sender_identities' and policyname = 'sender_identities_delete_own'
+  ) then
+    create policy "sender_identities_delete_own"
+      on public.sender_identities for delete
+      using (user_id = auth.uid());
+  end if;
+end$$;

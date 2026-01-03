@@ -174,18 +174,42 @@ drop policy if exists user_settings_select_own on public.user_settings;
 drop policy if exists user_settings_insert_own on public.user_settings;
 drop policy if exists user_settings_update_own on public.user_settings;
 
-create policy user_settings_select_own
-  on public.user_settings for select
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'user_settings' and policyname = 'user_settings_select_own'
+  ) then
+    create policy user_settings_select_own
+      on public.user_settings for select
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy user_settings_insert_own
-  on public.user_settings for insert
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'user_settings' and policyname = 'user_settings_insert_own'
+  ) then
+    create policy user_settings_insert_own
+      on public.user_settings for insert
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy user_settings_update_own
-  on public.user_settings for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'user_settings' and policyname = 'user_settings_update_own'
+  ) then
+    create policy user_settings_update_own
+      on public.user_settings for update
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
 -- clients policies
 drop policy if exists clients_select_own on public.clients;
@@ -193,22 +217,54 @@ drop policy if exists clients_insert_own on public.clients;
 drop policy if exists clients_update_own on public.clients;
 drop policy if exists clients_delete_own on public.clients;
 
-create policy clients_select_own
-  on public.clients for select
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clients' and policyname = 'clients_select_own'
+  ) then
+    create policy clients_select_own
+      on public.clients for select
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy clients_insert_own
-  on public.clients for insert
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clients' and policyname = 'clients_insert_own'
+  ) then
+    create policy clients_insert_own
+      on public.clients for insert
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy clients_update_own
-  on public.clients for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clients' and policyname = 'clients_update_own'
+  ) then
+    create policy clients_update_own
+      on public.clients for update
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy clients_delete_own
-  on public.clients for delete
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clients' and policyname = 'clients_delete_own'
+  ) then
+    create policy clients_delete_own
+      on public.clients for delete
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
 -- projects policies
 drop policy if exists projects_select_own on public.projects;
@@ -216,19 +272,51 @@ drop policy if exists projects_insert_own on public.projects;
 drop policy if exists projects_update_own on public.projects;
 drop policy if exists projects_delete_own on public.projects;
 
-create policy projects_select_own
-  on public.projects for select
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'projects' and policyname = 'projects_select_own'
+  ) then
+    create policy projects_select_own
+      on public.projects for select
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy projects_insert_own
-  on public.projects for insert
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'projects' and policyname = 'projects_insert_own'
+  ) then
+    create policy projects_insert_own
+      on public.projects for insert
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy projects_update_own
-  on public.projects for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'projects' and policyname = 'projects_update_own'
+  ) then
+    create policy projects_update_own
+      on public.projects for update
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy projects_delete_own
-  on public.projects for delete
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'projects' and policyname = 'projects_delete_own'
+  ) then
+    create policy projects_delete_own
+      on public.projects for delete
+      using (user_id = auth.uid());
+  end if;
+end$$;
