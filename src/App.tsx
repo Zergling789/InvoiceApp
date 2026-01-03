@@ -1,10 +1,14 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { LayoutDashboard, Users, FolderKanban, FileText, Receipt } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ListTodo, Menu } from "lucide-react";
 
 import Dashboard from "@/features/dashboard/Dashboard";
 import Clients from "@/features/clients/Clients";
 import Projects from "@/features/projects/Projects";
 import DocumentsPage from "@/features/documents/DocumentsPage";
+import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
+import DocumentDetailPage from "@/features/documents/DocumentDetailPage";
+import TodosPage from "@/features/todos/TodosPage";
+import MorePage from "@/features/more/MorePage";
 import SettingsView from "@/features/settings/SettingsView";
 import VerifyEmailResult from "@/features/settings/VerifyEmailResult";
 import AppShell from "@/components/Layout/AppShell";
@@ -15,10 +19,10 @@ import RequireAuth from "@/components/Auth/RequireAuth";
 
 const navItems: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
+  { to: "/app/todos", label: "To-dos", icon: <ListTodo size={16} /> },
+  { to: "/app/documents", label: "Dokumente", icon: <FileText size={16} /> },
   { to: "/app/clients", label: "Kunden", icon: <Users size={16} /> },
-  { to: "/app/projects", label: "Projekte", icon: <FolderKanban size={16} /> },
-  { to: "/app/offers", label: "Angebote", icon: <FileText size={16} /> },
-  { to: "/app/invoices", label: "Rechnungen", icon: <Receipt size={16} /> },
+  { to: "/app/more", label: "Mehr", icon: <Menu size={16} /> },
 ];
 
 export default function App() {
@@ -36,10 +40,14 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="todos" element={<TodosPage />} />
+        <Route path="documents" element={<DocumentsHubPage />} />
         <Route path="clients" element={<Clients />} />
         <Route path="projects" element={<Projects />} />
         <Route path="offers" element={<DocumentsPage type="offer" />} />
         <Route path="invoices" element={<DocumentsPage type="invoice" />} />
+        <Route path="documents/:type/:id" element={<DocumentDetailPage />} />
+        <Route path="more" element={<MorePage />} />
         <Route path="settings" element={<SettingsView />} />
         <Route path="settings/email/verify" element={<VerifyEmailResult />} />
 
