@@ -572,23 +572,45 @@ export function DocumentEditor({
                     </div>
                   </div>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className="flex items-start gap-3 rounded-2xl bg-blue-50 p-3 text-blue-700">
-                      <CalendarDays size={18} className="mt-0.5" />
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Datum</p>
-                        <p className="font-semibold">
-                          {formatDate(formData.date, settings.locale ?? "de-DE")}
-                        </p>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-[1.2fr_1fr] sm:items-start">
+                    <div className="rounded-2xl bg-blue-50 p-4 text-blue-700 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <CalendarDays size={18} className="mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Datum</p>
+                          <p className="font-semibold">
+                            {formatDate(formData.date, settings.locale ?? "de-DE")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <BadgeCheck size={18} className="mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                            {isInvoice ? "Fällig" : "Gültig bis"}
+                          </p>
+                          <p className="font-semibold">
+                            {isInvoice
+                              ? formData.dueDate
+                                ? formatDate(formData.dueDate, settings.locale ?? "de-DE")
+                                : "—"
+                              : formData.validUntil
+                                ? formatDate(formData.validUntil, settings.locale ?? "de-DE")
+                                : "—"}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3 rounded-2xl bg-blue-50 p-3 text-blue-700">
-                      <BadgeCheck size={18} className="mt-0.5" />
+                    <div className="space-y-2 text-sm text-slate-600 sm:text-right">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                          {isInvoice ? "Fällig" : "Gültig bis"}
-                        </p>
-                        <p className="font-semibold">
+                        <span className="text-slate-400">Datum:</span>{" "}
+                        <span className="font-semibold text-slate-700">
+                          {formatDate(formData.date, settings.locale ?? "de-DE")}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">{isInvoice ? "Fällig:" : "Gültig bis:"}</span>{" "}
+                        <span className="font-semibold text-slate-700">
                           {isInvoice
                             ? formData.dueDate
                               ? formatDate(formData.dueDate, settings.locale ?? "de-DE")
@@ -596,7 +618,7 @@ export function DocumentEditor({
                             : formData.validUntil
                               ? formatDate(formData.validUntil, settings.locale ?? "de-DE")
                               : "—"}
-                        </p>
+                        </span>
                       </div>
                     </div>
                   </div>
