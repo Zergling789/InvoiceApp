@@ -905,6 +905,17 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
   }
 });
 
+const computeInvoiceIsOverdue = (invoice) => {
+  if (!invoice) return false;
+  if (!["ISSUED", "SENT"].includes(invoice.status)) return false;
+  if (invoice.paid_at || invoice.canceled_at) return false;
+  if (!invoice.due_date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(invoice.due_date);
+  return due.getTime() < today.getTime();
+};
+
 const loadInvoiceForUser = async (supabase, invoiceId) => {
   const { data: invoice, error } = await supabase
     .from("invoices")
@@ -956,7 +967,7 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
       return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
     }
 
-    return res.json({ ok: true, invoice });
+    return res.json({ ok: true, invoice: { ...invoice, is_overdue: computeInvoiceIsOverdue(invoice) } });
   } catch (err) {
     console.error("Finalize invoice failed", err);
     if (err?.status === 401) {
@@ -1015,7 +1026,7 @@ app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
       return sendError(res, 500, "update_failed", "Invoice update failed.");
     }
 
-    return res.json({ ok: true, invoice: updated });
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
     const normalized = normalizeDbError(err);
     if (normalized) {
@@ -1069,7 +1080,7 @@ app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
       return sendError(res, 500, "update_failed", "Invoice update failed.");
     }
 
-    return res.json({ ok: true, invoice: updated });
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
     const normalized = normalizeDbError(err);
     if (normalized) {
@@ -1122,7 +1133,7 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
       return sendError(res, 500, "update_failed", "Invoice update failed.");
     }
 
-    return res.json({ ok: true, invoice: updated });
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
     const normalized = normalizeDbError(err);
     if (normalized) {

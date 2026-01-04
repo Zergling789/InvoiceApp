@@ -23,7 +23,13 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { DocumentEditor } from "./DocumentEditor";
-import { formatDocumentStatus, formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
+import {
+  formatDocumentStatus,
+  getInvoiceDisplayStatus,
+  formatInvoiceDisplayStatus,
+  formatInvoiceStatus,
+  formatOfferStatus,
+} from "@/features/documents/utils/formatStatus";
 import { getErrorMessage, logError } from "@/utils/errors";
 
 type EditorSeed = {
@@ -478,11 +484,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           const locale = settings?.locale ?? "de-DE";
           const invoiceCurrency = settings?.currency ?? "EUR";
           const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
-          const overdue =
-            isInvoice &&
-            item.status !== InvoiceStatus.PAID &&
-            item.status !== InvoiceStatus.CANCELED &&
-            isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+          const overdue = isInvoice && isInvoiceOverdue(item as Invoice, new Date());
 
           if (isInvoice) {
             const statusMeta = getInvoiceStatusMeta(item.status as InvoiceStatus, overdue);
@@ -629,11 +631,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               const invoiceCurrency = settings?.currency ?? "EUR";
               const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
 
-              const overdue =
-                isInvoice &&
-                item.status !== InvoiceStatus.PAID &&
-                item.status !== InvoiceStatus.CANCELED &&
-                isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+              const overdue = isInvoice && isInvoiceOverdue(item as Invoice, new Date());
+              const displayStatus = isInvoice ? getInvoiceDisplayStatus(item as Invoice) : item.status;
 
               return (
                 <tr key={item.id} className="hover:bg-gray-50">
@@ -645,16 +644,14 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                   </td>
 
                   <td className="p-4">
-                    {overdue && (
-                      <Badge color="red">
-                        {formatDocumentStatus(type, item.status, { isOverdue: overdue })}
-                      </Badge>
-                    )}
+                    {overdue && <Badge color="red">{formatInvoiceDisplayStatus(item as Invoice)}</Badge>}
                     {!overdue && (
                       <div className="space-y-1">
                         <Badge
                           color={
-                            item.status === InvoiceStatus.PAID ||
+                            displayStatus === "OVERDUE"
+                              ? "red"
+                              : item.status === InvoiceStatus.PAID ||
                             item.status === OfferStatus.ACCEPTED ||
                             item.status === OfferStatus.INVOICED
                               ? "green"

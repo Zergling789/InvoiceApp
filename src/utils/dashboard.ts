@@ -34,6 +34,7 @@ export const isInvoicePaid = (invoice: Invoice) => invoice.status === InvoiceSta
 export const isInvoiceCanceled = (invoice: Invoice) => invoice.status === InvoiceStatus.CANCELED;
 
 export const isInvoiceOverdue = (invoice: Invoice, today = new Date()) => {
+  if (typeof invoice.isOverdue === "boolean") return invoice.isOverdue;
   if (isInvoicePaid(invoice) || isInvoiceCanceled(invoice)) return false;
   if (![InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(invoice.status)) return false;
   if (invoice.paidAt || invoice.canceledAt) return false;

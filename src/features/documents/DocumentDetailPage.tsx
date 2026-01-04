@@ -19,7 +19,7 @@ import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
-import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
+import { formatDocumentStatus, formatInvoiceDisplayStatus } from "@/features/documents/utils/formatStatus";
 import {
   getDocumentCapabilities,
   getInvoicePhase,
@@ -596,7 +596,9 @@ export default function DocumentDetailPage() {
             </div>
           </div>
           <AppBadge color={overdue ? "red" : statusTone(phase ?? String(docStatus))}>
-            {formatDocumentStatus(docType, docStatus, { isOverdue: overdue })}
+            {docType === "invoice"
+              ? formatInvoiceDisplayStatus(doc as Invoice)
+              : formatDocumentStatus(docType, docStatus, { isOverdue: overdue })}
           </AppBadge>
         </div>
 

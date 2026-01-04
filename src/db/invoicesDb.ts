@@ -18,7 +18,6 @@ const INVOICE_FIELDS = [
   "payment_date",
   "paid_at",
   "canceled_at",
-  "issued_at",
   "positions",
   "intro_text",
   "footer_text",
@@ -54,6 +53,22 @@ const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatu
 const toDbInvoiceStatus = (status: InvoiceStatus | null | undefined): string =>
   normalizeInvoiceStatus(status ?? InvoiceStatus.DRAFT);
 
+const computeIsOverdue = (row: {
+  status: string | null;
+  due_date?: string | null;
+  paid_at?: string | null;
+  canceled_at?: string | null;
+}) => {
+  const status = (row.status ?? "").toUpperCase();
+  if (!["ISSUED", "SENT"].includes(status)) return false;
+  if (row.paid_at || row.canceled_at) return false;
+  if (!row.due_date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(row.due_date);
+  return due.getTime() < today.getTime();
+};
+
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw new Error(error.message);
@@ -87,7 +102,7 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     paymentDate: r.payment_date ?? undefined,
     paidAt: r.paid_at ?? null,
     canceledAt: r.canceled_at ?? null,
-    issuedAt: r.issued_at ?? null,
+    isOverdue: computeIsOverdue(r),
     positions: r.positions ?? [],
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
@@ -129,7 +144,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     paymentDate: data.payment_date ?? undefined,
     paidAt: data.paid_at ?? null,
     canceledAt: data.canceled_at ?? null,
-    issuedAt: data.issued_at ?? null,
+    isOverdue: computeIsOverdue(data),
     positions: data.positions ?? [],
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
@@ -166,7 +181,6 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     payment_date: inv.paymentDate ?? null,
     paid_at: inv.paidAt ?? null,
     canceled_at: inv.canceledAt ?? null,
-    issued_at: inv.issuedAt ?? null,
 
     positions: inv.positions ?? [],
 

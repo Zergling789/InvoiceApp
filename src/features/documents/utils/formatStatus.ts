@@ -1,6 +1,7 @@
 import { Invoice, InvoiceStatus, Offer, OfferStatus } from "@/types";
 import { getInvoicePhase, getOfferPhase } from "@/features/documents/state/documentState";
 import { formatInvoicePhaseLabel, formatOfferPhaseLabel } from "@/features/documents/state/formatPhaseLabel";
+import { isInvoiceOverdue } from "@/utils/dashboard";
 
 const buildInvoiceForPhase = (status: InvoiceStatus, isOverdue: boolean): Invoice => {
   const now = new Date();
@@ -36,6 +37,14 @@ export const formatInvoiceStatus = (status: InvoiceStatus, isOverdue = false): s
   const phase = getInvoicePhase(invoice, new Date());
   return formatInvoicePhaseLabel(phase);
 };
+
+export const getInvoiceDisplayStatus = (invoice: Invoice): InvoiceStatus | "OVERDUE" => {
+  const overdue = invoice.isOverdue ?? isInvoiceOverdue(invoice);
+  return overdue ? "OVERDUE" : invoice.status;
+};
+
+export const formatInvoiceDisplayStatus = (invoice: Invoice): string =>
+  formatInvoiceStatus(invoice.status, invoice.isOverdue ?? isInvoiceOverdue(invoice));
 
 export const formatOfferStatus = (status: OfferStatus): string => {
   const offer = buildOfferForPhase(status);

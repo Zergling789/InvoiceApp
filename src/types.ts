@@ -122,7 +122,7 @@ export interface Invoice {
   paymentDate?: string;
   paidAt?: string | null;
   canceledAt?: string | null;
-  issuedAt?: string | null;
+  isOverdue?: boolean;
   isLocked?: boolean;
   finalizedAt?: string | null;
   sentAt?: string | null;

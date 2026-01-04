@@ -87,14 +87,13 @@ test.describe.serial("invoice status transitions", () => {
 
     const { data: invoice, error } = await admin
       .from("invoices")
-      .select("status, is_locked, issued_at, finalized_at")
+      .select("status, is_locked, finalized_at")
       .eq("id", invoiceId)
       .single();
 
     expect(error).toBeNull();
     expect(invoice?.status).toBe("ISSUED");
     expect(invoice?.is_locked).toBe(true);
-    expect(invoice?.issued_at).toBeTruthy();
     expect(invoice?.finalized_at).toBeTruthy();
   });
 

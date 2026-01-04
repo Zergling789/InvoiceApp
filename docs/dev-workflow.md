@@ -37,5 +37,6 @@
   - `ISSUED`/`SENT`/`PAID`/`CANCELED` setzen `is_locked = true`.
   - `PAID` setzt `paid_at` (und `payment_date`) automatisch.
   - `CANCELED` setzt `canceled_at` automatisch.
-- Overdue ist ein berechneter Zustand:
+- `finalized_at` ist der kanonische Timestamp für die Finalisierung (`DRAFT -> ISSUED`).
+- Overdue ist ein berechneter Zustand über `is_overdue`:
   - `status in ('ISSUED','SENT')` und `due_date < today` und `paid_at`/`canceled_at` ist `null`.
