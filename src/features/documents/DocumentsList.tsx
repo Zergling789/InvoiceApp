@@ -368,7 +368,6 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         projectId: offer.projectId,
         date: todayISO(),
         paymentTermsDays: defaultTerms,
-        dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
         positions: offer.positions ?? [],
         vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
         isSmallBusiness: s.isSmallBusiness ?? false,

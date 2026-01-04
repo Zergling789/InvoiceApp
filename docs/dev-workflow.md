@@ -44,6 +44,7 @@
 ## Zahlungsbedingungen & Fälligkeit
 - Standard-Zahlungsziel pro User: `public.user_settings.payment_terms_days` (Default: `14`).
 - Snapshot pro Rechnung: `public.invoices.invoice_date`, `public.invoices.payment_terms_days`, `public.invoices.due_date`.
-- `due_date` wird serverseitig aus `invoice_date + payment_terms_days` berechnet.
+- `due_date` wird ausschließlich DB-seitig aus `invoice_date + payment_terms_days` berechnet.
 - Einstellungen wirken nur auf neue Rechnungen (bestehende Rechnungen behalten ihren Snapshot).
 - Overdue-Berechnung bleibt ausschließlich auf Basis von `due_date` (siehe Statusmodell oben).
+- Nach Finalisierung (`is_locked = true` oder `finalized_at != null`) sind `invoice_date`, `payment_terms_days` und `due_date` unveränderlich.

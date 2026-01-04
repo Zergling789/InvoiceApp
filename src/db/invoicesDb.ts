@@ -183,7 +183,6 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     date: inv.date,
     invoice_date: inv.date,
     payment_terms_days: Number(inv.paymentTermsDays ?? 14),
-    due_date: inv.dueDate ?? null,
     payment_date: inv.paymentDate ?? null,
     paid_at: inv.paidAt ?? null,
     canceled_at: inv.canceledAt ?? null,

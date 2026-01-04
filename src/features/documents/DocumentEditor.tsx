@@ -221,6 +221,7 @@ export function DocumentEditor({
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+  const invoiceMetaDisabled = disabled || (isInvoice && formData.status !== InvoiceStatus.DRAFT);
   const currencyOptions = ["EUR", "USD", "CHF", "GBP"];
   const documentCurrency = isInvoice
     ? settings.currency ?? "EUR"
@@ -290,7 +291,7 @@ export function DocumentEditor({
   }, [formData.positions, formData.vatRate, isSmallBusiness]);
 
   useEffect(() => {
-    if (!isInvoice || readOnly || locked) return;
+    if (!isInvoice || readOnly || locked || formData.status !== InvoiceStatus.DRAFT) return;
     if (!formData.date) return;
     const nextDueDate = invoiceService.buildDueDate(
       formData.date,
@@ -314,10 +315,6 @@ export function DocumentEditor({
       toast.error("Bitte Kunde wählen");
       return false;
     }
-    if (isInvoice && !data.dueDate) {
-      toast.error("Bitte Fälligkeitsdatum setzen");
-      return false;
-    }
     if (!isInvoice && !data.validUntil) {
       toast.error("Bitte Gültig-bis Datum setzen");
       return false;
@@ -334,7 +331,6 @@ export function DocumentEditor({
           projectId: data.projectId,
           date: data.date,
           paymentTermsDays: Number(data.paymentTermsDays ?? 14),
-          dueDate: data.dueDate!,
           positions: data.positions ?? [],
           vatRate: toNumberOrZero(data.vatRate),
           isSmallBusiness: data.isSmallBusiness ?? false,
@@ -442,10 +438,6 @@ export function DocumentEditor({
     }
     if (!formData.date) {
       toast.error("Bitte Rechnungsdatum setzen");
-      return false;
-    }
-    if (!formData.dueDate) {
-      toast.error("Bitte Fälligkeitsdatum setzen");
       return false;
     }
     if (!selectedClient?.address?.trim()) {
@@ -948,7 +940,7 @@ export function DocumentEditor({
                         type="date"
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
                         value={formData.date}
-                        disabled={disabled}
+                        disabled={isInvoice ? invoiceMetaDisabled : disabled}
                         onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                       />
                     </div>
@@ -1284,7 +1276,7 @@ export function DocumentEditor({
                     type="date"
                     className="w-full border rounded p-2"
                     value={formData.date}
-                    disabled={disabled}
+                    disabled={isInvoice ? invoiceMetaDisabled : disabled}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   />
                 </div>
@@ -1304,7 +1296,7 @@ export function DocumentEditor({
                       type="number"
                       className="w-full border rounded p-2"
                       value={formData.paymentTermsDays ?? 14}
-                      disabled={disabled}
+                      disabled={invoiceMetaDisabled}
                       min={0}
                       max={365}
                       onChange={(e) =>
