@@ -18,6 +18,9 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Statuswechsel ist nicht erlaubt.";
     case "EMAIL_NOT_CONFIGURED":
       return "E-Mail Versand ist nicht konfiguriert.";
+    case "CLIENT_REQUIRED":
+    case "CLIENT_NAME_REQUIRED":
+      return "Bitte Kunde auswählen.";
     default:
       return "Es ist ein unerwarteter Fehler aufgetreten.";
   }

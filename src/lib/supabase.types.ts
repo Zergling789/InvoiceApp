@@ -124,7 +124,14 @@ export type Database = {
       };
       invoices: {
         Row: {
+          client_address: string | null;
           client_id: string;
+          client_company_name: string | null;
+          client_contact_person: string | null;
+          client_email: string | null;
+          client_name: string;
+          client_phone: string | null;
+          client_vat_id: string | null;
           created_at: string;
           date: string;
           invoice_date: string;
@@ -156,7 +163,14 @@ export type Database = {
           vat_rate: number;
         };
         Insert: {
+          client_address?: string | null;
           client_id: string;
+          client_company_name?: string | null;
+          client_contact_person?: string | null;
+          client_email?: string | null;
+          client_name?: string;
+          client_phone?: string | null;
+          client_vat_id?: string | null;
           created_at?: string;
           date?: string;
           invoice_date?: string;
@@ -188,7 +202,14 @@ export type Database = {
           vat_rate?: number;
         };
         Update: {
+          client_address?: string | null;
           client_id?: string;
+          client_company_name?: string | null;
+          client_contact_person?: string | null;
+          client_email?: string | null;
+          client_name?: string;
+          client_phone?: string | null;
+          client_vat_id?: string | null;
           created_at?: string;
           date?: string;
           invoice_date?: string;
@@ -506,6 +527,12 @@ export type Database = {
     };
     Views: {};
     Functions: {
+      copy_customer_snapshot_to_invoice: {
+        Args: {
+          p_invoice_id: string;
+        };
+        Returns: Database["public"]["Tables"]["invoices"]["Row"];
+      };
       convert_offer_to_invoice: {
         Args: {
           offer_id: string;

@@ -237,7 +237,11 @@ export default function DocumentsHubPage() {
               id: invoice.id,
               type: "invoice",
               number: invoice.number ?? "Entwurf",
-              clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
+              clientName:
+                invoice.clientName?.trim() ||
+                invoice.clientCompanyName?.trim() ||
+                clientNameById.get(invoice.clientId) ||
+                "Unbekannter Kunde",
               date: invoice.date,
               createdAt: (invoice as { createdAt?: string }).createdAt,
               amountLabel: formatMoney(

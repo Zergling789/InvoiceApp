@@ -48,3 +48,11 @@
 - Einstellungen wirken nur auf neue Rechnungen (bestehende Rechnungen behalten ihren Snapshot).
 - Overdue-Berechnung bleibt ausschließlich auf Basis von `due_date` (siehe Statusmodell oben).
 - Nach Finalisierung (`is_locked = true` oder `finalized_at != null`) sind `invoice_date`, `payment_terms_days` und `due_date` unveränderlich.
+
+## Kundensnapshot auf Rechnungen
+- Rechnungen speichern beim Anlegen den Kundensnapshot in `public.invoices.client_*`.
+- Änderungen am Kundenstamm verändern bestehende Rechnungen nicht.
+- Snapshot wird spätestens bei der Finalisierung gesetzt (DB-RPC `finalize_invoice` prüft `client_name`).
+- `client_name` darf nicht leer sein, sobald `status != 'DRAFT'`.
+- Nach Finalisierung (`is_locked = true`) sind Snapshot-Felder unveränderlich.
+- Drafts übernehmen den Snapshot beim Auswählen/Ändern des Kunden im Editor.

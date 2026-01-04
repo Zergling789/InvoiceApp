@@ -101,7 +101,11 @@ export default function Dashboard() {
       .slice()
       .sort((a, b) => sortByDateAsc(a.dueDate, b.dueDate))
       .map<ActionItem>((invoice) => {
-        const clientName = clientMap.get(invoice.clientId) ?? "Unbekannter Kunde";
+        const clientName =
+          invoice.clientName?.trim() ||
+          invoice.clientCompanyName?.trim() ||
+          clientMap.get(invoice.clientId) ||
+          "Unbekannter Kunde";
         const ageDays = getDaysSince(invoice.dueDate ?? invoice.date, today);
         return {
           id: `invoice-overdue-${invoice.id}`,
@@ -124,7 +128,11 @@ export default function Dashboard() {
       .slice()
       .sort((a, b) => sortByDateAsc(getInvoiceReferenceDate(a), getInvoiceReferenceDate(b)))
       .map<ActionItem>((invoice) => {
-        const clientName = clientMap.get(invoice.clientId) ?? "Unbekannter Kunde";
+        const clientName =
+          invoice.clientName?.trim() ||
+          invoice.clientCompanyName?.trim() ||
+          clientMap.get(invoice.clientId) ||
+          "Unbekannter Kunde";
         const ageDays = getDaysSince(getInvoiceReferenceDate(invoice), today);
         return {
           id: `invoice-open-${invoice.id}`,
