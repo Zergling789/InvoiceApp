@@ -53,6 +53,9 @@ type FormData = {
   smallBusinessNote?: string | null;
   currency?: string;
   paymentDate?: string;
+  paidAt?: string | null;
+  canceledAt?: string | null;
+  issuedAt?: string | null;
   offerId?: string;
   projectId?: string;
   isLocked?: boolean;

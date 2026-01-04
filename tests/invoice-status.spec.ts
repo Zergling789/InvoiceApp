@@ -20,6 +20,7 @@ const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 test.describe.serial("invoice status transitions", () => {
   let user: { id: string; email: string; password: string };
   let client: { id: string; companyName: string; email: string; address: string };
+  let accessToken: string;
 
   test.beforeAll(async () => {
     user = await createTestUser();
@@ -35,6 +36,11 @@ test.describe.serial("invoice status transitions", () => {
       password: user.password,
     });
     if (error) throw error;
+    const { data } = await userClient.auth.getSession();
+    accessToken = data.session?.access_token ?? "";
+    if (!accessToken) {
+      throw new Error("Missing user access token.");
+    }
   });
 
   test.afterAll(async () => {
@@ -69,66 +75,115 @@ test.describe.serial("invoice status transitions", () => {
     return data.id as string;
   };
 
-  test("draft -> finalize -> issued + locked", async () => {
+  test("draft -> finalize -> issued + locked", async ({ request }) => {
     const invoiceId = await createDraftInvoice();
 
-    const { error: finalizeError } = await userClient.rpc("finalize_invoice", {
-      invoice_id: invoiceId,
+    const finalizeRes = await request.post(`/api/invoices/${invoiceId}/finalize`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
-
-    expect(finalizeError).toBeNull();
+    expect(finalizeRes.ok()).toBe(true);
 
     const { data: invoice, error } = await admin
       .from("invoices")
-      .select("status, is_locked")
+      .select("status, is_locked, issued_at, finalized_at")
       .eq("id", invoiceId)
       .single();
 
     expect(error).toBeNull();
     expect(invoice?.status).toBe("ISSUED");
     expect(invoice?.is_locked).toBe(true);
+    expect(invoice?.issued_at).toBeTruthy();
+    expect(invoice?.finalized_at).toBeTruthy();
   });
 
-  test("issued -> mark paid -> paid + paid_at set", async () => {
+  test("issued -> mark sent -> sent_at set", async ({ request }) => {
     const invoiceId = await createDraftInvoice();
 
-    const { error: finalizeError } = await userClient.rpc("finalize_invoice", {
-      invoice_id: invoiceId,
+    const finalizeRes = await request.post(`/api/invoices/${invoiceId}/finalize`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
-    expect(finalizeError).toBeNull();
+    expect(finalizeRes.ok()).toBe(true);
 
-    const { data: updated, error } = await userClient
+    const sentRes = await request.post(`/api/invoices/${invoiceId}/mark-sent`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    expect(sentRes.ok()).toBe(true);
+
+    const { data: updated, error } = await admin
       .from("invoices")
-      .update({ status: "PAID" })
+      .select("status, sent_at")
       .eq("id", invoiceId)
-      .select("status, paid_at, payment_date")
+      .single();
+
+    expect(error).toBeNull();
+    expect(updated?.status).toBe("SENT");
+    expect(updated?.sent_at).toBeTruthy();
+  });
+
+  test("sent -> paid -> paid_at set", async ({ request }) => {
+    const invoiceId = await createDraftInvoice();
+
+    const finalizeRes = await request.post(`/api/invoices/${invoiceId}/finalize`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    expect(finalizeRes.ok()).toBe(true);
+
+    const sentRes = await request.post(`/api/invoices/${invoiceId}/mark-sent`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    expect(sentRes.ok()).toBe(true);
+
+    const paidRes = await request.post(`/api/invoices/${invoiceId}/mark-paid`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    expect(paidRes.ok()).toBe(true);
+
+    const { data: updated, error } = await admin
+      .from("invoices")
+      .select("status, paid_at")
+      .eq("id", invoiceId)
       .single();
 
     expect(error).toBeNull();
     expect(updated?.status).toBe("PAID");
     expect(updated?.paid_at).toBeTruthy();
-    expect(updated?.payment_date).toBeTruthy();
   });
 
-  test("paid -> cancel is rejected", async () => {
+  test("paid -> cancel is rejected", async ({ request }) => {
     const invoiceId = await createDraftInvoice();
 
-    const { error: finalizeError } = await userClient.rpc("finalize_invoice", {
-      invoice_id: invoiceId,
+    const finalizeRes = await request.post(`/api/invoices/${invoiceId}/finalize`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
-    expect(finalizeError).toBeNull();
+    expect(finalizeRes.ok()).toBe(true);
 
-    const { error: paidError } = await userClient
-      .from("invoices")
-      .update({ status: "PAID" })
-      .eq("id", invoiceId);
-    expect(paidError).toBeNull();
+    const paidRes = await request.post(`/api/invoices/${invoiceId}/mark-paid`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    expect(paidRes.ok()).toBe(true);
 
-    const { error: cancelError } = await userClient
-      .from("invoices")
-      .update({ status: "CANCELED" })
-      .eq("id", invoiceId);
+    const cancelRes = await request.post(`/api/invoices/${invoiceId}/cancel`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
-    expect(cancelError).toBeTruthy();
+    expect(cancelRes.status()).toBe(409);
   });
 });

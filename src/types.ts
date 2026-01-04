@@ -100,7 +100,6 @@ export enum InvoiceStatus {
   DRAFT = "DRAFT",
   ISSUED = "ISSUED",
   SENT = "SENT",
-  OVERDUE = "OVERDUE",
   PAID = "PAID",
   CANCELED = "CANCELED",
 }
@@ -121,6 +120,9 @@ export interface Invoice {
   footerText: string;
   status: InvoiceStatus;
   paymentDate?: string;
+  paidAt?: string | null;
+  canceledAt?: string | null;
+  issuedAt?: string | null;
   isLocked?: boolean;
   finalizedAt?: string | null;
   sentAt?: string | null;

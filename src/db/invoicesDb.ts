@@ -16,6 +16,9 @@ const INVOICE_FIELDS = [
   "date",
   "due_date",
   "payment_date",
+  "paid_at",
+  "canceled_at",
+  "issued_at",
   "positions",
   "intro_text",
   "footer_text",
@@ -38,8 +41,6 @@ const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatu
       return InvoiceStatus.ISSUED;
     case InvoiceStatus.SENT:
       return InvoiceStatus.SENT;
-    case InvoiceStatus.OVERDUE:
-      return InvoiceStatus.OVERDUE;
     case InvoiceStatus.PAID:
       return InvoiceStatus.PAID;
     case InvoiceStatus.CANCELED:
@@ -84,6 +85,9 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     date: r.date,
     dueDate: r.due_date ?? "",
     paymentDate: r.payment_date ?? undefined,
+    paidAt: r.paid_at ?? null,
+    canceledAt: r.canceled_at ?? null,
+    issuedAt: r.issued_at ?? null,
     positions: r.positions ?? [],
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
@@ -123,6 +127,9 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     date: data.date,
     dueDate: data.due_date ?? "",
     paymentDate: data.payment_date ?? undefined,
+    paidAt: data.paid_at ?? null,
+    canceledAt: data.canceled_at ?? null,
+    issuedAt: data.issued_at ?? null,
     positions: data.positions ?? [],
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
@@ -157,6 +164,9 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     date: inv.date,
     due_date: inv.dueDate ?? null,
     payment_date: inv.paymentDate ?? null,
+    paid_at: inv.paidAt ?? null,
+    canceled_at: inv.canceledAt ?? null,
+    issued_at: inv.issuedAt ?? null,
 
     positions: inv.positions ?? [],
 

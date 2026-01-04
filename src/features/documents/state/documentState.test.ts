@@ -34,6 +34,9 @@ describe("documentState", () => {
     expect(
       getInvoicePhase({ ...baseInvoice, dueDate: "2024-01-05", status: InvoiceStatus.SENT }, new Date("2024-01-10"))
     ).toBe("overdue");
+    expect(
+      getInvoicePhase({ ...baseInvoice, dueDate: "2024-01-05", status: InvoiceStatus.ISSUED }, new Date("2024-01-10"))
+    ).toBe("overdue");
     expect(getInvoicePhase({ ...baseInvoice, sentAt: "2024-01-03", status: InvoiceStatus.ISSUED })).toBe("sent");
     expect(getInvoicePhase({ ...baseInvoice, status: InvoiceStatus.ISSUED })).toBe("issued");
     expect(getInvoicePhase(baseInvoice)).toBe("draft");

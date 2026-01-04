@@ -58,7 +58,7 @@ export const getInvoicePhase = (invoice: Invoice, now = new Date()): InvoicePhas
   const paymentDate = getInvoicePaymentDate(invoice);
   if (paymentDate || isInvoicePaid(invoice) || invoice.status === InvoiceStatus.PAID) return "paid";
 
-  if (invoice.status === InvoiceStatus.OVERDUE || isInvoiceOverdue(invoice, now)) return "overdue";
+  if (isInvoiceOverdue(invoice, now)) return "overdue";
 
   const hasBeenSent =
     hasSentData(invoice.sentAt) ||

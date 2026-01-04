@@ -1046,7 +1046,7 @@ app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
     if (!invoice) {
       return sendError(res, 404, "not_found", "Invoice not found.");
     }
-    if (!["ISSUED", "SENT", "OVERDUE"].includes(invoice.status)) {
+    if (!["ISSUED", "SENT"].includes(invoice.status)) {
       return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
     }
 
@@ -1100,7 +1100,7 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
     if (!invoice) {
       return sendError(res, 404, "not_found", "Invoice not found.");
     }
-    if (!["ISSUED", "SENT", "OVERDUE"].includes(invoice.status)) {
+    if (!["ISSUED", "SENT"].includes(invoice.status)) {
       return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
     }
 

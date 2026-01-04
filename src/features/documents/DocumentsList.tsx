@@ -105,7 +105,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
   const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
     const label = formatInvoiceStatus(status, overdue);
-    if (overdue || status === InvoiceStatus.OVERDUE) {
+    if (overdue) {
       return { label, tone: "red" as const };
     }
 
@@ -511,7 +511,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                   </button>
                 }
                 secondaryAction={
-                  [InvoiceStatus.ISSUED, InvoiceStatus.SENT, InvoiceStatus.OVERDUE].includes(
+                  [InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(
                     item.status as InvoiceStatus
                   ) ? (
                     <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
@@ -645,7 +645,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                   </td>
 
                   <td className="p-4">
-                    {overdue && <Badge color="red">Overdue</Badge>}
+                    {overdue && (
+                      <Badge color="red">
+                        {formatDocumentStatus(type, item.status, { isOverdue: overdue })}
+                      </Badge>
+                    )}
                     {!overdue && (
                       <div className="space-y-1">
                         <Badge
@@ -654,8 +658,6 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                             item.status === OfferStatus.ACCEPTED ||
                             item.status === OfferStatus.INVOICED
                               ? "green"
-                              : item.status === InvoiceStatus.OVERDUE
-                              ? "red"
                               : item.status === OfferStatus.SENT ||
                                 item.status === InvoiceStatus.SENT ||
                                 item.status === InvoiceStatus.ISSUED
@@ -701,7 +703,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                       )}
 
                       {isInvoice &&
-                        [InvoiceStatus.ISSUED, InvoiceStatus.SENT, InvoiceStatus.OVERDUE].includes(
+                        [InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(
                           item.status as InvoiceStatus
                         ) && (
                         <button
