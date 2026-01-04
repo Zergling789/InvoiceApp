@@ -132,6 +132,7 @@ export type Database = {
           footer_text: string;
           id: string;
           intro_text: string;
+          invoice_number: string | null;
           is_small_business: boolean;
           is_locked: boolean;
           last_sent_at: string | null;
@@ -159,6 +160,7 @@ export type Database = {
           footer_text?: string;
           id?: string;
           intro_text?: string;
+          invoice_number?: string | null;
           is_small_business?: boolean;
           is_locked?: boolean;
           last_sent_at?: string | null;
@@ -186,6 +188,7 @@ export type Database = {
           footer_text?: string;
           id?: string;
           intro_text?: string;
+          invoice_number?: string | null;
           is_small_business?: boolean;
           is_locked?: boolean;
           last_sent_at?: string | null;
@@ -400,6 +403,10 @@ export type Database = {
           email_default_text: string;
           footer_text: string;
           iban: string;
+          invoice_number_include_year: boolean;
+          invoice_number_next: number;
+          invoice_number_padding: number;
+          invoice_number_prefix: string;
           is_small_business: boolean;
           locale: string;
           logo_url: string;
@@ -429,6 +436,10 @@ export type Database = {
           email_default_text?: string;
           footer_text?: string;
           iban?: string;
+          invoice_number_include_year?: boolean;
+          invoice_number_next?: number;
+          invoice_number_padding?: number;
+          invoice_number_prefix?: string;
           is_small_business?: boolean;
           locale?: string;
           logo_url?: string;
@@ -458,6 +469,10 @@ export type Database = {
           email_default_text?: string;
           footer_text?: string;
           iban?: string;
+          invoice_number_include_year?: boolean;
+          invoice_number_next?: number;
+          invoice_number_padding?: number;
+          invoice_number_prefix?: string;
           is_small_business?: boolean;
           locale?: string;
           logo_url?: string;

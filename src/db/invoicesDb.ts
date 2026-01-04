@@ -8,6 +8,7 @@ type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
 
 const INVOICE_FIELDS = [
   "id",
+  "invoice_number",
   "number",
   "offer_id",
   "client_id",
@@ -74,7 +75,7 @@ export async function dbListInvoices(): Promise<Invoice[]> {
 
   return (data ?? []).map((r) => ({
     id: r.id,
-    number: r.number,
+    number: r.invoice_number ?? r.number ?? null,
     offerId: r.offer_id ?? undefined,
     clientId: r.client_id,
     projectId: r.project_id ?? undefined,
@@ -113,7 +114,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 
   return {
     id: data.id,
-    number: data.number,
+    number: data.invoice_number ?? data.number ?? null,
     offerId: data.offer_id ?? undefined,
     clientId: data.client_id,
     projectId: data.project_id ?? undefined,
@@ -144,8 +145,7 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
   const payload: DbInvoiceInsert = {
     id: inv.id,
     user_id: uid,
-
-    number: inv.number,
+    number: inv.number ?? undefined,
 
     offer_id: inv.offerId ?? null,
     client_id: inv.clientId,

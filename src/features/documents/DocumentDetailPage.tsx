@@ -40,7 +40,7 @@ const toNumberOrZero = (value: unknown) => {
 
 const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): EditorSeed => ({
   id: doc.id,
-  number: String(doc.number ?? ""),
+  number: doc.number ?? null,
   date: doc.date,
   dueDate: type === "invoice" ? (doc as Invoice).dueDate : undefined,
   validUntil: type === "offer" ? (doc as Offer).validUntil : undefined,
@@ -259,14 +259,12 @@ export default function DocumentDetailPage() {
     });
     if (!ok) return;
 
-    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
-      invoice_id: invoice.id,
-    });
-
-    if (finalizeError) {
+    try {
+      await invoiceService.finalizeInvoice(invoice.id);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
       toast.error(
-        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
-          "Rechnung konnte nicht finalisiert werden."
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
       );
       return;
     }
@@ -398,7 +396,7 @@ export default function DocumentDetailPage() {
     setEditorSeed(buildEditorSeed(doc, docType));
     setEditorInitial({
       id: doc.id,
-      number: String(doc.number ?? ""),
+      number: doc.number ?? null,
       date: doc.date,
       clientId: doc.clientId ?? "",
       projectId: doc.projectId ?? undefined,
@@ -509,7 +507,8 @@ export default function DocumentDetailPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {docType === "invoice" ? "Rechnung" : "Angebot"} #{doc.number}
+              {docType === "invoice" ? "Rechnung" : "Angebot"} #
+              {docType === "invoice" ? doc.number ?? "Entwurf" : doc.number ?? ""}
             </h1>
             <div className="mt-1 text-sm text-gray-600">
               {client?.companyName ?? "Unbekannter Kunde"} · {formatDate(doc.date, locale)}

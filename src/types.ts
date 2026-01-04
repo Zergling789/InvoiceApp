@@ -23,6 +23,10 @@ export interface UserSettings {
   prefixInvoice?: string;
   prefixOffer?: string;
   numberPadding?: number;
+  invoiceNumberPrefix?: string;
+  invoiceNumberNext?: number;
+  invoiceNumberPadding?: number;
+  invoiceNumberIncludeYear?: boolean;
   footerText?: string;
   defaultSenderIdentityId?: string | null;
 }
@@ -102,7 +106,7 @@ export enum InvoiceStatus {
 
 export interface Invoice {
   id: string;
-  number: string;
+  number: string | null;
   offerId?: string;
   clientId: string;
   projectId?: string;

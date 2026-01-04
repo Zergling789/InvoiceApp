@@ -226,7 +226,7 @@ export default function DocumentsHubPage() {
             return {
               id: invoice.id,
               type: "invoice",
-              number: invoice.number,
+              number: invoice.number ?? "Entwurf",
               clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
               date: invoice.date,
               createdAt: (invoice as { createdAt?: string }).createdAt,

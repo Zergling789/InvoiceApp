@@ -563,6 +563,8 @@ const normalizeDbError = (err) => {
       return { code, message: "Invoice content is locked.", httpStatus: 409 };
     case "INVOICE_LOCK_INVALID_STATUS":
       return { code, message: "Invoice lock status invalid.", httpStatus: 409 };
+    case "INVOICE_NUMBER_IMMUTABLE":
+      return { code, message: "Invoice number is immutable after finalization.", httpStatus: 409 };
     case "status_transition_not_allowed":
       return { code, message: "Status transition not allowed.", httpStatus: 409 };
     case "P0001":
@@ -574,6 +576,9 @@ const normalizeDbError = (err) => {
       }
       if (message.includes("INVOICE_LOCKED_CONTENT")) {
         return { code: "INVOICE_LOCKED_CONTENT", message: "Invoice content is locked.", httpStatus: 409 };
+      }
+      if (message.includes("INVOICE_NUMBER_IMMUTABLE")) {
+        return { code: "INVOICE_NUMBER_IMMUTABLE", message: "Invoice number is immutable after finalization.", httpStatus: 409 };
       }
       if (message.includes("status transition")) {
         return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
@@ -665,7 +670,7 @@ const buildPdfFilename = ({ type, doc, client }) => {
 
 const mapInvoiceRow = (row = {}) => ({
   id: row.id,
-  number: row.number,
+  number: row.invoice_number ?? row.number ?? null,
   clientId: row.client_id,
   projectId: row.project_id ?? undefined,
   date: row.date,
@@ -740,7 +745,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, number, client_id, project_id, date, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
+    ? "id, user_id, invoice_number, number, client_id, project_id, date, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db
@@ -897,6 +902,33 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
     const code = err?.code || "pdf_link_failed";
     console.error("PDF link generation failed", err);
     return sendError(res, status, code, "PDF link generation failed.");
+  }
+});
+
+app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const supabase = requireSupabase();
+    const { error } = await supabase.rpc("finalize_invoice", {
+      invoice_id: invoiceId,
+    });
+
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) {
+        return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      }
+      return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("Finalize invoice failed", err);
+    return sendError(res, err?.status || 500, "finalize_failed", "Invoice finalization failed.");
   }
 });
 

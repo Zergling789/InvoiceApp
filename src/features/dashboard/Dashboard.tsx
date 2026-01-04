@@ -105,7 +105,7 @@ export default function Dashboard() {
         const ageDays = getDaysSince(invoice.dueDate ?? invoice.date, today);
         return {
           id: `invoice-overdue-${invoice.id}`,
-          title: `${clientName} · Rechnung ${invoice.number}`,
+          title: `${clientName} · Rechnung ${invoice.number ?? "Entwurf"}`,
           subtitle: "Zahlung überfällig – mahnen, bevor es eskaliert.",
           amountLabel: formatAmount(
             calculateDocumentTotal(invoice.positions, invoice.vatRate, invoice.isSmallBusiness),
@@ -128,7 +128,7 @@ export default function Dashboard() {
         const ageDays = getDaysSince(getInvoiceReferenceDate(invoice), today);
         return {
           id: `invoice-open-${invoice.id}`,
-          title: `${clientName} · Rechnung ${invoice.number}`,
+          title: `${clientName} · Rechnung ${invoice.number ?? "Entwurf"}`,
           subtitle: "Rechnung offen – sende jetzt die Erinnerung.",
           amountLabel: formatAmount(
             calculateDocumentTotal(invoice.positions, invoice.vatRate, invoice.isSmallBusiness),

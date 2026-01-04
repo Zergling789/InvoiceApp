@@ -4,7 +4,6 @@ import type { Client, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { useToast } from "@/ui/FeedbackProvider";
 import { fetchSettings } from "@/app/settings/settingsService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -49,11 +48,10 @@ export function InvoiceForm({ onClose, onDirtyChange }: InvoiceFormProps) {
           fetchSettings(),
         ]);
         if (!mounted) return;
-        const num = await getNextDocumentNumber("invoice", settingsData);
         const defaultTerms = Number(settingsData.defaultPaymentTerms ?? 14);
         const seed: EditorSeed = {
           id: newId(),
-          number: num,
+          number: null,
           date: todayISO(),
           dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
           vatRate: Number(settingsData.defaultVatRate ?? 0),

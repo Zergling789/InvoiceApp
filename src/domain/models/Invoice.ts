@@ -4,7 +4,7 @@ import { InvoiceStatus } from "../types";
 export function createEmptyInvoice(id: string, clientId = ""): Invoice {
   return {
     id,
-    number: "",
+    number: null,
     offerId: undefined,
     clientId,
     projectId: undefined,
@@ -31,6 +31,7 @@ export function createEmptyInvoice(id: string, clientId = ""): Invoice {
 export function normalizeInvoice(invoice: Invoice): Invoice {
   return {
     ...invoice,
+    number: invoice.number ?? null,
     clientId: invoice.clientId ?? "",
     date: invoice.date ?? new Date().toISOString().slice(0, 10),
     positions: invoice.positions ?? [],

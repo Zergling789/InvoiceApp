@@ -11,7 +11,7 @@ import * as invoiceService from "@/app/invoices/invoiceService";
 
 const buildEditorSeed = (doc: Invoice): EditorSeed => ({
   id: doc.id,
-  number: String(doc.number ?? ""),
+  number: doc.number ?? null,
   date: doc.date,
   dueDate: doc.dueDate ?? undefined,
   vatRate: Number(doc.vatRate ?? 0),
@@ -23,7 +23,7 @@ const buildEditorSeed = (doc: Invoice): EditorSeed => ({
 
 const buildEditorInitial = (doc: Invoice) => ({
   id: doc.id,
-  number: String(doc.number ?? ""),
+  number: doc.number ?? null,
   date: doc.date,
   clientId: doc.clientId ?? "",
   projectId: doc.projectId ?? undefined,
