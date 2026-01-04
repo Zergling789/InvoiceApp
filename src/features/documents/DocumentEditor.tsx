@@ -447,6 +447,16 @@ export function DocumentEditor({
 
       if (closeAfterSave) onClose();
       return true;
+    } catch (error) {
+      let code = (error as Error & { code?: string }).code;
+      if (!code && error instanceof Error) {
+        code = error.message;
+      }
+      const message =
+        mapErrorCodeToToast(code) ||
+        getErrorMessage(error, "Dokument konnte nicht gespeichert werden.");
+      toast.error(message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -985,31 +995,22 @@ export function DocumentEditor({
                     )}
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">Ansprechpartner</span>
-                      <input
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                        placeholder="z.B. Max Mustermann"
-                        value={displayClient?.contactPerson ?? ""}
-                        readOnly
-                      />
+                      <span className="w-full sm:max-w-[260px] text-sm text-gray-700">
+                        {displayClient?.contactPerson || "—"}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">E-Mail</span>
-                      <input
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                        placeholder="E-Mail-Adresse"
-                        value={displayClient?.email ?? ""}
-                        readOnly
-                      />
+                      <span className="w-full sm:max-w-[260px] text-sm text-gray-700">
+                        {displayClient?.email || "—"}
+                      </span>
                     </div>
                     {isInvoice && (
                       <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                         <span className="text-sm font-medium text-gray-700">Adresse</span>
-                        <textarea
-                          className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                          rows={3}
-                          value={displayClient?.address ?? ""}
-                          readOnly
-                        />
+                        <div className="w-full sm:max-w-[260px] text-sm text-gray-700 whitespace-pre-line">
+                          {displayClient?.address || "—"}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1363,6 +1364,11 @@ export function DocumentEditor({
                       {displayClient?.address && (
                         <div className="mt-1 whitespace-pre-line">{displayClient.address}</div>
                       )}
+                      <div className="mt-2">
+                        <Link to="/app/clients" className="text-xs text-blue-600 hover:underline">
+                          Kunde bearbeiten
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -236,13 +236,21 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
   };
 
   const { error } = await supabase.from("invoices").upsert(payload, { onConflict: "id" });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const err = new Error(error.message);
+    (err as Error & { code?: string }).code = error.message;
+    throw err;
+  }
 
-  if (isDraft && inv.clientId && !String(inv.clientName ?? "").trim()) {
+  if (isDraft && inv.clientId) {
     const { error: snapshotError } = await supabase.rpc("copy_customer_snapshot_to_invoice", {
       p_invoice_id: inv.id,
     });
-    if (snapshotError) throw new Error(snapshotError.message);
+    if (snapshotError) {
+      const err = new Error(snapshotError.message);
+      (err as Error & { code?: string }).code = snapshotError.message;
+      throw err;
+    }
   }
 }
 

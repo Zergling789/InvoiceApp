@@ -53,6 +53,7 @@
 - Rechnungen speichern beim Anlegen den Kundensnapshot in `public.invoices.client_*`.
 - Änderungen am Kundenstamm verändern bestehende Rechnungen nicht.
 - Snapshot wird spätestens bei der Finalisierung gesetzt (DB-RPC `finalize_invoice` prüft `client_name`).
+- Drafts aktualisieren den Snapshot bei jedem Speichern automatisch aus dem Kundenstamm.
 - `client_name` darf nicht leer sein, sobald `status != 'DRAFT'`.
 - Nach Finalisierung (`is_locked = true`) sind Snapshot-Felder unveränderlich.
 - Drafts übernehmen den Snapshot beim Auswählen/Ändern des Kunden im Editor.
