@@ -15,7 +15,8 @@
 ## Finalize flow
 - Endpunkt: `POST /api/invoices/:id/finalize`
 - Ablauf:
-  1. Auth-Check (API).
+  1. Auth-Check (API), Supabase-User-Client mit Bearer-Token (auth.uid()).
   2. DB-RPC `finalize_invoice` sperrt die Rechnung row und holt die nächste Nummer atomar.
   3. Setzt `invoice_number` (falls leer), `finalized_at`, `status = 'ISSUED'`, `is_locked = true`.
   4. Trigger verhindert nach Finalisierung jede Änderung an `invoice_number`.
+  5. DB-Trigger sperrt inhaltliche Updates auf `public.invoices` sobald `is_locked = true`.
