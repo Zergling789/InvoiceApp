@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 
 import ModalSheet from "@/components/ui/ModalSheet";
-import OfferForm from "@/features/documents/create/OfferForm";
+import InvoiceForm from "@/features/documents/create/InvoiceForm";
 
-export default function OfferCreatePage() {
+export default function InvoiceCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDirty, setIsDirty] = useState(false);
@@ -33,8 +33,8 @@ export default function OfferCreatePage() {
   };
 
   return (
-    <ModalSheet title="Neues Angebot" isOpen onClose={handleClose}>
-      <OfferForm onClose={handleClose} onDirtyChange={setIsDirty} />
+    <ModalSheet title="Neue Rechnung" isOpen onClose={handleClose}>
+      <InvoiceForm onClose={handleClose} onDirtyChange={setIsDirty} />
     </ModalSheet>
   );
 }

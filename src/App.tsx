@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, type Location } from "react-router-dom";
 import { LayoutDashboard, Users, FileText, ListTodo, Menu } from "lucide-react";
 
 import Dashboard from "@/features/dashboard/Dashboard";
@@ -8,8 +8,11 @@ import DocumentsPage from "@/features/documents/DocumentsPage";
 import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
 import DocumentDetailPage from "@/features/documents/DocumentDetailPage";
 import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
+import InvoiceCreatePage from "@/features/documents/create/InvoiceCreatePage";
 import OfferEditPage from "@/features/documents/edit/OfferEditPage";
 import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
+import CustomerCreatePage from "@/features/clients/CustomerCreatePage";
+import ProjectCreatePage from "@/features/projects/ProjectCreatePage";
 import TodosPage from "@/features/todos/TodosPage";
 import MorePage from "@/features/more/MorePage";
 import SettingsView from "@/features/settings/SettingsView";
@@ -30,39 +33,57 @@ const navItems: NavItem[] = [
 ];
 
 export default function App() {
+  const location = useLocation();
+  const state = location.state as { backgroundLocation?: Location } | null;
+  const backgroundLocation = state?.backgroundLocation;
+
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/demo/angebotdetails" element={<AngebotDetails />} />
-      <Route path="/login" element={<LoginPage />} />
+    <>
+      <Routes location={backgroundLocation || location}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/demo/angebotdetails" element={<AngebotDetails />} />
+        <Route path="/login" element={<LoginPage />} />
 
-      <Route
-        path="/app"
-        element={
-          <RequireAuth>
-            <AppShell navItems={navItems} />
-          </RequireAuth>
-        }
-      >
-        <Route index element={<Dashboard />} />
-        <Route path="todos" element={<TodosPage />} />
-        <Route path="documents" element={<DocumentsHubPage />} />
-        <Route path="clients" element={<Clients />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="offers" element={<DocumentsPage type="offer" />} />
-        <Route path="offers/new" element={<OfferCreatePage />} />
-        <Route path="invoices" element={<DocumentsPage type="invoice" />} />
-        <Route path="documents/offer/:id/edit" element={<OfferEditPage />} />
-        <Route path="documents/invoice/:id/edit" element={<InvoiceEditPage />} />
-        <Route path="documents/:type/:id" element={<DocumentDetailPage />} />
-        <Route path="more" element={<MorePage />} />
-        <Route path="settings" element={<SettingsView />} />
-        <Route path="settings/email/verify" element={<VerifyEmailResult />} />
+        <Route
+          path="/app"
+          element={
+            <RequireAuth>
+              <AppShell navItems={navItems} />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="todos" element={<TodosPage />} />
+          <Route path="documents" element={<DocumentsHubPage />} />
+          <Route path="clients" element={<Clients />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="offers" element={<DocumentsPage type="offer" />} />
+          <Route path="offers/new" element={<OfferCreatePage />} />
+          <Route path="invoices" element={<DocumentsPage type="invoice" />} />
+          <Route path="invoices/new" element={<InvoiceCreatePage />} />
+          <Route path="customers/new" element={<CustomerCreatePage />} />
+          <Route path="projects/new" element={<ProjectCreatePage />} />
+          <Route path="documents/offer/:id/edit" element={<OfferEditPage />} />
+          <Route path="documents/invoice/:id/edit" element={<InvoiceEditPage />} />
+          <Route path="documents/:type/:id" element={<DocumentDetailPage />} />
+          <Route path="more" element={<MorePage />} />
+          <Route path="settings" element={<SettingsView />} />
+          <Route path="settings/email/verify" element={<VerifyEmailResult />} />
 
-        <Route path="*" element={<Navigate to="/app" replace />} />
-      </Route>
+          <Route path="*" element={<Navigate to="/app" replace />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      {backgroundLocation && (
+        <Routes>
+          <Route path="/app/offers/new" element={<OfferCreatePage />} />
+          <Route path="/app/invoices/new" element={<InvoiceCreatePage />} />
+          <Route path="/app/customers/new" element={<CustomerCreatePage />} />
+          <Route path="/app/projects/new" element={<ProjectCreatePage />} />
+        </Routes>
+      )}
+    </>
   );
 }

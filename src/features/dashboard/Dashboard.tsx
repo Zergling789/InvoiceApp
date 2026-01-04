@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -35,6 +35,7 @@ type DashboardData = {
 const MAX_ACTIONS = 7;
 
 export default function Dashboard() {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
@@ -293,7 +294,7 @@ export default function Dashboard() {
           emptyState={
             <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-gray-200 p-6 text-sm text-gray-600">
               <span>✅ Alles sauber – keine offenen Follow-ups.</span>
-              <Link to="/app/offers/new">
+              <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
                 <AppButton>Neues Angebot erstellen</AppButton>
               </Link>
             </div>
@@ -320,7 +321,7 @@ export default function Dashboard() {
       <section className="space-y-3">
         <SectionHeader title="Schnellaktionen" subtitle="Starte neue Umsätze in Sekunden." />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Link to="/app/offers/new">
+          <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
             <AppButton className="w-full justify-center">Angebot erstellen</AppButton>
           </Link>
           <Link to="/app/documents?mode=invoices">

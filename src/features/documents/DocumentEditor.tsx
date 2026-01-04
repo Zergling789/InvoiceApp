@@ -136,6 +136,8 @@ export function DocumentEditor({
   actionMode = "full",
   primaryActionLabel = "Speichern",
   disableOfferWizard = false,
+  showHeader = true,
+  onDirtyChange,
 }: {
   type: "offer" | "invoice";
   seed: EditorSeed;
@@ -146,14 +148,17 @@ export function DocumentEditor({
   initial?: Partial<FormData>;
   readOnly?: boolean;
   startInPrint?: boolean;
-  layout?: "modal" | "page";
+  layout?: "modal" | "page" | "embedded";
   showTabs?: boolean;
   actionMode?: "full" | "save-only";
   primaryActionLabel?: string;
   disableOfferWizard?: boolean;
+  showHeader?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const isInvoice = type === "invoice";
   const isPageLayout = layout === "page";
+  const isEmbeddedLayout = layout === "embedded";
   const showStatusActions = actionMode === "full";
 
   const [saving, setSaving] = useState(false);
@@ -167,11 +172,16 @@ export function DocumentEditor({
   const [formData, setFormData] = useState<FormData>(() =>
     buildFormData(seed, initial, isInvoice, settings.currency)
   );
+  const [initialFormData, setInitialFormData] = useState<FormData>(() =>
+    buildFormData(seed, initial, isInvoice, settings.currency)
+  );
   const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
 
   // ✅ WICHTIG: wenn seed/initial wechseln (Viewer lädt async), state neu setzen
   useEffect(() => {
-    setFormData(buildFormData(seed, initial, isInvoice, settings.currency));
+    const next = buildFormData(seed, initial, isInvoice, settings.currency);
+    setFormData(next);
+    setInitialFormData(next);
     setActiveTab("details");
     setShowPrint(startInPrint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,12 +190,20 @@ export function DocumentEditor({
   useEffect(() => {
     // initial kann nachträglich gesetzt werden (async)
     if (initial) {
-      setFormData((prev) =>
-        buildFormData({ ...seed }, { ...prev, ...initial }, isInvoice, settings.currency)
-      );
+      setFormData((prev) => {
+        const next = buildFormData({ ...seed }, { ...prev, ...initial }, isInvoice, settings.currency);
+        setInitialFormData(next);
+        return next;
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial, settings.currency]);
+
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    const dirty = JSON.stringify(formData) !== JSON.stringify(initialFormData);
+    onDirtyChange(dirty);
+  }, [formData, initialFormData, onDirtyChange]);
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
@@ -768,6 +786,8 @@ export function DocumentEditor({
       className={
         isPageLayout
           ? "min-h-screen-safe bg-gray-50"
+          : isEmbeddedLayout
+          ? "bg-white flex flex-col min-h-0"
           : "fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40"
       }
     >
@@ -776,20 +796,24 @@ export function DocumentEditor({
         className={
           isPageLayout
             ? "bg-white min-h-screen-safe flex flex-col"
+            : isEmbeddedLayout
+            ? "bg-white flex flex-col min-h-0"
             : "bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom"
         }
       >
         {showOfferWizard ? (
           <>
-            <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-              <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
-                <ArrowLeft size={20} />
-              </AppButton>
-              <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
-              <AppButton variant="ghost" aria-label="Einstellungen">
-                <Settings size={20} />
-              </AppButton>
-            </div>
+            {showHeader && (
+              <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
+                <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                  <ArrowLeft size={20} />
+                </AppButton>
+                <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
+                <AppButton variant="ghost" aria-label="Einstellungen">
+                  <Settings size={20} />
+                </AppButton>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto bg-gray-50">
               <div className="px-6 pt-4 pb-3 border-b bg-white">
@@ -1089,34 +1113,36 @@ export function DocumentEditor({
           </>
         ) : (
           <>
-            <div className="flex justify-between items-center p-6 border-b">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold">
-                  {readOnly
-                    ? isInvoice
-                      ? "Rechnung ansehen"
-                      : "Angebot ansehen"
-                    : isInvoice
-                    ? "Rechnung bearbeiten"
-                    : "Angebot bearbeiten"}
-                </h2>
-                {isInvoice && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="px-2 py-1 rounded border bg-gray-100 text-gray-700">
-                      {formatDocumentStatus(type, formData.status)}
-                    </span>
-                    {locked && (
-                      <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">
-                        Locked
+            {showHeader && (
+              <div className="flex justify-between items-center p-6 border-b">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold">
+                    {readOnly
+                      ? isInvoice
+                        ? "Rechnung ansehen"
+                        : "Angebot ansehen"
+                      : isInvoice
+                      ? "Rechnung bearbeiten"
+                      : "Angebot bearbeiten"}
+                  </h2>
+                  {isInvoice && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="px-2 py-1 rounded border bg-gray-100 text-gray-700">
+                        {formatDocumentStatus(type, formData.status)}
                       </span>
-                    )}
-                  </div>
-                )}
+                      {locked && (
+                        <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">
+                          Locked
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                  {isPageLayout ? <ArrowLeft size={20} /> : <X size={20} />}
+                </AppButton>
               </div>
-              <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
-                {isPageLayout ? <ArrowLeft size={20} /> : <X size={20} />}
-              </AppButton>
-            </div>
+            )}
 
             <div className={`flex-1 overflow-y-auto p-6 space-y-6 ${actionMode === "save-only" ? "bottom-action-spacer" : ""}`}>
               {showTabs && (
