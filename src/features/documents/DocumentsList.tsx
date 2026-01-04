@@ -17,7 +17,6 @@ import * as clientService from "@/app/clients/clientService";
 import * as settingsService from "@/app/settings/settingsService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
@@ -71,8 +70,6 @@ const toLocalISODate = (d: Date) => {
 };
 
 const todayISO = () => toLocalISODate(new Date());
-const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
-
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -217,44 +214,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     void refresh();
   }, [refresh, type]);
 
-  const openNewEditor = async () => {
-    try {
-      const s =
-        settings ??
-        (await settingsService.fetchSettings()) ??
-        ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
-
-      setSettings(s);
-
-      // reset view flags
-      setEditorReadOnly(false);
-      setEditorStartInPrint(false);
-      setEditorInitial(null);
-
-      const num = await getNextDocumentNumber(type, s);
-
-      const seed: EditorSeed = {
-        id: newId(),
-        number: num,
-        date: todayISO(),
-        dueDate: isInvoice ? invoiceService.buildDueDate(todayISO(), Number(s.defaultPaymentTerms ?? 14)) : undefined,
-        validUntil: !isInvoice ? addDaysISO(14) : undefined,
-        vatRate: Number(s.defaultVatRate ?? 0),
-        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
-        footerText: isInvoice
-          ? `Zahlbar innerhalb von ${Number(s.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
-          : "Ich freue mich auf Ihre Rückmeldung.",
-        currency: !isInvoice ? s.currency ?? "EUR" : undefined,
-      };
-
-      setEditorSeed(seed);
-      setEditorOpen(true);
-    } catch (e) {
-      logError(e);
-      const msg = getErrorMessage(e);
-      setError(msg);
-      toast.error(msg);
-    }
+  const openCreateRoute = () => {
+    navigate("/app/invoices/new", { state: { backgroundLocation: location } });
   };
 
   // VIEW: immer frisch laden
@@ -442,12 +403,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         <h1 className="text-2xl font-bold text-gray-900">{isInvoice ? "Rechnungen" : "Angebote"}</h1>
 
         {isInvoice ? (
-          <Button onClick={openNewEditor} disabled={loading} className="w-full sm:w-auto justify-center">
+          <Button onClick={openCreateRoute} disabled={loading} className="w-full sm:w-auto justify-center">
             <Plus size={16} />
             Erstellen
           </Button>
         ) : (
-          <Link to="/app/offers/new" className="w-full sm:w-auto">
+          <Link to="/app/offers/new" state={{ backgroundLocation: location }} className="w-full sm:w-auto">
             <Button disabled={loading} className="w-full justify-center">
               <Plus size={16} />
               Erstellen
@@ -470,12 +431,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           </p>
           <div className="mt-4 flex justify-center">
             {isInvoice ? (
-              <Button onClick={openNewEditor}>
+              <Button onClick={openCreateRoute}>
                 <Plus size={16} />
                 Rechnung erstellen
               </Button>
             ) : (
-              <Link to="/app/offers/new">
+              <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
                 <Button>
                   <Plus size={16} />
                   Angebot erstellen

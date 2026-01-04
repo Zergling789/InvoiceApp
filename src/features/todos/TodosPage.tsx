@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { loadDashboardData } from "@/app/dashboard/dashboardService";
@@ -81,6 +81,7 @@ const newId = () =>
 
 export default function TodosPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const { confirm } = useConfirm();
   const [filter, setFilter] = useState<FilterType>("all");
@@ -388,7 +389,7 @@ export default function TodosPage() {
   const openNewEditor = async (type: "invoice" | "offer") => {
     if (type === "offer") {
       setFabOpen(false);
-      navigate("/app/offers/new");
+      navigate("/app/offers/new", { state: { backgroundLocation: location } });
       return;
     }
     try {
@@ -511,7 +512,7 @@ export default function TodosPage() {
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/app/offers/new">
+            <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
               <AppButton>Neues Angebot</AppButton>
             </Link>
             <Link to="/app/documents?mode=invoices">
