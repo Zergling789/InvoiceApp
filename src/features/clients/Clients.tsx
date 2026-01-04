@@ -1,6 +1,7 @@
 // src/features/clients/Clients.tsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MoreVertical, Plus, Save, Trash2 } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Client } from "@/types";
 import { AppButton } from "@/ui/AppButton";
@@ -21,14 +22,28 @@ export default function Clients() {
   const toast = useToast();
   const { save, saving } = useSaveClient(refresh);
   const { remove, deleting } = useDeleteClient(refresh);
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [editing, setEditing] = useState<Client | null>(null);
   const [showActions, setShowActions] = useState(false);
+  const companyNameRef = useRef<HTMLInputElement | null>(null);
 
   const startNew = () => setEditing(createEmptyClient(newId()));
   const startEdit = (c: Client) => setEditing({ ...c });
 
-  const cancel = () => setEditing(null);
+  const isCreateRoute =
+    location.pathname.endsWith("/clients/new") || searchParams.get("new") === "1";
+  const returnUrl = searchParams.get("return") || "/app/clients";
+
+  const cancel = () => {
+    if (isCreateRoute) {
+      navigate(returnUrl, { replace: true });
+      return;
+    }
+    setEditing(null);
+  };
 
   const saveClient = async () => {
     if (!editing) return;
@@ -48,6 +63,9 @@ export default function Clients() {
     });
     setEditing(null);
     await refresh();
+    if (isCreateRoute) {
+      navigate(returnUrl, { replace: true });
+    }
   };
 
   const deleteClient = async (id: string) => {
@@ -65,6 +83,18 @@ export default function Clients() {
     () => (editing ? clients.some((client) => client.id === editing.id) : false),
     [clients, editing]
   );
+
+  useEffect(() => {
+    if (isCreateRoute && !editing) {
+      setEditing(createEmptyClient(newId()));
+    }
+  }, [isCreateRoute, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      requestAnimationFrame(() => companyNameRef.current?.focus());
+    }
+  }, [editing]);
 
   return (
     <div className="space-y-6">
@@ -122,6 +152,7 @@ export default function Clients() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Firma *</label>
                 <input
+                  ref={companyNameRef}
                   className="w-full border rounded p-2"
                   value={editing.companyName}
                   onChange={(e) => setEditing({ ...editing, companyName: e.target.value })}

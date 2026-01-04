@@ -47,6 +47,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="todos" element={<TodosPage />} />
         <Route path="documents" element={<DocumentsHubPage />} />
+        <Route path="clients/new" element={<Clients />} />
         <Route path="clients" element={<Clients />} />
         <Route path="projects" element={<Projects />} />
         <Route path="offers" element={<DocumentsPage type="offer" />} />

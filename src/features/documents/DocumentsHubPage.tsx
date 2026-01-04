@@ -530,7 +530,7 @@ export default function DocumentsHubPage() {
                 className="w-full justify-center"
                 onClick={() => {
                   setFabOpen(false);
-                  navigate("/app/clients");
+                  navigate("/app/clients/new?return=/app/documents");
                 }}
               >
                 Neuer Kunde
