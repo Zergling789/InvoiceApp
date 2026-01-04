@@ -15,6 +15,8 @@ const buildEditorSeed = (doc: Invoice): EditorSeed => ({
   date: doc.date,
   dueDate: doc.dueDate ?? undefined,
   vatRate: Number(doc.vatRate ?? 0),
+  isSmallBusiness: doc.isSmallBusiness ?? false,
+  smallBusinessNote: doc.smallBusinessNote ?? null,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
 });
@@ -29,6 +31,8 @@ const buildEditorInitial = (doc: Invoice) => ({
   dueDate: doc.dueDate ?? undefined,
   positions: doc.positions ?? [],
   vatRate: Number(doc.vatRate ?? 0),
+  isSmallBusiness: doc.isSmallBusiness ?? false,
+  smallBusinessNote: doc.smallBusinessNote ?? null,
   status: doc.status,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",

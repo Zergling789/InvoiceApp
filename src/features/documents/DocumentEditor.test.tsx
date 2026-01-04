@@ -6,6 +6,7 @@ import { vi, beforeEach, describe, it, expect } from "vitest";
 import { DocumentEditor } from "./DocumentEditor";
 import { ConfirmProvider, ToastProvider } from "@/ui/FeedbackProvider";
 import { InvoiceStatus } from "@/types";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 const saveInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
@@ -33,6 +34,8 @@ const seed = {
   date: "2025-01-01",
   dueDate: "2025-01-10",
   vatRate: 19,
+  isSmallBusiness: false,
+  smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
   introText: "",
   footerText: "",
 };
@@ -50,6 +53,8 @@ const settings = {
   email: "",
   emailDefaultSubject: "Dokument {nummer}",
   emailDefaultText: "Bitte im Anhang finden Sie das Dokument.",
+  isSmallBusiness: false,
+  smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
   logoUrl: "",
   primaryColor: "#4f46e5",
   templateId: "default",

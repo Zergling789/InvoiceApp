@@ -2,6 +2,7 @@
 import { supabase } from "../supabaseClient";
 import type { Database } from "@/lib/supabase.types";
 import type { UserSettings } from "@/types";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 type DbSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
 type DbSettingsInsert = Database["public"]["Tables"]["user_settings"]["Insert"];
@@ -20,6 +21,8 @@ const SETTINGS_FIELDS = [
   "email",
   "email_default_subject",
   "email_default_text",
+  "is_small_business",
+  "small_business_note",
   "logo_url",
   "primary_color",
   "template_id",
@@ -68,6 +71,8 @@ export async function dbGetSettings(): Promise<UserSettings> {
       email: "",
       email_default_subject: "Dokument {nummer}",
       email_default_text: "Bitte im Anhang finden Sie das Dokument.",
+      is_small_business: false,
+      small_business_note: SMALL_BUSINESS_DEFAULT_NOTE,
       logo_url: "",
       primary_color: "#4f46e5",
       template_id: "default",
@@ -98,6 +103,8 @@ export async function dbGetSettings(): Promise<UserSettings> {
       email: "",
       emailDefaultSubject: "Dokument {nummer}",
       emailDefaultText: "Bitte im Anhang finden Sie das Dokument.",
+      isSmallBusiness: false,
+      smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
       logoUrl: "",
       primaryColor: "#4f46e5",
       templateId: "default",
@@ -124,6 +131,8 @@ export async function dbGetSettings(): Promise<UserSettings> {
     email: row.email ?? "",
     emailDefaultSubject: row.email_default_subject ?? "Dokument {nummer}",
     emailDefaultText: row.email_default_text ?? "Bitte im Anhang finden Sie das Dokument.",
+    isSmallBusiness: row.is_small_business ?? false,
+    smallBusinessNote: row.small_business_note ?? SMALL_BUSINESS_DEFAULT_NOTE,
     logoUrl: row.logo_url ?? "",
     primaryColor: row.primary_color ?? "#4f46e5",
     templateId: row.template_id ?? "default",
@@ -154,6 +163,8 @@ export async function dbSaveSettings(s: UserSettings): Promise<void> {
     email: s.email ?? "",
     email_default_subject: s.emailDefaultSubject ?? "Dokument {nummer}",
     email_default_text: s.emailDefaultText ?? "Bitte im Anhang finden Sie das Dokument.",
+    is_small_business: s.isSmallBusiness ?? false,
+    small_business_note: s.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
     logo_url: s.logoUrl ?? "",
     primary_color: s.primaryColor ?? "#4f46e5",
     template_id: s.templateId ?? "default",

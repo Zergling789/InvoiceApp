@@ -30,6 +30,8 @@ export type EditorSeed = {
   dueDate?: string;
   validUntil?: string;
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
   introText: string;
   footerText: string;
   currency?: string;
@@ -47,6 +49,8 @@ type FormData = {
   footerText: string;
   status: InvoiceStatus | OfferStatus;
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
   currency?: string;
   paymentDate?: string;
   offerId?: string;
@@ -94,6 +98,8 @@ function buildFormData(
     footerText: seed.footerText ?? "",
     status: isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT,
     vatRate: seed.vatRate ?? 0,
+    isSmallBusiness: seed.isSmallBusiness ?? false,
+    smallBusinessNote: seed.smallBusinessNote ?? "",
     currency: isInvoice ? undefined : defaultCurrency ?? "EUR",
     paymentDate: undefined,
     offerId: undefined,
@@ -117,6 +123,8 @@ function buildFormData(
     introText: merged.introText ?? "",
     footerText: merged.footerText ?? "",
     vatRate: Number(merged.vatRate ?? 0),
+    isSmallBusiness: Boolean(merged.isSmallBusiness ?? false),
+    smallBusinessNote: merged.smallBusinessNote ?? "",
     currency: isInvoice ? undefined : merged.currency ?? defaultCurrency ?? "EUR",
   };
 }
@@ -218,6 +226,7 @@ export function DocumentEditor({
     !readOnly &&
     formData.status === OfferStatus.DRAFT &&
     !formData.invoiceId;
+  const isSmallBusiness = isInvoice && Boolean(formData.isSmallBusiness);
   const selectedClient = clients.find((c) => c.id === formData.clientId);
   const { defaultSubject, defaultMessage } = useMemo(
     () => buildTemplateDefaults(formData),
@@ -270,9 +279,9 @@ export function DocumentEditor({
 
   const totals = useMemo(() => {
     const subtotal = calcNet(formData.positions ?? []);
-    const tax = calcVat(subtotal, toNumberOrZero(formData.vatRate));
-    return { subtotal, tax, total: calcGross(subtotal, tax) };
-  }, [formData.positions, formData.vatRate]);
+    const tax = isSmallBusiness ? 0 : calcVat(subtotal, toNumberOrZero(formData.vatRate));
+    return { subtotal, tax, total: isSmallBusiness ? subtotal : calcGross(subtotal, tax) };
+  }, [formData.positions, formData.vatRate, isSmallBusiness]);
 
   const handleSave = async (opts?: {
     closeAfterSave?: boolean;
@@ -310,6 +319,8 @@ export function DocumentEditor({
           dueDate: data.dueDate!,
           positions: data.positions ?? [],
           vatRate: toNumberOrZero(data.vatRate),
+          isSmallBusiness: data.isSmallBusiness ?? false,
+          smallBusinessNote: data.smallBusinessNote ?? "",
           status: (data.status as InvoiceStatus) ?? InvoiceStatus.DRAFT,
           paymentDate: data.paymentDate,
           introText: data.introText ?? "",
@@ -432,8 +443,10 @@ export function DocumentEditor({
       return false;
     }
     if (!Number.isFinite(formData.vatRate)) {
-      toast.error("Bitte einen gültigen MwSt.-Satz setzen");
-      return false;
+      if (!isSmallBusiness) {
+        toast.error("Bitte einen gültigen MwSt.-Satz setzen");
+        return false;
+      }
     }
     if (!Number.isFinite(settings.defaultPaymentTerms) || settings.defaultPaymentTerms <= 0) {
       toast.error("Bitte Zahlungsziel in den Einstellungen prüfen");
@@ -702,27 +715,43 @@ export function DocumentEditor({
                   </tbody>
 
                   <tfoot className="border-t-2 border-gray-200">
-                    <tr>
-                      <td colSpan={3} className="pt-4 text-right">
-                        Zwischensumme:
-                      </td>
-                      <td className="pt-4 text-right">{formatMoney(totals.subtotal, documentCurrency, locale)}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="text-right text-gray-500">
-                        Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
-                      </td>
-                      <td className="text-right text-gray-500">{formatMoney(totals.tax, documentCurrency, locale)}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="pt-2 text-right font-bold text-lg">
-                        Gesamtsumme:
-                      </td>
-                      <td className="pt-2 text-right font-bold text-lg">{formatMoney(totals.total, documentCurrency, locale)}</td>
-                    </tr>
+                    {isSmallBusiness ? (
+                      <tr>
+                        <td colSpan={3} className="pt-4 text-right font-bold text-lg">
+                          Gesamtbetrag:
+                        </td>
+                        <td className="pt-4 text-right font-bold text-lg">
+                          {formatMoney(totals.total, documentCurrency, locale)}
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr>
+                          <td colSpan={3} className="pt-4 text-right">
+                            Zwischensumme:
+                          </td>
+                          <td className="pt-4 text-right">{formatMoney(totals.subtotal, documentCurrency, locale)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="text-right text-gray-500">
+                            Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
+                          </td>
+                          <td className="text-right text-gray-500">{formatMoney(totals.tax, documentCurrency, locale)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="pt-2 text-right font-bold text-lg">
+                            Gesamtsumme:
+                          </td>
+                          <td className="pt-2 text-right font-bold text-lg">{formatMoney(totals.total, documentCurrency, locale)}</td>
+                        </tr>
+                      </>
+                    )}
                   </tfoot>
                 </table>
                 </div>
+                {isSmallBusiness && formData.smallBusinessNote && (
+                  <p className="mt-4 text-xs text-gray-500">{formData.smallBusinessNote}</p>
+                )}
               </div>
 
               <div className="mt-12 pt-8 border-t border-gray-100 text-sm">
@@ -1254,25 +1283,75 @@ export function DocumentEditor({
                       onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                     />
                   </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                      htmlFor="document-vat"
-                    >
-                      MwSt (%)
+                  {!isSmallBusiness && (
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                        htmlFor="document-vat"
+                      >
+                        MwSt (%)
+                      </label>
+                      <input
+                        id="document-vat"
+                        type="number"
+                        className="w-full border rounded p-2"
+                        value={formData.vatRate ?? 0}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                        }
+                        inputMode="decimal"
+                      />
+                    </div>
+                  )}
+                  <div className="md:col-span-2">
+                    <label className="flex items-start gap-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4"
+                        checked={isSmallBusiness}
+                        disabled={disabled}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => ({
+                            ...prev,
+                            isSmallBusiness: checked,
+                            smallBusinessNote: checked
+                              ? prev.smallBusinessNote?.trim() ||
+                                settings.smallBusinessNote ||
+                                ""
+                              : prev.smallBusinessNote ?? "",
+                          }));
+                        }}
+                      />
+                      <span>
+                        <span className="font-medium">Kleinunternehmer (§ 19 UStG)</span>
+                        <span className="block text-xs text-gray-500">
+                          Keine Umsatzsteuer ausweisen und Hinweistext auf der Rechnung anzeigen.
+                        </span>
+                      </span>
                     </label>
-                    <input
-                      id="document-vat"
-                      type="number"
-                      className="w-full border rounded p-2"
-                      value={formData.vatRate ?? 0}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
-                      }
-                      inputMode="decimal"
-                    />
                   </div>
+                  {isSmallBusiness && (
+                    <div className="md:col-span-2">
+                      <label
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                        htmlFor="document-small-business-note"
+                      >
+                        Hinweistext
+                      </label>
+                      <textarea
+                        id="document-small-business-note"
+                        className="w-full border rounded p-2"
+                        rows={2}
+                        value={formData.smallBusinessNote ?? ""}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setFormData({ ...formData, smallBusinessNote: e.target.value })
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1501,16 +1580,27 @@ export function DocumentEditor({
 
           <div className="flex justify-end pt-4 border-t">
             <div className="w-full sm:w-64 space-y-2 text-right">
-              <div className="flex justify-between">
-                <span>Netto:</span> <span>{formatMoney(totals.subtotal, documentCurrency, locale)}</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
-                <span>{formatMoney(totals.tax, documentCurrency, locale)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg">
-                <span>Gesamt:</span> <span>{formatMoney(totals.total, documentCurrency, locale)}</span>
-              </div>
+              {isSmallBusiness ? (
+                <div className="flex justify-between font-bold text-lg">
+                  <span>Gesamtbetrag:</span> <span>{formatMoney(totals.total, documentCurrency, locale)}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span>Netto:</span> <span>{formatMoney(totals.subtotal, documentCurrency, locale)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
+                    <span>{formatMoney(totals.tax, documentCurrency, locale)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg">
+                    <span>Gesamt:</span> <span>{formatMoney(totals.total, documentCurrency, locale)}</span>
+                  </div>
+                </>
+              )}
+              {isSmallBusiness && formData.smallBusinessNote && (
+                <p className="pt-2 text-xs text-gray-500 text-left">{formData.smallBusinessNote}</p>
+              )}
             </div>
           </div>
 

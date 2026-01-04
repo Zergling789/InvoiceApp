@@ -13,9 +13,13 @@ export const formatCurrencyEur = (amount: number) => formatMoney(amount, "EUR", 
 export const calculatePositionsTotal = (positions: Position[]) =>
   positions.reduce((total, position) => total + position.quantity * position.price, 0);
 
-export const calculateDocumentTotal = (positions: Position[], vatRate: number) => {
+export const calculateDocumentTotal = (
+  positions: Position[],
+  vatRate: number,
+  isSmallBusiness = false
+) => {
   const net = calculatePositionsTotal(positions);
-  return net * (1 + (vatRate || 0) / 100);
+  return isSmallBusiness ? net : net * (1 + (vatRate || 0) / 100);
 };
 
 export const getDaysSince = (dateStr?: string | null, today = new Date()) => {

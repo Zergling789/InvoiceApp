@@ -12,6 +12,7 @@ import { DocumentCard } from "@/components/documents/DocumentCard";
 import type { Client, UserSettings, Position, Invoice, Offer } from "@/types";
 import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
 import { formatMoney } from "@/utils/money";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 import * as clientService from "@/app/clients/clientService";
 import * as settingsService from "@/app/settings/settingsService";
@@ -32,6 +33,8 @@ type EditorSeed = {
   dueDate?: string;
   validUntil?: string;
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
   introText: string;
   footerText: string;
   currency?: string;
@@ -47,6 +50,8 @@ type DocListItem = {
   validUntil?: string;
   positions: Position[];
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
   currency?: string;
   status: InvoiceStatus | OfferStatus;
   offerId?: string;
@@ -163,6 +168,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             validUntil: undefined,
             positions: (inv.positions ?? []) as Position[],
             vatRate: Number(inv.vatRate ?? 0),
+            isSmallBusiness: inv.isSmallBusiness ?? false,
+            smallBusinessNote: inv.smallBusinessNote ?? null,
             currency: s.currency ?? "EUR",
             status: inv.status,
             offerId: inv.offerId,
@@ -241,6 +248,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         dueDate: isInvoice ? (doc as Invoice).dueDate : undefined,
         validUntil: !isInvoice ? (doc as Offer).validUntil : undefined,
         vatRate: Number((doc as any).vatRate ?? 0),
+        isSmallBusiness: isInvoice ? (doc as Invoice).isSmallBusiness ?? false : undefined,
+        smallBusinessNote: isInvoice ? (doc as Invoice).smallBusinessNote ?? null : undefined,
         introText: (doc as any).introText ?? "",
         footerText: (doc as any).footerText ?? "",
         currency: (doc as any).currency ?? undefined,
@@ -257,6 +266,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         validUntil: (doc as any).validUntil ?? undefined,
         positions: (doc as any).positions ?? [],
         vatRate: Number((doc as any).vatRate ?? 0),
+        isSmallBusiness: isInvoice ? (doc as Invoice).isSmallBusiness ?? false : undefined,
+        smallBusinessNote: isInvoice ? (doc as Invoice).smallBusinessNote ?? null : undefined,
         status: (doc as any).status,
         introText: (doc as any).introText ?? "",
         footerText: (doc as any).footerText ?? "",
@@ -314,7 +325,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       const s =
         settings ??
         (await settingsService.fetchSettings()) ??
-        ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
+        ({
+          defaultVatRate: 0,
+          defaultPaymentTerms: 14,
+          isSmallBusiness: false,
+          smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
+        } as unknown as UserSettings);
 
       setSettings(s);
 
@@ -342,6 +358,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         dueDate: invoiceService.buildDueDate(todayISO(), Number(s.defaultPaymentTerms ?? 14)),
         positions: offer.positions ?? [],
         vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
+        isSmallBusiness: s.isSmallBusiness ?? false,
+        smallBusinessNote: s.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
         status: InvoiceStatus.DRAFT,
         paymentDate: undefined,
         introText: offer.introText ?? "",
@@ -469,8 +487,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       <div className="md:hidden space-y-4">
         {items.map((item) => {
           const net = calcNet(item.positions ?? []);
-          const vat = calcVat(net, item.vatRate);
-          const total = calcGross(net, vat);
+          const isSmallBusiness = isInvoice ? (item as Invoice).isSmallBusiness : false;
+          const vat = isSmallBusiness ? 0 : calcVat(net, item.vatRate);
+          const total = isSmallBusiness ? net : calcGross(net, vat);
           const locale = settings?.locale ?? "de-DE";
           const invoiceCurrency = settings?.currency ?? "EUR";
           const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
@@ -615,8 +634,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           <tbody className="divide-y">
             {items.map((item) => {
               const net = calcNet(item.positions ?? []);
-              const vat = calcVat(net, item.vatRate);
-              const total = calcGross(net, vat);
+              const isSmallBusiness = isInvoice ? (item as Invoice).isSmallBusiness : false;
+              const vat = isSmallBusiness ? 0 : calcVat(net, item.vatRate);
+              const total = isSmallBusiness ? net : calcGross(net, vat);
               const locale = settings?.locale ?? "de-DE";
               const invoiceCurrency = settings?.currency ?? "EUR";
               const offerCurrency = item.currency ?? settings?.currency ?? "EUR";

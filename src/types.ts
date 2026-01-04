@@ -13,6 +13,8 @@ export interface UserSettings {
   email: string;
   emailDefaultSubject: string;
   emailDefaultText: string;
+  isSmallBusiness: boolean;
+  smallBusinessNote?: string | null;
   logoUrl?: string;
   primaryColor?: string;
   templateId?: string;
@@ -108,6 +110,8 @@ export interface Invoice {
   dueDate?: string;
   positions: Position[];
   vatRate: number;
+  isSmallBusiness: boolean;
+  smallBusinessNote?: string | null;
   introText: string;
   footerText: string;
   status: InvoiceStatus;

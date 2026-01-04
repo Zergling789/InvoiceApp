@@ -78,7 +78,7 @@ export default function Dashboard() {
       return addTotal(
         acc,
         settingsCurrency,
-        calculateDocumentTotal(invoice.positions, invoice.vatRate)
+        calculateDocumentTotal(invoice.positions, invoice.vatRate, invoice.isSmallBusiness)
       );
     }, {} as Record<string, number>);
 
@@ -86,7 +86,7 @@ export default function Dashboard() {
       return addTotal(
         acc,
         settingsCurrency,
-        calculateDocumentTotal(invoice.positions, invoice.vatRate)
+        calculateDocumentTotal(invoice.positions, invoice.vatRate, invoice.isSmallBusiness)
       );
     }, {} as Record<string, number>);
 
@@ -108,7 +108,7 @@ export default function Dashboard() {
           title: `${clientName} · Rechnung ${invoice.number}`,
           subtitle: "Zahlung überfällig – mahnen, bevor es eskaliert.",
           amountLabel: formatAmount(
-            calculateDocumentTotal(invoice.positions, invoice.vatRate),
+            calculateDocumentTotal(invoice.positions, invoice.vatRate, invoice.isSmallBusiness),
             settingsCurrency
           ),
           ageLabel: `seit ${ageDays} Tagen`,
@@ -131,7 +131,7 @@ export default function Dashboard() {
           title: `${clientName} · Rechnung ${invoice.number}`,
           subtitle: "Rechnung offen – sende jetzt die Erinnerung.",
           amountLabel: formatAmount(
-            calculateDocumentTotal(invoice.positions, invoice.vatRate),
+            calculateDocumentTotal(invoice.positions, invoice.vatRate, invoice.isSmallBusiness),
             settingsCurrency
           ),
           ageLabel: `seit ${ageDays} Tagen`,

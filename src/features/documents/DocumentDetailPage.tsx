@@ -45,6 +45,8 @@ const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): Edito
   dueDate: type === "invoice" ? (doc as Invoice).dueDate : undefined,
   validUntil: type === "offer" ? (doc as Offer).validUntil : undefined,
   vatRate: Number(doc.vatRate ?? 0),
+  isSmallBusiness: type === "invoice" ? (doc as Invoice).isSmallBusiness ?? false : undefined,
+  smallBusinessNote: type === "invoice" ? (doc as Invoice).smallBusinessNote ?? null : undefined,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
   currency: type === "offer" ? (doc as Offer).currency ?? undefined : undefined,
@@ -120,12 +122,15 @@ export default function DocumentDetailPage() {
     return clients.find((entry) => entry.id === doc.clientId);
   }, [clients, doc]);
 
+  const isSmallBusiness =
+    docType === "invoice" && doc ? Boolean((doc as Invoice).isSmallBusiness) : false;
+
   const totals = useMemo(() => {
     if (!doc) return { net: 0, vat: 0, gross: 0 };
     const net = calcNet(doc.positions ?? []);
-    const vat = calcVat(net, toNumberOrZero(doc.vatRate));
-    return { net, vat, gross: calcGross(net, vat) };
-  }, [doc]);
+    const vat = isSmallBusiness ? 0 : calcVat(net, toNumberOrZero(doc.vatRate));
+    return { net, vat, gross: isSmallBusiness ? net : calcGross(net, vat) };
+  }, [doc, isSmallBusiness]);
 
   const timeline = useMemo(() => {
     if (!doc) return [];
@@ -402,6 +407,8 @@ export default function DocumentDetailPage() {
       validUntil: "validUntil" in doc ? doc.validUntil : undefined,
       positions: doc.positions ?? [],
       vatRate: Number(doc.vatRate ?? 0),
+      isSmallBusiness: "isSmallBusiness" in doc ? doc.isSmallBusiness ?? false : false,
+      smallBusinessNote: "smallBusinessNote" in doc ? doc.smallBusinessNote ?? null : null,
       status: doc.status,
       introText: doc.introText ?? "",
       footerText: doc.footerText ?? "",
@@ -555,18 +562,30 @@ export default function DocumentDetailPage() {
 
       <AppCard className="space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">Summen</h2>
-        <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>Netto</span>
-          <span>{formatMoney(totals.net, documentCurrency, locale)}</span>
-        </div>
-        <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>MwSt ({toNumberOrZero(doc.vatRate)}%)</span>
-          <span>{formatMoney(totals.vat, documentCurrency, locale)}</span>
-        </div>
-        <div className="flex items-center justify-between text-base font-semibold text-gray-900">
-          <span>Brutto</span>
-          <span>{formatMoney(totals.gross, documentCurrency, locale)}</span>
-        </div>
+        {isSmallBusiness ? (
+          <div className="flex items-center justify-between text-base font-semibold text-gray-900">
+            <span>Gesamtbetrag</span>
+            <span>{formatMoney(totals.gross, documentCurrency, locale)}</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>Netto</span>
+              <span>{formatMoney(totals.net, documentCurrency, locale)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>MwSt ({toNumberOrZero(doc.vatRate)}%)</span>
+              <span>{formatMoney(totals.vat, documentCurrency, locale)}</span>
+            </div>
+            <div className="flex items-center justify-between text-base font-semibold text-gray-900">
+              <span>Brutto</span>
+              <span>{formatMoney(totals.gross, documentCurrency, locale)}</span>
+            </div>
+          </>
+        )}
+        {isSmallBusiness && "smallBusinessNote" in doc && doc.smallBusinessNote && (
+          <p className="text-xs text-gray-500">{doc.smallBusinessNote}</p>
+        )}
       </AppCard>
 
       <AppCard className="space-y-3">
