@@ -912,22 +912,36 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
       return sendError(res, 400, "bad_request", "Missing invoice id.");
     }
 
-    const supabase = requireSupabase();
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
     const { error } = await supabase.rpc("finalize_invoice", {
       invoice_id: invoiceId,
     });
 
     if (error) {
       const normalized = normalizeDbError(error);
-      if (normalized) {
+      if (normalized && (normalized.httpStatus === 401 || normalized.httpStatus === 403)) {
         return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
       }
-      return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
+      const message = normalized?.message || error.message || "Invoice finalization failed.";
+      return res.status(400).json({
+        error: message,
+        code: normalized?.code || error.code || "finalize_failed",
+      });
     }
 
     return res.json({ ok: true });
   } catch (err) {
     console.error("Finalize invoice failed", err);
+    if (err?.status === 401) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    if (err?.status === 403) {
+      return sendError(res, 403, "forbidden", "Forbidden");
+    }
     return sendError(res, err?.status || 500, "finalize_failed", "Invoice finalization failed.");
   }
 });
