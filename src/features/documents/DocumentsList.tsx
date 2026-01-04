@@ -28,7 +28,7 @@ import { getErrorMessage, logError } from "@/utils/errors";
 
 type EditorSeed = {
   id: string;
-  number: string;
+  number: string | null;
   date: string;
   dueDate?: string;
   validUntil?: string;
@@ -160,7 +160,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         setItems(
           invs.map((inv) => ({
             id: inv.id,
-            number: inv.number,
+            number: inv.number ?? "Entwurf",
             clientId: inv.clientId,
             projectId: inv.projectId,
             date: inv.date,
@@ -243,7 +243,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       setEditorSeed({
         id: doc.id,
-        number: String((doc as any).number ?? ""),
+        number: (doc as any).number ?? null,
         date: (doc as any).date,
         dueDate: isInvoice ? (doc as Invoice).dueDate : undefined,
         validUntil: !isInvoice ? (doc as Offer).validUntil : undefined,
@@ -257,7 +257,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       setEditorInitial({
         id: doc.id,
-        number: String((doc as any).number ?? ""),
+        number: (doc as any).number ?? null,
         date: (doc as any).date,
         clientId: (doc as any).clientId ?? "",
         projectId: (doc as any).projectId ?? undefined,
@@ -345,12 +345,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         return;
       }
 
-      const invoiceNumber = await getNextDocumentNumber("invoice", s);
       const invoiceId = newId();
 
       await invoiceService.saveInvoice({
         id: invoiceId,
-        number: String(invoiceNumber),
+        number: null,
         offerId: offer.id,
         clientId: offer.clientId,
         projectId: offer.projectId,

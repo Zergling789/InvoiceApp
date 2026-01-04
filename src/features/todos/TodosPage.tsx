@@ -17,7 +17,6 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
-import { supabase } from "@/supabaseClient";
 import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
@@ -199,7 +198,7 @@ export default function TodosPage() {
     return {
       id: invoice.id,
       type: "invoice" as const,
-      number: invoice.number,
+      number: invoice.number ?? "Entwurf",
       clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
       amountLabel: formatCurrencyEur(total),
       statusLabel: options.statusLabel,
@@ -299,7 +298,7 @@ export default function TodosPage() {
     followUpOfferCards.length +
     draftCards.length;
 
-  const getDefaultSubject = (docType: "invoice" | "offer", docNumber: string) => {
+  const getDefaultSubject = (docType: "invoice" | "offer", docNumber: string | null) => {
     if (!settings) return "";
     const label = docType === "invoice" ? "Rechnung" : "Angebot";
     const template = settings.emailDefaultSubject?.trim() || `${label} {nummer}`;
@@ -324,14 +323,12 @@ export default function TodosPage() {
     });
     if (!ok) return null;
 
-    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
-      invoice_id: invoice.id,
-    });
-
-    if (finalizeError) {
+    try {
+      await invoiceService.finalizeInvoice(invoice.id);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
       toast.error(
-        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
-          "Rechnung konnte nicht finalisiert werden."
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
       );
       return null;
     }
@@ -401,8 +398,8 @@ export default function TodosPage() {
     try {
       const nextSettings = settings ?? (await fetchSettings());
       setSettings(nextSettings);
-      const num = await getNextDocumentNumber(type, nextSettings);
       const isInvoice = type === "invoice";
+      const num = isInvoice ? null : await getNextDocumentNumber(type, nextSettings);
       const seed: EditorSeed = {
         id: newId(),
         number: num,
@@ -436,7 +433,7 @@ export default function TodosPage() {
           document={selectedDoc}
           client={data.clients.find((entry) => entry.id === selectedDoc.clientId)}
           settings={settings}
-          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number)}
+          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number ?? "")}
           defaultMessage={getDefaultMessage()}
           templateType={sendIntent ?? undefined}
           onFinalize={selectedType === "invoice" ? handleFinalizeInvoice : undefined}

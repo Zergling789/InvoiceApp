@@ -25,7 +25,7 @@ import { ApiRequestError, getErrorMessage, logError } from "@/utils/errors";
 
 export type EditorSeed = {
   id: string;
-  number: string;
+  number: string | null;
   date: string;
   dueDate?: string;
   validUntil?: string;
@@ -39,7 +39,7 @@ export type EditorSeed = {
 
 type FormData = {
   id: string;
-  number: string;
+  number: string | null;
   date: string;
   dueDate?: string;
   validUntil?: string;
@@ -88,7 +88,7 @@ function buildFormData(
 ): FormData {
   const base: FormData = {
     id: seed.id,
-    number: seed.number,
+    number: seed.number ?? null,
     date: seed.date,
     dueDate: seed.dueDate,
     validUntil: seed.validUntil,
@@ -418,10 +418,6 @@ export function DocumentEditor({
       toast.error("Bitte Kunde wählen");
       return false;
     }
-    if (!formData.number?.trim()) {
-      toast.error("Bitte Rechnungsnummer vergeben");
-      return false;
-    }
     if (!formData.date) {
       toast.error("Bitte Rechnungsdatum setzen");
       return false;
@@ -470,14 +466,12 @@ export function DocumentEditor({
     });
     if (!ok) return;
 
-    const { error } = await supabase.rpc("finalize_invoice", {
-      invoice_id: formData.id,
-    });
-
-    if (error) {
+    try {
+      await invoiceService.finalizeInvoice(formData.id);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
       toast.error(
-        mapErrorCodeToToast(error.code ?? error.message) ||
-          "Rechnung konnte nicht finalisiert werden."
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
       );
       return null;
     }
@@ -635,7 +629,9 @@ export function DocumentEditor({
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">
                     {isInvoice ? "RECHNUNG" : "ANGEBOT"}
                   </h2>
-                  <p className="text-gray-500">Nr: {formData.number}</p>
+                  <p className="text-gray-500">
+                    Nr: {formData.number ?? (isInvoice ? "Wird bei Finalisierung vergeben" : "-")}
+                  </p>
                   <p className="text-gray-500">Datum: {formatDate(formData.date, locale)}</p>
                   {isInvoice && formData.dueDate && (
                     <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, locale)}</p>
@@ -670,7 +666,9 @@ export function DocumentEditor({
 
               <div className="mb-8">
                 <h3 className="font-bold text-lg mb-2">
-                  {isInvoice ? `Rechnung ${formData.number}` : `Angebot ${formData.number}`}
+                  {isInvoice
+                    ? `Rechnung ${formData.number ?? "Entwurf"}`
+                    : `Angebot ${formData.number ?? ""}`}
                 </h3>
 
                 {formData.introText && (
@@ -910,7 +908,7 @@ export function DocumentEditor({
                       <input
                         id="document-number"
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
-                        value={formData.number}
+                        value={formData.number ?? ""}
                         disabled={disabled}
                         onChange={(e) => setFormData({ ...formData, number: e.target.value })}
                         placeholder="z.B. ANG-2023-001"
@@ -1241,9 +1239,11 @@ export function DocumentEditor({
                   <input
                     id="document-number"
                     className="w-full border rounded p-2"
-                    value={formData.number}
-                    disabled={disabled}
+                    value={formData.number ?? ""}
+                    disabled={disabled || isInvoice}
+                    readOnly={isInvoice}
                     onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                    placeholder={isInvoice ? "Wird bei Finalisierung vergeben" : undefined}
                   />
                 </div>
 
