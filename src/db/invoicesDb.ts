@@ -14,6 +14,8 @@ const INVOICE_FIELDS = [
   "client_id",
   "project_id",
   "date",
+  "invoice_date",
+  "payment_terms_days",
   "due_date",
   "payment_date",
   "paid_at",
@@ -87,7 +89,7 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     .from("invoices")
     .select(INVOICE_FIELDS.join(","))
     .eq("user_id", uid)
-    .order("date", { ascending: false });
+    .order("invoice_date", { ascending: false });
 
   if (error) throw new Error(error.message);
 
@@ -97,7 +99,8 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     offerId: r.offer_id ?? undefined,
     clientId: r.client_id,
     projectId: r.project_id ?? undefined,
-    date: r.date,
+    date: r.invoice_date ?? r.date,
+    paymentTermsDays: Number(r.payment_terms_days ?? 14),
     dueDate: r.due_date ?? "",
     paymentDate: r.payment_date ?? undefined,
     paidAt: r.paid_at ?? null,
@@ -139,7 +142,8 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     offerId: data.offer_id ?? undefined,
     clientId: data.client_id,
     projectId: data.project_id ?? undefined,
-    date: data.date,
+    date: data.invoice_date ?? data.date,
+    paymentTermsDays: Number(data.payment_terms_days ?? 14),
     dueDate: data.due_date ?? "",
     paymentDate: data.payment_date ?? undefined,
     paidAt: data.paid_at ?? null,
@@ -177,6 +181,8 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     project_id: inv.projectId ?? null,
 
     date: inv.date,
+    invoice_date: inv.date,
+    payment_terms_days: Number(inv.paymentTermsDays ?? 14),
     due_date: inv.dueDate ?? null,
     payment_date: inv.paymentDate ?? null,
     paid_at: inv.paidAt ?? null,

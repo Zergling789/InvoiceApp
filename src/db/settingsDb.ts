@@ -15,6 +15,7 @@ const SETTINGS_FIELDS = [
   "tax_id",
   "default_vat_rate",
   "default_payment_terms",
+  "payment_terms_days",
   "iban",
   "bic",
   "bank_name",
@@ -69,6 +70,7 @@ export async function dbGetSettings(): Promise<UserSettings> {
       tax_id: "",
       default_vat_rate: 19,
       default_payment_terms: 14,
+      payment_terms_days: 14,
       iban: "",
       bic: "",
       bank_name: "",
@@ -136,7 +138,7 @@ export async function dbGetSettings(): Promise<UserSettings> {
     address: row.address ?? "",
     taxId: row.tax_id ?? "",
     defaultVatRate: Number(row.default_vat_rate ?? 19),
-    defaultPaymentTerms: Number(row.default_payment_terms ?? 14),
+    defaultPaymentTerms: Number(row.payment_terms_days ?? row.default_payment_terms ?? 14),
     iban: row.iban ?? "",
     bic: row.bic ?? "",
     bankName: row.bank_name ?? "",
@@ -164,6 +166,7 @@ export async function dbGetSettings(): Promise<UserSettings> {
 
 export async function dbSaveSettings(s: UserSettings): Promise<void> {
   const uid = await requireUserId();
+  const paymentTermsDays = Math.min(365, Math.max(0, Number(s.defaultPaymentTerms ?? 14)));
 
   const payload: DbSettingsInsert = {
     user_id: uid,
@@ -172,7 +175,8 @@ export async function dbSaveSettings(s: UserSettings): Promise<void> {
     address: s.address ?? "",
     tax_id: s.taxId ?? "",
     default_vat_rate: Number(s.defaultVatRate ?? 19),
-    default_payment_terms: Number(s.defaultPaymentTerms ?? 14),
+    default_payment_terms: paymentTermsDays,
+    payment_terms_days: paymentTermsDays,
     iban: s.iban ?? "",
     bic: s.bic ?? "",
     bank_name: s.bankName ?? "",

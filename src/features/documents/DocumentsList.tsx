@@ -255,6 +255,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         id: doc.id,
         number: (doc as any).number ?? null,
         date: (doc as any).date,
+        paymentTermsDays: isInvoice ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
         dueDate: isInvoice ? (doc as Invoice).dueDate : undefined,
         validUntil: !isInvoice ? (doc as Offer).validUntil : undefined,
         vatRate: Number((doc as any).vatRate ?? 0),
@@ -269,6 +270,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         id: doc.id,
         number: (doc as any).number ?? null,
         date: (doc as any).date,
+        paymentTermsDays: isInvoice ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
         clientId: (doc as any).clientId ?? "",
         projectId: (doc as any).projectId ?? undefined,
         offerId: (doc as any).offerId ?? undefined,
@@ -355,6 +357,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         return;
       }
 
+      const defaultTerms = Number(s.defaultPaymentTerms ?? 14);
       const invoiceId = newId();
 
       await invoiceService.saveInvoice({
@@ -364,7 +367,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         clientId: offer.clientId,
         projectId: offer.projectId,
         date: todayISO(),
-        dueDate: invoiceService.buildDueDate(todayISO(), Number(s.defaultPaymentTerms ?? 14)),
+        paymentTermsDays: defaultTerms,
+        dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
         positions: offer.positions ?? [],
         vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
         isSmallBusiness: s.isSmallBusiness ?? false,
@@ -500,6 +504,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 clientName={getClientName(item.clientId)}
                 statusLabel={statusMeta.label}
                 statusTone={statusMeta.tone}
+                metadata={
+                  <div className="text-xs text-gray-500 dark:text-slate-400">
+                    Fällig am{" "}
+                    {item.dueDate ? formatDate(item.dueDate, settings?.locale) : "—"}
+                  </div>
+                }
                 primaryAction={
                   <button
                     type="button"

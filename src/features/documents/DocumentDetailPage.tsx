@@ -43,6 +43,7 @@ const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): Edito
   id: doc.id,
   number: doc.number ?? null,
   date: doc.date,
+  paymentTermsDays: type === "invoice" ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
   dueDate: type === "invoice" ? (doc as Invoice).dueDate : undefined,
   validUntil: type === "offer" ? (doc as Offer).validUntil : undefined,
   vatRate: Number(doc.vatRate ?? 0),
@@ -469,6 +470,7 @@ export default function DocumentDetailPage() {
       id: doc.id,
       number: doc.number ?? null,
       date: doc.date,
+      paymentTermsDays: "paymentTermsDays" in doc ? doc.paymentTermsDays ?? 14 : undefined,
       clientId: doc.clientId ?? "",
       projectId: doc.projectId ?? undefined,
       offerId: "offerId" in doc ? doc.offerId : undefined,
@@ -685,7 +687,10 @@ export default function DocumentDetailPage() {
         {docType === "invoice" ? (
           <div className="space-y-2 text-sm text-gray-600">
             <div>
-              Zahlungsziel: {(doc as Invoice).dueDate ? formatDate((doc as Invoice).dueDate ?? "", "de-DE") : "—"}
+              Zahlungsziel: {(doc as Invoice).paymentTermsDays ?? 0} Tage
+            </div>
+            <div>
+              Fällig am: {(doc as Invoice).dueDate ? formatDate((doc as Invoice).dueDate ?? "", "de-DE") : "—"}
             </div>
             <div>
               Bank: {settings.bankName || "—"}

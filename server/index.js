@@ -673,8 +673,9 @@ const mapInvoiceRow = (row = {}) => ({
   number: row.invoice_number ?? row.number ?? null,
   clientId: row.client_id,
   projectId: row.project_id ?? undefined,
-  date: row.date,
+  date: row.invoice_date ?? row.date,
   dueDate: row.due_date ?? "",
+  paymentTermsDays: row.payment_terms_days ?? 14,
   positions: row.positions ?? [],
   introText: row.intro_text ?? "",
   footerText: row.footer_text ?? "",
@@ -745,7 +746,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, invoice_number, number, client_id, project_id, date, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
+    ? "id, user_id, invoice_number, number, client_id, project_id, date, invoice_date, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db

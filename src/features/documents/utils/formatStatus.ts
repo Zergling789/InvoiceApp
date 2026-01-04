@@ -11,6 +11,7 @@ const buildInvoiceForPhase = (status: InvoiceStatus, isOverdue: boolean): Invoic
     number: "STATUS",
     clientId: "status-placeholder",
     date: now.toISOString(),
+    paymentTermsDays: 14,
     dueDate: isOverdue ? overdueDate : undefined,
     positions: [],
     vatRate: 0,

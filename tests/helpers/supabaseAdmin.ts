@@ -81,6 +81,7 @@ export async function seedUserSettings({
       tax_id: "DE123456789",
       default_vat_rate: 19,
       default_payment_terms: 14,
+      payment_terms_days: 14,
       iban: "DE00123456780000000000",
       bic: "TESTDEFFXXX",
       bank_name: "Test Bank",

@@ -27,6 +27,7 @@ export type EditorSeed = {
   id: string;
   number: string | null;
   date: string;
+  paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
   vatRate: number;
@@ -41,6 +42,7 @@ type FormData = {
   id: string;
   number: string | null;
   date: string;
+  paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
   clientId: string;
@@ -92,6 +94,7 @@ function buildFormData(
     id: seed.id,
     number: seed.number ?? null,
     date: seed.date,
+    paymentTermsDays: seed.paymentTermsDays ?? 14,
     dueDate: seed.dueDate,
     validUntil: seed.validUntil,
     clientId: "",
@@ -125,6 +128,7 @@ function buildFormData(
     introText: merged.introText ?? "",
     footerText: merged.footerText ?? "",
     vatRate: Number(merged.vatRate ?? 0),
+    paymentTermsDays: Number(merged.paymentTermsDays ?? 14),
     isSmallBusiness: Boolean(merged.isSmallBusiness ?? false),
     smallBusinessNote: merged.smallBusinessNote ?? "",
     currency: isInvoice ? undefined : merged.currency ?? defaultCurrency ?? "EUR",
@@ -285,6 +289,17 @@ export function DocumentEditor({
     return { subtotal, tax, total: isSmallBusiness ? subtotal : calcGross(subtotal, tax) };
   }, [formData.positions, formData.vatRate, isSmallBusiness]);
 
+  useEffect(() => {
+    if (!isInvoice || readOnly || locked) return;
+    if (!formData.date) return;
+    const nextDueDate = invoiceService.buildDueDate(
+      formData.date,
+      Number(formData.paymentTermsDays ?? 0)
+    );
+    if (nextDueDate === formData.dueDate) return;
+    setFormData((prev) => ({ ...prev, dueDate: nextDueDate }));
+  }, [formData.date, formData.paymentTermsDays, formData.dueDate, isInvoice, readOnly, locked]);
+
   const handleSave = async (opts?: {
     closeAfterSave?: boolean;
     data?: FormData;
@@ -318,6 +333,7 @@ export function DocumentEditor({
           clientId: data.clientId,
           projectId: data.projectId,
           date: data.date,
+          paymentTermsDays: Number(data.paymentTermsDays ?? 14),
           dueDate: data.dueDate!,
           positions: data.positions ?? [],
           vatRate: toNumberOrZero(data.vatRate),
@@ -450,8 +466,9 @@ export function DocumentEditor({
         return false;
       }
     }
-    if (!Number.isFinite(settings.defaultPaymentTerms) || settings.defaultPaymentTerms <= 0) {
-      toast.error("Bitte Zahlungsziel in den Einstellungen prüfen");
+    const paymentTermsDays = Number(formData.paymentTermsDays ?? settings.defaultPaymentTerms ?? 14);
+    if (!Number.isFinite(paymentTermsDays) || paymentTermsDays < 0 || paymentTermsDays > 365) {
+      toast.error("Bitte Zahlungsziel zwischen 0 und 365 Tagen setzen");
       return false;
     }
     if ((formData.positions ?? []).length === 0) {
@@ -924,7 +941,7 @@ export function DocumentEditor({
                     </div>
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <label className="text-sm font-medium text-gray-700" htmlFor="document-date">
-                        Datum
+                        {isInvoice ? "Rechnungsdatum" : "Datum"}
                       </label>
                       <input
                         id="document-date"
@@ -1260,7 +1277,7 @@ export function DocumentEditor({
                     className="block text-sm font-medium text-gray-700 mb-1"
                     htmlFor="document-date"
                   >
-                    Datum
+                    {isInvoice ? "Rechnungsdatum" : "Datum"}
                   </label>
                   <input
                     id="document-date"
@@ -1278,6 +1295,33 @@ export function DocumentEditor({
                   <div>
                     <label
                       className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-payment-terms"
+                    >
+                      Zahlungsziel (Tage)
+                    </label>
+                    <input
+                      id="document-payment-terms"
+                      type="number"
+                      className="w-full border rounded p-2"
+                      value={formData.paymentTermsDays ?? 14}
+                      disabled={disabled}
+                      min={0}
+                      max={365}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          paymentTermsDays: Math.min(
+                            365,
+                            Math.max(0, Math.trunc(toNumberOrZero(e.target.value)))
+                          ),
+                        })
+                      }
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
                       htmlFor="document-due-date"
                     >
                       Fällig am
@@ -1287,8 +1331,8 @@ export function DocumentEditor({
                       type="date"
                       className="w-full border rounded p-2"
                       value={formData.dueDate ?? ""}
+                      readOnly
                       disabled={disabled}
-                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                     />
                   </div>
                   {!isSmallBusiness && (
