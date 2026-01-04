@@ -128,6 +128,8 @@ export type Database = {
           created_at: string;
           date: string;
           due_date: string | null;
+          paid_at: string | null;
+          canceled_at: string | null;
           finalized_at: string | null;
           footer_text: string;
           id: string;
@@ -156,6 +158,8 @@ export type Database = {
           created_at?: string;
           date?: string;
           due_date?: string | null;
+          paid_at?: string | null;
+          canceled_at?: string | null;
           finalized_at?: string | null;
           footer_text?: string;
           id?: string;
@@ -184,6 +188,8 @@ export type Database = {
           created_at?: string;
           date?: string;
           due_date?: string | null;
+          paid_at?: string | null;
+          canceled_at?: string | null;
           finalized_at?: string | null;
           footer_text?: string;
           id?: string;

@@ -905,6 +905,31 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
   }
 });
 
+const computeInvoiceIsOverdue = (invoice) => {
+  if (!invoice) return false;
+  if (!["ISSUED", "SENT"].includes(invoice.status)) return false;
+  if (invoice.paid_at || invoice.canceled_at) return false;
+  if (!invoice.due_date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(invoice.due_date);
+  return due.getTime() < today.getTime();
+};
+
+const loadInvoiceForUser = async (supabase, invoiceId) => {
+  const { data: invoice, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .maybeSingle();
+
+  if (error) {
+    return { error };
+  }
+
+  return { invoice };
+};
+
 app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
@@ -933,7 +958,16 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
       });
     }
 
-    return res.json({ ok: true });
+    const { data: invoice, error: fetchError } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", invoiceId)
+      .maybeSingle();
+    if (fetchError || !invoice) {
+      return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...invoice, is_overdue: computeInvoiceIsOverdue(invoice) } });
   } catch (err) {
     console.error("Finalize invoice failed", err);
     if (err?.status === 401) {
@@ -943,6 +977,169 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
       return sendError(res, 403, "forbidden", "Forbidden");
     }
     return sendError(res, err?.status || 500, "finalize_failed", "Invoice finalization failed.");
+  }
+});
+
+app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+    }
+    if (!invoice) {
+      return sendError(res, 404, "not_found", "Invoice not found.");
+    }
+    if (invoice.status !== "ISSUED") {
+      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        status: "SENT",
+        sent_at: invoice.sent_at ?? nowIso,
+        last_sent_at: nowIso,
+        sent_count: (invoice.sent_count ?? 0) + 1,
+        sent_via: "MANUAL",
+        updated_at: nowIso,
+      })
+      .eq("id", invoiceId)
+      .select("*")
+      .single();
+
+    if (updateError || !updated) {
+      const normalized = normalizeDbError(updateError);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "update_failed", "Invoice update failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
+  } catch (err) {
+    const normalized = normalizeDbError(err);
+    if (normalized) {
+      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+    }
+    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+  }
+});
+
+app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+    }
+    if (!invoice) {
+      return sendError(res, 404, "not_found", "Invoice not found.");
+    }
+    if (!["ISSUED", "SENT"].includes(invoice.status)) {
+      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        status: "PAID",
+        paid_at: nowIso,
+        payment_date: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", invoiceId)
+      .select("*")
+      .single();
+
+    if (updateError || !updated) {
+      const normalized = normalizeDbError(updateError);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "update_failed", "Invoice update failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
+  } catch (err) {
+    const normalized = normalizeDbError(err);
+    if (normalized) {
+      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+    }
+    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+  }
+});
+
+app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+    }
+    if (!invoice) {
+      return sendError(res, 404, "not_found", "Invoice not found.");
+    }
+    if (!["ISSUED", "SENT"].includes(invoice.status)) {
+      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        status: "CANCELED",
+        canceled_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", invoiceId)
+      .select("*")
+      .single();
+
+    if (updateError || !updated) {
+      const normalized = normalizeDbError(updateError);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "update_failed", "Invoice update failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
+  } catch (err) {
+    const normalized = normalizeDbError(err);
+    if (normalized) {
+      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+    }
+    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
   }
 });
 

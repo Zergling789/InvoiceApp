@@ -39,6 +39,7 @@ export function getSendWarnings({
       (inv) =>
         inv.clientId === client.id &&
         inv.status !== InvoiceStatus.PAID &&
+        inv.status !== InvoiceStatus.CANCELED &&
         isOverdue({ status: inv.status, dueDate: inv.dueDate })
     );
     if (hasOverdue) {

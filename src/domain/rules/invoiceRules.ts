@@ -13,6 +13,7 @@ export function isPaid(status: InvoiceStatus): boolean {
 
 export function isOverdue(invoice: Pick<Invoice, "status" | "dueDate">, now = new Date()): boolean {
   if (!invoice.dueDate) return false;
-  if (isPaid(invoice.status)) return false;
+  if (isPaid(invoice.status) || invoice.status === InvoiceStatus.CANCELED) return false;
+  if (![InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(invoice.status)) return false;
   return new Date(invoice.dueDate).getTime() < now.getTime();
 }

@@ -74,6 +74,8 @@ const invoiceStatusTone = (phase: InvoicePhase): DocumentRow["statusTone"] => {
       return "blue";
     case "issued":
       return "yellow";
+    case "canceled":
+      return "gray";
     default:
       return "gray";
   }
@@ -186,7 +188,7 @@ export default function DocumentsHubPage() {
       return ["draft", "sent", "accepted", "rejected", "invoiced"];
     }
     if (mode === "invoice") {
-      return ["draft", "issued", "sent", "overdue", "paid"];
+      return ["draft", "issued", "sent", "overdue", "paid", "canceled"];
     }
     return [
       "draft",
@@ -197,12 +199,20 @@ export default function DocumentsHubPage() {
       "issued",
       "overdue",
       "paid",
+      "canceled",
     ];
   }, [mode]);
 
   const statusLabel = useMemo(() => {
     const offerPhases = new Set<OfferPhase>(["draft", "sent", "accepted", "rejected", "invoiced"]);
-    const invoicePhases = new Set<InvoicePhase>(["draft", "issued", "sent", "overdue", "paid"]);
+    const invoicePhases = new Set<InvoicePhase>([
+      "draft",
+      "issued",
+      "sent",
+      "overdue",
+      "paid",
+      "canceled",
+    ]);
     return (status: CombinedStatus) => {
       if (offerPhases.has(status as OfferPhase)) {
         return formatOfferPhaseLabel(status as OfferPhase);

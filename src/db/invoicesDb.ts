@@ -16,6 +16,8 @@ const INVOICE_FIELDS = [
   "date",
   "due_date",
   "payment_date",
+  "paid_at",
+  "canceled_at",
   "positions",
   "intro_text",
   "footer_text",
@@ -38,10 +40,10 @@ const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatu
       return InvoiceStatus.ISSUED;
     case InvoiceStatus.SENT:
       return InvoiceStatus.SENT;
-    case InvoiceStatus.OVERDUE:
-      return InvoiceStatus.OVERDUE;
     case InvoiceStatus.PAID:
       return InvoiceStatus.PAID;
+    case InvoiceStatus.CANCELED:
+      return InvoiceStatus.CANCELED;
     case InvoiceStatus.DRAFT:
     default:
       return InvoiceStatus.DRAFT;
@@ -50,6 +52,22 @@ const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatu
 
 const toDbInvoiceStatus = (status: InvoiceStatus | null | undefined): string =>
   normalizeInvoiceStatus(status ?? InvoiceStatus.DRAFT);
+
+const computeIsOverdue = (row: {
+  status: string | null;
+  due_date?: string | null;
+  paid_at?: string | null;
+  canceled_at?: string | null;
+}) => {
+  const status = (row.status ?? "").toUpperCase();
+  if (!["ISSUED", "SENT"].includes(status)) return false;
+  if (row.paid_at || row.canceled_at) return false;
+  if (!row.due_date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(row.due_date);
+  return due.getTime() < today.getTime();
+};
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
@@ -82,6 +100,9 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     date: r.date,
     dueDate: r.due_date ?? "",
     paymentDate: r.payment_date ?? undefined,
+    paidAt: r.paid_at ?? null,
+    canceledAt: r.canceled_at ?? null,
+    isOverdue: computeIsOverdue(r),
     positions: r.positions ?? [],
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
@@ -121,6 +142,9 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     date: data.date,
     dueDate: data.due_date ?? "",
     paymentDate: data.payment_date ?? undefined,
+    paidAt: data.paid_at ?? null,
+    canceledAt: data.canceled_at ?? null,
+    isOverdue: computeIsOverdue(data),
     positions: data.positions ?? [],
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
@@ -142,6 +166,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
   const uid = await requireUserId();
 
+  const isDraft = inv.status === InvoiceStatus.DRAFT;
   const payload: DbInvoiceInsert = {
     id: inv.id,
     user_id: uid,
@@ -154,6 +179,8 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     date: inv.date,
     due_date: inv.dueDate ?? null,
     payment_date: inv.paymentDate ?? null,
+    paid_at: inv.paidAt ?? null,
+    canceled_at: inv.canceledAt ?? null,
 
     positions: inv.positions ?? [],
 
@@ -163,8 +190,8 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     vat_rate: Number(inv.vatRate ?? 0),
     is_small_business: Boolean(inv.isSmallBusiness ?? false),
     small_business_note: inv.smallBusinessNote ?? null,
-    status: toDbInvoiceStatus(inv.status ?? InvoiceStatus.DRAFT),
-    is_locked: Boolean(inv.isLocked ?? false),
+    status: isDraft ? toDbInvoiceStatus(inv.status ?? InvoiceStatus.DRAFT) : undefined,
+    is_locked: isDraft ? Boolean(inv.isLocked ?? false) : undefined,
     finalized_at: inv.finalizedAt ?? null,
     sent_at: inv.sentAt ?? null,
     last_sent_at: inv.lastSentAt ?? null,
