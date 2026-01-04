@@ -1130,22 +1130,40 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
       return sendError(res, 400, "bad_request", "Missing invoice id.");
     }
 
+    const includeDebugDetails = process.env.NODE_ENV !== "production";
     const token = getBearerToken(req);
     if (!token) {
       return sendError(res, 401, "unauthorized", "Unauthorized");
     }
     const supabase = createUserSupabaseClient(token);
-    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .select("id,status,is_locked,finalized_at,paid_at,canceled_at")
+      .eq("id", invoiceId)
+      .maybeSingle();
     if (error) {
+      console.error("Cancel invoice load failed", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      const status = normalized?.httpStatus ?? 400;
+      const code = normalized?.code || error.code || "load_failed";
+      const message = normalized?.message || error.message || "Invoice fetch failed.";
+      const response = { ok: false, error: { code, message } };
+      if (includeDebugDetails) {
+        response.error.details = error.details ?? null;
+        response.error.hint = error.hint ?? null;
+      }
+      return res.status(status).json(response);
     }
     if (!invoice) {
       return sendError(res, 404, "not_found", "Invoice not found.");
     }
     if (!["ISSUED", "SENT"].includes(invoice.status)) {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "status_transition_not_allowed", "Invoice must be ISSUED or SENT to cancel.");
     }
 
     const nowIso = new Date().toISOString();
@@ -1161,9 +1179,24 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
+      if (updateError) {
+        console.error("Cancel invoice update failed", {
+          code: updateError.code,
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+        });
+      }
       const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      const status = normalized?.httpStatus ?? 400;
+      const code = normalized?.code || updateError?.code || "update_failed";
+      const message = normalized?.message || updateError?.message || "Invoice update failed.";
+      const response = { ok: false, error: { code, message } };
+      if (includeDebugDetails && updateError) {
+        response.error.details = updateError.details ?? null;
+        response.error.hint = updateError.hint ?? null;
+      }
+      return res.status(status).json(response);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
@@ -1172,7 +1205,7 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
     if (normalized) {
       return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
     }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendError(res, err?.status || 400, "update_failed", "Invoice update failed.");
   }
 });
 
