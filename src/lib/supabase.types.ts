@@ -127,7 +127,9 @@ export type Database = {
           client_id: string;
           created_at: string;
           date: string;
+          invoice_date: string;
           due_date: string | null;
+          payment_terms_days: number;
           paid_at: string | null;
           canceled_at: string | null;
           finalized_at: string | null;
@@ -157,7 +159,9 @@ export type Database = {
           client_id: string;
           created_at?: string;
           date?: string;
+          invoice_date?: string;
           due_date?: string | null;
+          payment_terms_days?: number;
           paid_at?: string | null;
           canceled_at?: string | null;
           finalized_at?: string | null;
@@ -187,7 +191,9 @@ export type Database = {
           client_id?: string;
           created_at?: string;
           date?: string;
+          invoice_date?: string;
           due_date?: string | null;
+          payment_terms_days?: number;
           paid_at?: string | null;
           canceled_at?: string | null;
           finalized_at?: string | null;
@@ -402,6 +408,7 @@ export type Database = {
           created_at: string;
           currency: string;
           default_payment_terms: number;
+          payment_terms_days: number;
           default_sender_identity_id: string | null;
           default_vat_rate: number;
           email: string;
@@ -435,6 +442,7 @@ export type Database = {
           created_at?: string;
           currency?: string;
           default_payment_terms?: number;
+          payment_terms_days?: number;
           default_sender_identity_id?: string | null;
           default_vat_rate?: number;
           email?: string;
@@ -468,6 +476,7 @@ export type Database = {
           created_at?: string;
           currency?: string;
           default_payment_terms?: number;
+          payment_terms_days?: number;
           default_sender_identity_id?: string | null;
           default_vat_rate?: number;
           email?: string;

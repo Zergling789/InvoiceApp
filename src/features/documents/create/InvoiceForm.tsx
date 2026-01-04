@@ -53,6 +53,7 @@ export function InvoiceForm({ onClose, onDirtyChange }: InvoiceFormProps) {
           id: newId(),
           number: null,
           date: todayISO(),
+          paymentTermsDays: defaultTerms,
           dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
           vatRate: Number(settingsData.defaultVatRate ?? 0),
           isSmallBusiness: settingsData.isSmallBusiness ?? false,

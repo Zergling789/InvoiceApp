@@ -34,6 +34,7 @@ const seed = {
   id: "inv-1",
   number: "RE-0001",
   date: "2025-01-01",
+  paymentTermsDays: 14,
   dueDate: "2025-01-10",
   vatRate: 19,
   isSmallBusiness: false,
@@ -94,6 +95,7 @@ describe("DocumentEditor send email status", () => {
       clientId: "client-1",
       positions: [],
       status: InvoiceStatus.SENT,
+      paymentTermsDays: 14,
     });
     const user = userEvent.setup();
 
@@ -112,6 +114,7 @@ describe("DocumentEditor send email status", () => {
               clientId: "client-1",
               positions: [],
               status: InvoiceStatus.DRAFT,
+              paymentTermsDays: 14,
             }}
           />
         </ConfirmProvider>

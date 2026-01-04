@@ -111,6 +111,7 @@ export interface Invoice {
   clientId: string;
   projectId?: string;
   date: string;
+  paymentTermsDays: number;
   dueDate?: string;
   positions: Position[];
   vatRate: number;

@@ -46,9 +46,15 @@ const defaultSettings: UserSettings = {
   defaultSenderIdentityId: null,
 };
 
+const PAYMENT_TERMS_OPTIONS = [0, 7, 14, 30, 60] as const;
+
 function toNumberOrFallback(v: unknown, fallback: number) {
   const n = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
   return Number.isFinite(n) ? n : fallback;
+}
+
+function clampPaymentTerms(value: unknown) {
+  return Math.min(365, Math.max(0, Math.trunc(toNumberOrFallback(value, 14))));
 }
 
 export default function SettingsView() {
@@ -73,6 +79,13 @@ export default function SettingsView() {
     if (!settings.email.trim()) w.push("E-Mail fehlt");
     return w;
   }, [settings]);
+
+  const paymentTermsPreset = useMemo(() => {
+    const normalized = clampPaymentTerms(settings.defaultPaymentTerms);
+    return PAYMENT_TERMS_OPTIONS.includes(normalized as (typeof PAYMENT_TERMS_OPTIONS)[number])
+      ? String(normalized)
+      : "custom";
+  }, [settings.defaultPaymentTerms]);
 
   const verifiedIdentities = useMemo(
     () => senderIdentities.filter((identity) => identity.status === "verified"),
@@ -225,7 +238,7 @@ export default function SettingsView() {
         ...defaultSettings,
         ...settings,
         defaultVatRate: Math.max(0, toNumberOrFallback(settings.defaultVatRate, 19)),
-        defaultPaymentTerms: Math.max(0, Math.trunc(toNumberOrFallback(settings.defaultPaymentTerms, 14))),
+        defaultPaymentTerms: clampPaymentTerms(settings.defaultPaymentTerms),
         numberPadding: Math.max(1, Math.trunc(settings.numberPadding ?? 4)),
       };
 
@@ -406,6 +419,53 @@ export default function SettingsView() {
 
       <AppCard className="space-y-4">
         <div className="border-b pb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Zahlungsbedingungen</h2>
+          <p className="text-sm text-gray-500">
+            Wird als Standard für neue Rechnungen übernommen.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Zahlungsziel</label>
+            <select
+              className="w-full border rounded p-2"
+              value={paymentTermsPreset}
+              onChange={(e) => {
+                if (e.target.value === "custom") return;
+                setSettings({ ...settings, defaultPaymentTerms: clampPaymentTerms(e.target.value) });
+              }}
+            >
+              {PAYMENT_TERMS_OPTIONS.map((days) => (
+                <option key={days} value={String(days)}>
+                  {days} Tage
+                </option>
+              ))}
+              <option value="custom">Benutzerdefiniert</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tage (Custom)</label>
+            <input
+              type="number"
+              className="w-full border rounded p-2"
+              value={clampPaymentTerms(settings.defaultPaymentTerms)}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  defaultPaymentTerms: clampPaymentTerms(e.target.value),
+                })
+              }
+              min={0}
+              max={365}
+              inputMode="numeric"
+            />
+            <p className="text-xs text-gray-500 mt-1">0–365 Tage möglich.</p>
+          </div>
+        </div>
+      </AppCard>
+
+      <AppCard className="space-y-4">
+        <div className="border-b pb-3">
           <h2 className="text-sm font-semibold text-gray-700">Dokument-Defaults</h2>
           <p className="text-sm text-gray-500">Standardwerte für Angebote und Rechnungen.</p>
         </div>
@@ -442,22 +502,6 @@ export default function SettingsView() {
                 setSettings({ ...settings, defaultVatRate: toNumberOrFallback(e.target.value, 19) })
               }
               inputMode="decimal"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Zahlungsziel (Tage)</label>
-            <input
-              type="number"
-              className="w-full border rounded p-2"
-              value={settings.defaultPaymentTerms}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  defaultPaymentTerms: Math.max(0, Math.trunc(toNumberOrFallback(e.target.value, 14))),
-                })
-              }
-              inputMode="numeric"
             />
           </div>
         </div>

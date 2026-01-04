@@ -399,19 +399,21 @@ export default function TodosPage() {
       const nextSettings = settings ?? (await fetchSettings());
       setSettings(nextSettings);
       const isInvoice = type === "invoice";
+      const defaultTerms = Number(nextSettings.defaultPaymentTerms ?? 14);
       const num = isInvoice ? null : await getNextDocumentNumber(type, nextSettings);
       const seed: EditorSeed = {
         id: newId(),
         number: num,
         date: todayISO(),
         dueDate: isInvoice
-          ? invoiceService.buildDueDate(todayISO(), Number(nextSettings.defaultPaymentTerms ?? 14))
+          ? invoiceService.buildDueDate(todayISO(), defaultTerms)
           : undefined,
+        paymentTermsDays: isInvoice ? defaultTerms : undefined,
         validUntil: !isInvoice ? addDaysISO(14) : undefined,
         vatRate: Number(nextSettings.defaultVatRate ?? 0),
         introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
         footerText: isInvoice
-          ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
+          ? `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`
           : "Ich freue mich auf Ihre Rückmeldung.",
       };
       setEditorType(type);

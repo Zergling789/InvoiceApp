@@ -7,6 +7,7 @@ const baseInvoice: Invoice = {
   number: "INV-1",
   clientId: "client-1",
   date: "2024-01-01",
+  paymentTermsDays: 14,
   positions: [],
   vatRate: 0,
   introText: "",
