@@ -42,6 +42,8 @@ const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatu
       return InvoiceStatus.OVERDUE;
     case InvoiceStatus.PAID:
       return InvoiceStatus.PAID;
+    case InvoiceStatus.CANCELED:
+      return InvoiceStatus.CANCELED;
     case InvoiceStatus.DRAFT:
     default:
       return InvoiceStatus.DRAFT;
@@ -142,6 +144,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
   const uid = await requireUserId();
 
+  const isDraft = inv.status === InvoiceStatus.DRAFT;
   const payload: DbInvoiceInsert = {
     id: inv.id,
     user_id: uid,
@@ -163,8 +166,8 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     vat_rate: Number(inv.vatRate ?? 0),
     is_small_business: Boolean(inv.isSmallBusiness ?? false),
     small_business_note: inv.smallBusinessNote ?? null,
-    status: toDbInvoiceStatus(inv.status ?? InvoiceStatus.DRAFT),
-    is_locked: Boolean(inv.isLocked ?? false),
+    status: isDraft ? toDbInvoiceStatus(inv.status ?? InvoiceStatus.DRAFT) : undefined,
+    is_locked: isDraft ? Boolean(inv.isLocked ?? false) : undefined,
     finalized_at: inv.finalizedAt ?? null,
     sent_at: inv.sentAt ?? null,
     last_sent_at: inv.lastSentAt ?? null,

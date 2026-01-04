@@ -113,6 +113,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       return { label, tone: "green" as const };
     }
 
+    if (status === InvoiceStatus.CANCELED) {
+      return { label, tone: "gray" as const };
+    }
+
     return { label, tone: "yellow" as const };
   };
 
@@ -386,25 +390,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     if (!ok) return;
 
     try {
-      const inv = await invoiceService.getInvoice(invId);
-      if (!inv) {
-        toast.error("Rechnung nicht gefunden.");
-        return;
-      }
-
-      if (!inv.dueDate) {
-        toast.error("Fehler: Rechnung hat kein Fälligkeitsdatum (dueDate).");
-        return;
-      }
-
-      const paidAt = new Date().toISOString();
-
-      await invoiceService.saveInvoice({
-        ...inv,
-        status: InvoiceStatus.PAID,
-        paymentDate: paidAt,
-      });
-
+      await invoiceService.markInvoicePaid(invId);
       await refresh();
     } catch (e) {
       logError(e);
@@ -495,6 +481,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           const overdue =
             isInvoice &&
             item.status !== InvoiceStatus.PAID &&
+            item.status !== InvoiceStatus.CANCELED &&
             isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
 
           if (isInvoice) {
@@ -524,7 +511,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                   </button>
                 }
                 secondaryAction={
-                  item.status !== InvoiceStatus.PAID && !item.isLocked ? (
+                  [InvoiceStatus.ISSUED, InvoiceStatus.SENT, InvoiceStatus.OVERDUE].includes(
+                    item.status as InvoiceStatus
+                  ) ? (
                     <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
                       <Check size={16} /> Als bezahlt
                     </Button>
@@ -643,6 +632,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               const overdue =
                 isInvoice &&
                 item.status !== InvoiceStatus.PAID &&
+                item.status !== InvoiceStatus.CANCELED &&
                 isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
 
               return (
@@ -664,6 +654,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                             item.status === OfferStatus.ACCEPTED ||
                             item.status === OfferStatus.INVOICED
                               ? "green"
+                              : item.status === InvoiceStatus.OVERDUE
+                              ? "red"
                               : item.status === OfferStatus.SENT ||
                                 item.status === InvoiceStatus.SENT ||
                                 item.status === InvoiceStatus.ISSUED
@@ -708,7 +700,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                         </button>
                       )}
 
-                      {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
+                      {isInvoice &&
+                        [InvoiceStatus.ISSUED, InvoiceStatus.SENT, InvoiceStatus.OVERDUE].includes(
+                          item.status as InvoiceStatus
+                        ) && (
                         <button
                           onClick={() => void handleMarkPaid(item.id)}
                           title="Als bezahlt markieren"

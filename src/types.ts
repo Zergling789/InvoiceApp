@@ -102,6 +102,7 @@ export enum InvoiceStatus {
   SENT = "SENT",
   OVERDUE = "OVERDUE",
   PAID = "PAID",
+  CANCELED = "CANCELED",
 }
 
 export interface Invoice {

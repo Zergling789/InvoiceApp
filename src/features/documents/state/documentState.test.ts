@@ -29,6 +29,7 @@ const baseOffer: Offer = {
 
 describe("documentState", () => {
   it("derives invoice phases in priority order", () => {
+    expect(getInvoicePhase({ ...baseInvoice, status: InvoiceStatus.CANCELED })).toBe("canceled");
     expect(getInvoicePhase({ ...baseInvoice, paymentDate: "2024-01-10" })).toBe("paid");
     expect(
       getInvoicePhase({ ...baseInvoice, dueDate: "2024-01-05", status: InvoiceStatus.SENT }, new Date("2024-01-10"))
@@ -60,6 +61,14 @@ describe("documentState", () => {
     expect(overdueCaps.canSend).toBe(true);
     expect(overdueCaps.canSendDunning).toBe(true);
     expect(overdueCaps.canMarkPaid).toBe(true);
+    expect(overdueCaps.canCancel).toBe(true);
+
+    const canceledCaps = getDocumentCapabilities("invoice", {
+      ...baseInvoice,
+      status: InvoiceStatus.CANCELED,
+    });
+    expect(canceledCaps.canMarkPaid).toBe(false);
+    expect(canceledCaps.canCancel).toBe(false);
   });
 
   it("calculates offer capabilities", () => {

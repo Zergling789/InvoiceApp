@@ -31,14 +31,15 @@ export const getDaysSince = (dateStr?: string | null, today = new Date()) => {
 };
 
 export const isInvoicePaid = (invoice: Invoice) => invoice.status === InvoiceStatus.PAID;
+export const isInvoiceCanceled = (invoice: Invoice) => invoice.status === InvoiceStatus.CANCELED;
 
 export const isInvoiceOverdue = (invoice: Invoice, today = new Date()) => {
-  if (isInvoicePaid(invoice)) return false;
+  if (isInvoicePaid(invoice) || isInvoiceCanceled(invoice)) return false;
   if (!invoice.dueDate) return false;
   return new Date(invoice.dueDate).getTime() < today.getTime();
 };
 
-export const isInvoiceOpen = (invoice: Invoice) => !isInvoicePaid(invoice);
+export const isInvoiceOpen = (invoice: Invoice) => !isInvoicePaid(invoice) && !isInvoiceCanceled(invoice);
 
 export const isOfferOpen = (offer: Offer) =>
   offer.status !== OfferStatus.ACCEPTED &&

@@ -3,7 +3,7 @@ import { isInvoiceOverdue, isInvoicePaid } from "@/utils/dashboard";
 
 export type DocType = "invoice" | "offer";
 
-export type InvoicePhase = "draft" | "issued" | "sent" | "overdue" | "paid";
+export type InvoicePhase = "draft" | "issued" | "sent" | "overdue" | "paid" | "canceled";
 export type OfferPhase = "draft" | "sent" | "accepted" | "rejected" | "invoiced";
 export type DocumentPhase = InvoicePhase | OfferPhase;
 
@@ -13,7 +13,9 @@ type InvoiceCapabilities = {
   canSend: boolean;
   canSendReminder: boolean;
   canSendDunning: boolean;
+  canMarkSent: boolean;
   canMarkPaid: boolean;
+  canCancel: boolean;
 };
 
 type OfferCapabilities = {
@@ -52,6 +54,7 @@ const isLockedDocument = (doc: { isLocked?: boolean; finalizedAt?: string | null
   Boolean(doc.isLocked ?? doc.is_locked ?? false) || Boolean(doc.finalizedAt ?? null);
 
 export const getInvoicePhase = (invoice: Invoice, now = new Date()): InvoicePhase => {
+  if (invoice.status === InvoiceStatus.CANCELED) return "canceled";
   const paymentDate = getInvoicePaymentDate(invoice);
   if (paymentDate || isInvoicePaid(invoice) || invoice.status === InvoiceStatus.PAID) return "paid";
 
@@ -90,6 +93,7 @@ export const getDocumentCapabilities = (
     const phase = getInvoicePhase(invoice, now);
     const locked = isLockedDocument(invoice);
     const paid = phase === "paid";
+    const canceled = phase === "canceled";
 
     return {
       canEdit: !locked && phase === "draft",
@@ -97,7 +101,9 @@ export const getDocumentCapabilities = (
       canSend: ["issued", "sent", "overdue"].includes(phase),
       canSendReminder: phase === "sent",
       canSendDunning: phase === "overdue",
-      canMarkPaid: !paid && ["issued", "sent", "overdue"].includes(phase),
+      canMarkSent: phase === "issued",
+      canMarkPaid: !paid && !canceled && ["issued", "sent", "overdue"].includes(phase),
+      canCancel: !paid && !canceled && ["issued", "sent", "overdue"].includes(phase),
     };
   }
 

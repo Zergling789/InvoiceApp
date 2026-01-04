@@ -407,9 +407,13 @@ export function DocumentEditor({
     return { defaultSubject, defaultMessage };
   }
 
-  const handleSendSuccess = async (nextData: FormData) => {
-    setFormData(nextData);
-    await handleSave({ closeAfterSave: false, data: nextData, allowLocked: true });
+  const handleSendSuccess = async () => {
+    const refreshed = isInvoice
+      ? await invoiceService.getInvoice(formData.id)
+      : await offerService.getOffer(formData.id);
+    if (refreshed) {
+      setFormData(refreshed as FormData);
+    }
     await onSaved();
   };
 
@@ -467,7 +471,10 @@ export function DocumentEditor({
     if (!ok) return;
 
     try {
-      await invoiceService.finalizeInvoice(formData.id);
+      const updated = await invoiceService.finalizeInvoice(formData.id);
+      if (updated) {
+        setFormData({ ...formData, ...updated });
+      }
     } catch (error) {
       const code = (error as Error & { code?: string }).code;
       toast.error(
@@ -475,16 +482,15 @@ export function DocumentEditor({
       );
       return null;
     }
-
-    const updated = await invoiceService.getInvoice(formData.id);
-    if (!updated) {
+    const refreshed = await invoiceService.getInvoice(formData.id);
+    if (!refreshed) {
       toast.error("Rechnung konnte nicht geladen werden.");
       return null;
     }
 
     const nextData: FormData = {
       ...formData,
-      ...updated,
+      ...refreshed,
     };
     setFormData(nextData);
     await onSaved();
@@ -563,8 +569,8 @@ export function DocumentEditor({
       defaultSubject={defaultSubject}
       defaultMessage={defaultMessage}
       onFinalize={isInvoice ? handleFinalizeInvoice : undefined}
-      onSent={async (nextData) => {
-        await handleSendSuccess(nextData as FormData);
+      onSent={async () => {
+        await handleSendSuccess();
       }}
     />
   );

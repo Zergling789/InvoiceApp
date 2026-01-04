@@ -20,3 +20,22 @@
   3. Setzt `invoice_number` (falls leer), `finalized_at`, `status = 'ISSUED'`, `is_locked = true`.
   4. Trigger verhindert nach Finalisierung jede Änderung an `invoice_number`.
   5. DB-Trigger sperrt inhaltliche Updates auf `public.invoices` sobald `is_locked = true`.
+
+## Invoice status model
+- Statuswerte: `DRAFT`, `ISSUED`, `SENT`, `OVERDUE`, `PAID`, `CANCELED`.
+- Status ist nicht frei editierbar, sondern über Aktionen:
+  - `POST /api/invoices/:id/finalize` → `ISSUED`
+  - `POST /api/invoices/:id/mark-sent` → `SENT` (nur aus `ISSUED`)
+  - `POST /api/invoices/:id/mark-paid` → `PAID` (aus `ISSUED`/`SENT`/`OVERDUE`)
+  - `POST /api/invoices/:id/cancel` → `CANCELED` (aus `ISSUED`/`SENT`/`OVERDUE`)
+- DB-Trigger validieren die Übergänge:
+  - `DRAFT → ISSUED`
+  - `ISSUED → SENT | PAID | OVERDUE | CANCELED`
+  - `SENT → PAID | OVERDUE | CANCELED`
+  - `OVERDUE → PAID | CANCELED`
+  - `PAID`/`CANCELED` sind terminal.
+- Konsistenzregeln:
+  - `ISSUED`/`SENT`/`OVERDUE`/`PAID`/`CANCELED` setzen `is_locked = true`.
+  - `PAID` setzt `paid_at` (und `payment_date`) automatisch.
+  - `CANCELED` setzt `canceled_at` automatisch.
+- Overdue wird UI-seitig aus `due_date < today` berechnet (nur wenn Status nicht `PAID`/`CANCELED`).

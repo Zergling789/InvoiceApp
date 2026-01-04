@@ -9,11 +9,13 @@ import { InvoiceStatus } from "@/types";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 const saveInvoiceMock = vi.fn();
+const getInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
 
 
 vi.mock("@/app/invoices/invoiceService", () => ({
   saveInvoice: (...args: unknown[]) => saveInvoiceMock(...args),
+  getInvoice: (...args: unknown[]) => getInvoiceMock(...args),
 }));
 
 vi.mock("@/app/offers/offerService", () => ({
@@ -81,11 +83,18 @@ const clients = [
 describe("DocumentEditor send email status", () => {
   beforeEach(() => {
     saveInvoiceMock.mockReset();
+    getInvoiceMock.mockReset();
     sendDocumentEmailMock.mockReset();
   });
 
   it("sets status SENT on successful send", async () => {
     sendDocumentEmailMock.mockResolvedValue({ ok: true });
+    getInvoiceMock.mockResolvedValue({
+      id: "inv-1",
+      clientId: "client-1",
+      positions: [],
+      status: InvoiceStatus.SENT,
+    });
     const user = userEvent.setup();
 
     render(
@@ -116,9 +125,7 @@ describe("DocumentEditor send email status", () => {
     });
 
     await waitFor(() => {
-      expect(saveInvoiceMock).toHaveBeenCalledWith(
-        expect.objectContaining({ status: InvoiceStatus.SENT })
-      );
+      expect(getInvoiceMock).toHaveBeenCalled();
     });
 
   });
