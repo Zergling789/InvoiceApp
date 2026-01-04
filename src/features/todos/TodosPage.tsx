@@ -165,7 +165,9 @@ export default function TodosPage() {
       data.invoices.forEach((invoice) => {
         const isIncomplete =
           getInvoicePhase(invoice, today) === "draft" &&
-          ((invoice.positions ?? []).length === 0 || !invoice.clientId || invoice.vatRate == null);
+          ((invoice.positions ?? []).length === 0 ||
+            !invoice.clientId ||
+            (!invoice.isSmallBusiness && invoice.vatRate == null));
         if (isIncomplete) items.push({ type: "invoice", data: invoice });
       });
     }
@@ -189,7 +191,11 @@ export default function TodosPage() {
       secondaryAction?: TodoCard["secondaryAction"];
     }
   ) => {
-    const total = calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0));
+    const total = calculateDocumentTotal(
+      invoice.positions ?? [],
+      Number(invoice.vatRate ?? 0),
+      invoice.isSmallBusiness
+    );
     return {
       id: invoice.id,
       type: "invoice" as const,

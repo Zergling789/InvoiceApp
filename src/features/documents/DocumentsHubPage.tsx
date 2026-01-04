@@ -231,7 +231,11 @@ export default function DocumentsHubPage() {
               date: invoice.date,
               createdAt: (invoice as { createdAt?: string }).createdAt,
               amountLabel: formatMoney(
-                calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0)),
+                calculateDocumentTotal(
+                  invoice.positions ?? [],
+                  Number(invoice.vatRate ?? 0),
+                  invoice.isSmallBusiness
+                ),
                 invoiceCurrency,
                 locale
               ),

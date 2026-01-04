@@ -17,6 +17,7 @@ import {
   setDefaultSenderIdentity,
 } from "@/app/senderIdentities/senderIdentitiesService";
 import { trackEvent } from "@/lib/track";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 const defaultSettings: UserSettings = {
   name: "",
@@ -31,6 +32,8 @@ const defaultSettings: UserSettings = {
   email: "",
   emailDefaultSubject: "Dokument {nummer}",
   emailDefaultText: "Bitte im Anhang finden Sie das Dokument.",
+  isSmallBusiness: false,
+  smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
   logoUrl: "",
   primaryColor: "#4f46e5",
   templateId: "default",
@@ -362,6 +365,41 @@ export default function SettingsView() {
                 onChange={(e) => setSettings({ ...settings, bic: e.target.value })}
               />
             </div>
+          </div>
+        </div>
+      </AppCard>
+
+      <AppCard className="space-y-4">
+        <div className="border-b pb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Steuern</h2>
+          <p className="text-sm text-gray-500">Einstellungen für den Steuerhinweis auf Rechnungen.</p>
+        </div>
+        <div className="space-y-4">
+          <label className="flex items-start gap-3 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4"
+              checked={settings.isSmallBusiness}
+              onChange={(e) => setSettings({ ...settings, isSmallBusiness: e.target.checked })}
+            />
+            <span>
+              <span className="font-medium">Kleinunternehmer (§ 19 UStG)</span>
+              <span className="block text-xs text-gray-500">
+                Aktiviert den Hinweistext und blendet die Umsatzsteuer auf Rechnungen aus.
+              </span>
+            </span>
+          </label>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Hinweistext (optional)
+            </label>
+            <textarea
+              className="w-full border rounded p-2"
+              rows={2}
+              value={settings.smallBusinessNote ?? ""}
+              onChange={(e) => setSettings({ ...settings, smallBusinessNote: e.target.value })}
+              placeholder={SMALL_BUSINESS_DEFAULT_NOTE}
+            />
           </div>
         </div>
       </AppCard>

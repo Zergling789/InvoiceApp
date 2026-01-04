@@ -132,6 +132,7 @@ export type Database = {
           footer_text: string;
           id: string;
           intro_text: string;
+          is_small_business: boolean;
           is_locked: boolean;
           last_sent_at: string | null;
           last_sent_to: string | null;
@@ -140,6 +141,7 @@ export type Database = {
           payment_date: string | null;
           positions: Json;
           project_id: string | null;
+          small_business_note: string | null;
           sent_at: string | null;
           sent_count: number;
           sent_via: string | null;
@@ -157,6 +159,7 @@ export type Database = {
           footer_text?: string;
           id?: string;
           intro_text?: string;
+          is_small_business?: boolean;
           is_locked?: boolean;
           last_sent_at?: string | null;
           last_sent_to?: string | null;
@@ -165,6 +168,7 @@ export type Database = {
           payment_date?: string | null;
           positions?: Json;
           project_id?: string | null;
+          small_business_note?: string | null;
           sent_at?: string | null;
           sent_count?: number;
           sent_via?: string | null;
@@ -182,6 +186,7 @@ export type Database = {
           footer_text?: string;
           id?: string;
           intro_text?: string;
+          is_small_business?: boolean;
           is_locked?: boolean;
           last_sent_at?: string | null;
           last_sent_to?: string | null;
@@ -190,6 +195,7 @@ export type Database = {
           payment_date?: string | null;
           positions?: Json;
           project_id?: string | null;
+          small_business_note?: string | null;
           sent_at?: string | null;
           sent_count?: number;
           sent_via?: string | null;
@@ -394,6 +400,7 @@ export type Database = {
           email_default_text: string;
           footer_text: string;
           iban: string;
+          is_small_business: boolean;
           locale: string;
           logo_url: string;
           name: string;
@@ -401,6 +408,7 @@ export type Database = {
           prefix_invoice: string;
           prefix_offer: string;
           primary_color: string;
+          small_business_note: string | null;
           tax_id: string;
           template_id: string;
           updated_at: string;
@@ -421,6 +429,7 @@ export type Database = {
           email_default_text?: string;
           footer_text?: string;
           iban?: string;
+          is_small_business?: boolean;
           locale?: string;
           logo_url?: string;
           name?: string;
@@ -428,6 +437,7 @@ export type Database = {
           prefix_invoice?: string;
           prefix_offer?: string;
           primary_color?: string;
+          small_business_note?: string | null;
           tax_id?: string;
           template_id?: string;
           updated_at?: string;
@@ -448,6 +458,7 @@ export type Database = {
           email_default_text?: string;
           footer_text?: string;
           iban?: string;
+          is_small_business?: boolean;
           locale?: string;
           logo_url?: string;
           name?: string;
@@ -455,6 +466,7 @@ export type Database = {
           prefix_invoice?: string;
           prefix_offer?: string;
           primary_color?: string;
+          small_business_note?: string | null;
           tax_id?: string;
           template_id?: string;
           updated_at?: string;

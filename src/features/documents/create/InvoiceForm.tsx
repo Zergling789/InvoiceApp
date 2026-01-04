@@ -8,6 +8,7 @@ import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 const toLocalISODate = (d: Date) => {
   const year = d.getFullYear();
@@ -56,6 +57,8 @@ export function InvoiceForm({ onClose, onDirtyChange }: InvoiceFormProps) {
           date: todayISO(),
           dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
           vatRate: Number(settingsData.defaultVatRate ?? 0),
+          isSmallBusiness: settingsData.isSmallBusiness ?? false,
+          smallBusinessNote: settingsData.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
           introText: "",
           footerText: `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`,
         };
