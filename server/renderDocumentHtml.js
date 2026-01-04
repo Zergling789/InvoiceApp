@@ -42,6 +42,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
 
   const companyName = settings.companyName ?? "";
   const addressLines = String(settings.address ?? "").split("\n").filter(Boolean);
+  const clientDisplayName = client.companyName ?? client.name ?? "";
   const clientAddressLines = String(client.address ?? "").split("\n").filter(Boolean);
 
   const introHtml = doc.introText ? sanitizeMultiline(doc.introText) : "";
@@ -167,7 +168,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
       <div class="section page-break">
         <div class="recipient-header">${escapeHtml(companyName)} — ${escapeHtml(addressLines[0] ?? "")}</div>
         <div class="recipient">
-          ${escapeHtml(client.companyName ?? "")}<br />
+          ${escapeHtml(clientDisplayName)}<br />
           ${client.contactPerson ? `${escapeHtml(client.contactPerson)}<br />` : ""}
           ${clientAddressLines.map(escapeHtml).join("<br />")}
         </div>

@@ -199,7 +199,11 @@ export default function TodosPage() {
       id: invoice.id,
       type: "invoice" as const,
       number: invoice.number ?? "Entwurf",
-      clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
+      clientName:
+        invoice.clientName?.trim() ||
+        invoice.clientCompanyName?.trim() ||
+        clientNameById.get(invoice.clientId) ||
+        "Unbekannter Kunde",
       amountLabel: formatCurrencyEur(total),
       statusLabel: options.statusLabel,
       statusTone: options.tone,

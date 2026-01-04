@@ -109,6 +109,13 @@ export interface Invoice {
   number: string | null;
   offerId?: string;
   clientId: string;
+  clientName?: string;
+  clientCompanyName?: string | null;
+  clientContactPerson?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  clientVatId?: string | null;
+  clientAddress?: string | null;
   projectId?: string;
   date: string;
   paymentTermsDays: number;

@@ -672,6 +672,13 @@ const mapInvoiceRow = (row = {}) => ({
   id: row.id,
   number: row.invoice_number ?? row.number ?? null,
   clientId: row.client_id,
+  clientName: row.client_name ?? "",
+  clientCompanyName: row.client_company_name ?? "",
+  clientContactPerson: row.client_contact_person ?? "",
+  clientEmail: row.client_email ?? "",
+  clientPhone: row.client_phone ?? "",
+  clientVatId: row.client_vat_id ?? "",
+  clientAddress: row.client_address ?? "",
   projectId: row.project_id ?? undefined,
   date: row.invoice_date ?? row.date,
   dueDate: row.due_date ?? "",
@@ -705,6 +712,17 @@ const mapSettingsRow = (row = {}) => ({
   bic: row.bic ?? "",
   bankName: row.bank_name ?? "",
   footerText: row.footer_text ?? "",
+});
+
+const mapInvoiceSnapshotClient = (row = {}) => ({
+  id: row.client_id ?? "",
+  companyName: row.client_company_name ?? row.client_name ?? "",
+  name: row.client_name ?? row.client_company_name ?? "",
+  contactPerson: row.client_contact_person ?? "",
+  email: row.client_email ?? "",
+  address: row.client_address ?? "",
+  vatId: row.client_vat_id ?? "",
+  phone: row.client_phone ?? "",
 });
 
 const mapClientRow = (row = {}) => ({
@@ -746,7 +764,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, invoice_number, number, client_id, project_id, date, invoice_date, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
+    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, project_id, date, invoice_date, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db
@@ -781,7 +799,21 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   const settings = mapSettingsRow(settingsRow ?? {});
 
   let client = mapClientRow({});
-  if (doc.clientId) {
+  if (resolvedType === "invoice") {
+    const snapshotClient = mapInvoiceSnapshotClient(docRow);
+    const hasSnapshot = [
+      snapshotClient.companyName,
+      snapshotClient.name,
+      snapshotClient.contactPerson,
+      snapshotClient.email,
+      snapshotClient.address,
+    ].some((value) => String(value ?? "").trim().length > 0);
+    if (hasSnapshot) {
+      client = snapshotClient;
+    }
+  }
+
+  if (!client.companyName && !client.name && doc.clientId) {
     const { data: clientRow } = await db
       .from("clients")
       .select("id, company_name, contact_person, email, address")

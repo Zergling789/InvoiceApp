@@ -12,6 +12,13 @@ const INVOICE_FIELDS = [
   "number",
   "offer_id",
   "client_id",
+  "client_name",
+  "client_company_name",
+  "client_contact_person",
+  "client_email",
+  "client_phone",
+  "client_vat_id",
+  "client_address",
   "project_id",
   "date",
   "invoice_date",
@@ -98,6 +105,13 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     number: r.invoice_number ?? r.number ?? null,
     offerId: r.offer_id ?? undefined,
     clientId: r.client_id,
+    clientName: r.client_name ?? "",
+    clientCompanyName: r.client_company_name ?? null,
+    clientContactPerson: r.client_contact_person ?? null,
+    clientEmail: r.client_email ?? null,
+    clientPhone: r.client_phone ?? null,
+    clientVatId: r.client_vat_id ?? null,
+    clientAddress: r.client_address ?? null,
     projectId: r.project_id ?? undefined,
     date: r.invoice_date ?? r.date,
     paymentTermsDays: Number(r.payment_terms_days ?? 14),
@@ -141,6 +155,13 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     number: data.invoice_number ?? data.number ?? null,
     offerId: data.offer_id ?? undefined,
     clientId: data.client_id,
+    clientName: data.client_name ?? "",
+    clientCompanyName: data.client_company_name ?? null,
+    clientContactPerson: data.client_contact_person ?? null,
+    clientEmail: data.client_email ?? null,
+    clientPhone: data.client_phone ?? null,
+    clientVatId: data.client_vat_id ?? null,
+    clientAddress: data.client_address ?? null,
     projectId: data.project_id ?? undefined,
     date: data.invoice_date ?? data.date,
     paymentTermsDays: Number(data.payment_terms_days ?? 14),
@@ -178,6 +199,13 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
 
     offer_id: inv.offerId ?? null,
     client_id: inv.clientId,
+    client_name: isDraft ? inv.clientName ?? "" : undefined,
+    client_company_name: isDraft ? inv.clientCompanyName ?? null : undefined,
+    client_contact_person: isDraft ? inv.clientContactPerson ?? null : undefined,
+    client_email: isDraft ? inv.clientEmail ?? null : undefined,
+    client_phone: isDraft ? inv.clientPhone ?? null : undefined,
+    client_vat_id: isDraft ? inv.clientVatId ?? null : undefined,
+    client_address: isDraft ? inv.clientAddress ?? null : undefined,
     project_id: inv.projectId ?? null,
 
     date: inv.date,
@@ -208,7 +236,22 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
   };
 
   const { error } = await supabase.from("invoices").upsert(payload, { onConflict: "id" });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const err = new Error(error.message);
+    (err as Error & { code?: string }).code = error.message;
+    throw err;
+  }
+
+  if (isDraft && inv.clientId) {
+    const { error: snapshotError } = await supabase.rpc("copy_customer_snapshot_to_invoice", {
+      p_invoice_id: inv.id,
+    });
+    if (snapshotError) {
+      const err = new Error(snapshotError.message);
+      (err as Error & { code?: string }).code = snapshotError.message;
+      throw err;
+    }
+  }
 }
 
 // ---------- DELETE ----------

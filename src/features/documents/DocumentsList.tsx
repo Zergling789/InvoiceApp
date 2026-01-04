@@ -50,6 +50,7 @@ type DocListItem = {
   id: string;
   number: string;
   clientId: string;
+  clientName?: string;
   projectId?: string;
   date: string;
   dueDate?: string;
@@ -151,6 +152,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   }, [clients]);
 
   const getClientName = (id: string) => clientNameById.get(id) || "Unknown";
+  const getItemClientName = (item: DocListItem) =>
+    isInvoice ? item.clientName?.trim() || getClientName(item.clientId) : getClientName(item.clientId);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -172,6 +175,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             id: inv.id,
             number: inv.number ?? "Entwurf",
             clientId: inv.clientId,
+            clientName: inv.clientName ?? inv.clientCompanyName ?? "",
             projectId: inv.projectId,
             date: inv.date,
             dueDate: inv.dueDate,
@@ -359,12 +363,30 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       const defaultTerms = Number(s.defaultPaymentTerms ?? 14);
       const invoiceId = newId();
+      const snapshotClient = clients.find((c) => c.id === offer.clientId);
+      const snapshot = snapshotClient
+        ? {
+            clientName:
+              snapshotClient.companyName?.trim() || snapshotClient.contactPerson || "",
+            clientCompanyName: snapshotClient.companyName ?? "",
+            clientContactPerson: snapshotClient.contactPerson ?? "",
+            clientEmail: snapshotClient.email ?? "",
+            clientAddress: snapshotClient.address ?? "",
+          }
+        : {
+            clientName: "",
+            clientCompanyName: "",
+            clientContactPerson: "",
+            clientEmail: "",
+            clientAddress: "",
+          };
 
       await invoiceService.saveInvoice({
         id: invoiceId,
         number: null,
         offerId: offer.id,
         clientId: offer.clientId,
+        ...snapshot,
         projectId: offer.projectId,
         date: todayISO(),
         paymentTermsDays: defaultTerms,
@@ -500,7 +522,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 number={item.number}
                 date={item.date ? formatDate(item.date, settings?.locale) : "—"}
                 amount={formatMoney(total, invoiceCurrency, locale)}
-                clientName={getClientName(item.clientId)}
+                clientName={getItemClientName(item)}
                 statusLabel={statusMeta.label}
                 statusTone={statusMeta.tone}
                 metadata={
@@ -555,7 +577,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               number={item.number}
               date={item.date ? formatDate(item.date, settings?.locale) : "—"}
               amount={formatMoney(total, offerCurrency, locale)}
-              clientName={getClientName(item.clientId)}
+              clientName={getItemClientName(item)}
               statusLabel={offerMeta.label}
               statusTone={offerMeta.tone}
               metadata={
@@ -646,7 +668,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               return (
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="p-4 font-medium">{item.number}</td>
-                  <td className="p-4">{getClientName(item.clientId)}</td>
+                  <td className="p-4">{getItemClientName(item)}</td>
                   <td className="p-4 text-sm text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</td>
                   <td className="p-4 font-mono">
                     {formatMoney(total, isInvoice ? invoiceCurrency : offerCurrency, locale)}

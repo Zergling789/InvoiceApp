@@ -121,8 +121,19 @@ export default function DocumentDetailPage() {
 
   const client = useMemo(() => {
     if (!doc) return undefined;
+    if (docType === "invoice") {
+      const invoice = doc as Invoice;
+      return {
+        id: invoice.clientId,
+        companyName: invoice.clientCompanyName?.trim() || invoice.clientName?.trim() || "",
+        contactPerson: invoice.clientContactPerson ?? "",
+        email: invoice.clientEmail ?? "",
+        address: invoice.clientAddress ?? "",
+        notes: "",
+      } as Client;
+    }
     return clients.find((entry) => entry.id === doc.clientId);
-  }, [clients, doc]);
+  }, [clients, doc, docType]);
 
   const isSmallBusiness =
     docType === "invoice" && doc ? Boolean((doc as Invoice).isSmallBusiness) : false;

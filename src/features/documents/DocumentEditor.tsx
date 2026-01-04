@@ -46,6 +46,13 @@ type FormData = {
   dueDate?: string;
   validUntil?: string;
   clientId: string;
+  clientName?: string;
+  clientCompanyName?: string | null;
+  clientContactPerson?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  clientVatId?: string | null;
+  clientAddress?: string | null;
   positions: Position[];
   introText: string;
   footerText: string;
@@ -84,6 +91,20 @@ function applyTemplate(template: string, data: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (match, key) => data[key] ?? match);
 }
 
+function buildSnapshotFromClient(client?: Client | null) {
+  const companyName = client?.companyName ?? "";
+  const contactPerson = client?.contactPerson ?? "";
+  return {
+    clientName: companyName.trim() ? companyName : contactPerson,
+    clientCompanyName: companyName,
+    clientContactPerson: contactPerson,
+    clientEmail: client?.email ?? "",
+    clientPhone: null,
+    clientVatId: null,
+    clientAddress: client?.address ?? "",
+  };
+}
+
 function buildFormData(
   seed: EditorSeed,
   initial: Partial<FormData> | undefined,
@@ -98,6 +119,13 @@ function buildFormData(
     dueDate: seed.dueDate,
     validUntil: seed.validUntil,
     clientId: "",
+    clientName: "",
+    clientCompanyName: "",
+    clientContactPerson: "",
+    clientEmail: "",
+    clientPhone: null,
+    clientVatId: null,
+    clientAddress: "",
     positions: [],
     introText: seed.introText ?? "",
     footerText: seed.footerText ?? "",
@@ -124,6 +152,13 @@ function buildFormData(
   return {
     ...merged,
     clientId: merged.clientId ?? "",
+    clientName: merged.clientName ?? "",
+    clientCompanyName: merged.clientCompanyName ?? "",
+    clientContactPerson: merged.clientContactPerson ?? "",
+    clientEmail: merged.clientEmail ?? "",
+    clientPhone: merged.clientPhone ?? null,
+    clientVatId: merged.clientVatId ?? null,
+    clientAddress: merged.clientAddress ?? "",
     positions: Array.isArray(merged.positions) ? (merged.positions as Position[]) : [],
     introText: merged.introText ?? "",
     footerText: merged.footerText ?? "",
@@ -235,6 +270,37 @@ export function DocumentEditor({
     !formData.invoiceId;
   const isSmallBusiness = isInvoice && Boolean(formData.isSmallBusiness);
   const selectedClient = clients.find((c) => c.id === formData.clientId);
+  const invoiceSnapshotClient = useMemo(() => {
+    if (!isInvoice) return undefined;
+    return {
+      id: formData.clientId,
+      companyName: formData.clientCompanyName?.trim() || formData.clientName?.trim() || "",
+      contactPerson: formData.clientContactPerson ?? "",
+      email: formData.clientEmail ?? "",
+      address: formData.clientAddress ?? "",
+      notes: "",
+    } as Client;
+  }, [
+    formData.clientAddress,
+    formData.clientCompanyName,
+    formData.clientContactPerson,
+    formData.clientEmail,
+    formData.clientId,
+    formData.clientName,
+    isInvoice,
+  ]);
+  const displayClient = isInvoice ? invoiceSnapshotClient : selectedClient;
+
+  const handleClientChange = (clientId: string) => {
+    if (!isInvoice || readOnly || locked || formData.status !== InvoiceStatus.DRAFT) {
+      setFormData((prev) => ({ ...prev, clientId }));
+      return;
+    }
+
+    const client = clients.find((c) => c.id === clientId);
+    const snapshot = client ? buildSnapshotFromClient(client) : buildSnapshotFromClient();
+    setFormData((prev) => ({ ...prev, clientId, ...snapshot }));
+  };
   const { defaultSubject, defaultMessage } = useMemo(
     () => buildTemplateDefaults(formData),
     [
@@ -328,6 +394,13 @@ export function DocumentEditor({
           number: data.number,
           offerId: data.offerId,
           clientId: data.clientId,
+          clientName: data.clientName ?? "",
+          clientCompanyName: data.clientCompanyName ?? "",
+          clientContactPerson: data.clientContactPerson ?? "",
+          clientEmail: data.clientEmail ?? "",
+          clientPhone: data.clientPhone ?? null,
+          clientVatId: data.clientVatId ?? null,
+          clientAddress: data.clientAddress ?? "",
           projectId: data.projectId,
           date: data.date,
           paymentTermsDays: Number(data.paymentTermsDays ?? 14),
@@ -374,6 +447,16 @@ export function DocumentEditor({
 
       if (closeAfterSave) onClose();
       return true;
+    } catch (error) {
+      let code = (error as Error & { code?: string }).code;
+      if (!code && error instanceof Error) {
+        code = error.message;
+      }
+      const message =
+        mapErrorCodeToToast(code) ||
+        getErrorMessage(error, "Dokument konnte nicht gespeichert werden.");
+      toast.error(message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -403,7 +486,16 @@ export function DocumentEditor({
   };
 
   function buildTemplateDefaults(data: FormData) {
-    const client = clients.find((c) => c.id === data.clientId);
+    const client = isInvoice
+      ? ({
+          id: data.clientId,
+          companyName: data.clientCompanyName?.trim() || data.clientName?.trim() || "",
+          contactPerson: data.clientContactPerson ?? "",
+          email: data.clientEmail ?? "",
+          address: data.clientAddress ?? "",
+          notes: "",
+        } as Client)
+      : clients.find((c) => c.id === data.clientId);
     const templateData = {
       dokument: isInvoice ? "Rechnung" : "Angebot",
       nummer: data.number ?? "",
@@ -436,11 +528,15 @@ export function DocumentEditor({
       toast.error("Bitte Kunde wählen");
       return false;
     }
+    if (!formData.clientName?.trim()) {
+      toast.error("Bitte Kunde auswählen");
+      return false;
+    }
     if (!formData.date) {
       toast.error("Bitte Rechnungsdatum setzen");
       return false;
     }
-    if (!selectedClient?.address?.trim()) {
+    if (!formData.clientAddress?.trim()) {
       toast.error("Bitte Kundenadresse hinterlegen");
       return false;
     }
@@ -575,7 +671,7 @@ export function DocumentEditor({
       onClose={() => setShowSendModal(false)}
       documentType={isInvoice ? "invoice" : "offer"}
       document={formData as any}
-      client={selectedClient}
+      client={displayClient}
       settings={settings}
       defaultSubject={defaultSubject}
       defaultMessage={defaultMessage}
@@ -588,7 +684,7 @@ export function DocumentEditor({
 
   // ---------- Print Overlay ----------
   if (showPrint) {
-    const client = clients.find((c) => c.id === formData.clientId);
+    const client = displayClient;
 
     return (
       <div className="fixed inset-0 bg-white z-50 overflow-hidden">
@@ -882,7 +978,7 @@ export function DocumentEditor({
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
                         value={formData.clientId}
                         disabled={disabled}
-                        onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                        onChange={(e) => handleClientChange(e.target.value)}
                       >
                         <option value="">Kunde auswählen</option>
                         {clients.map((c) => (
@@ -892,24 +988,31 @@ export function DocumentEditor({
                         ))}
                       </select>
                     </div>
+                    {isInvoice && (
+                      <div className="px-4 py-3 text-xs text-gray-500">
+                        Kundendaten werden in die Rechnung übernommen.
+                      </div>
+                    )}
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">Ansprechpartner</span>
-                      <input
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                        placeholder="z.B. Max Mustermann"
-                        value={selectedClient?.contactPerson ?? ""}
-                        readOnly
-                      />
+                      <span className="w-full sm:max-w-[260px] text-sm text-gray-700">
+                        {displayClient?.contactPerson || "—"}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">E-Mail</span>
-                      <input
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                        placeholder="E-Mail-Adresse"
-                        value={selectedClient?.email ?? ""}
-                        readOnly
-                      />
+                      <span className="w-full sm:max-w-[260px] text-sm text-gray-700">
+                        {displayClient?.email || "—"}
+                      </span>
                     </div>
+                    {isInvoice && (
+                      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                        <span className="text-sm font-medium text-gray-700">Adresse</span>
+                        <div className="w-full sm:max-w-[260px] text-sm text-gray-700 whitespace-pre-line">
+                          {displayClient?.address || "—"}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1235,7 +1338,7 @@ export function DocumentEditor({
                     className="w-full border rounded p-2"
                     value={formData.clientId}
                     disabled={disabled}
-                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                    onChange={(e) => handleClientChange(e.target.value)}
                   >
                     <option value="">Wählen...</option>
                     {clients.map((c) => (
@@ -1244,6 +1347,30 @@ export function DocumentEditor({
                       </option>
                     ))}
                   </select>
+                  {isInvoice && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Kundendaten werden in die Rechnung übernommen.
+                    </p>
+                  )}
+                  {isInvoice && (
+                    <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-700">
+                      <div className="font-semibold">
+                        {displayClient?.companyName || displayClient?.contactPerson || "—"}
+                      </div>
+                      {displayClient?.contactPerson &&
+                        displayClient.contactPerson !== displayClient.companyName && (
+                          <div>{displayClient.contactPerson}</div>
+                        )}
+                      {displayClient?.address && (
+                        <div className="mt-1 whitespace-pre-line">{displayClient.address}</div>
+                      )}
+                      <div className="mt-2">
+                        <Link to="/app/clients" className="text-xs text-blue-600 hover:underline">
+                          Kunde bearbeiten
+                        </Link>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
