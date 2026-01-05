@@ -11,6 +11,14 @@ const PORT = process.env.PORT || 4000;
 const app = express();
 app.disable("x-powered-by");
 
+const IS_PROD = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader("x-request-id", req.requestId);
+  next();
+});
+
 const jsonParser = express.json({ limit: "10mb" });
 app.use((req, res, next) => {
   // nur Requests mit Body parsen (GET/HEAD brauchen das nicht)
@@ -165,7 +173,17 @@ const getBrowser = async () => {
       throw error;
     }
   }
-  return browserPromise;
+  const browser = await browserPromise;
+  if (browser && !browser.isConnected()) {
+    try {
+      await browser.close();
+    } catch (error) {
+      console.warn("[pdf] Failed to close disconnected browser", error);
+    }
+    browserPromise = null;
+    return getBrowser();
+  }
+  return browser;
 };
 
 let mailerPromise = null;
@@ -463,28 +481,65 @@ const checkEmailRateLimit = async (scope, id) => {
   return checkEmailRateLimitInMemory(scope, id, EMAIL_RATE_LIMIT, EMAIL_RATE_WINDOW_MS);
 };
 
-const sendError = (res, status, code, message) =>
-  res.status(status).json({ ok: false, error: { code, message } });
+const sendError = (res, status, code, message, req, options = {}) => {
+  const requestId = req?.requestId ?? res.req?.requestId;
+  const error = {
+    code,
+    message,
+    requestId,
+    ...(options.extra ?? {}),
+  };
 
-const sendRateLimit = (res, retryAfterSeconds) =>
-  res.status(429).json({
-    ok: false,
-    error: {
-      code: "RATE_LIMIT",
-      message: "Too many requests.",
-      retryAfterSeconds,
-    },
+  if (!IS_PROD) {
+    if (options.details) error.details = options.details;
+    if (options.hint) error.hint = options.hint;
+  }
+
+  return res.status(status).json({ ok: false, error });
+};
+
+const sendRateLimit = (req, res, retryAfterSeconds) =>
+  sendError(res, 429, "RATE_LIMIT", "Zu viele Anfragen.", req, {
+    extra: { retryAfterSeconds },
   });
+
+const sendSupabaseError = (res, err, req, fallback) => {
+  const normalized = normalizeDbError(err);
+  if (normalized) {
+    return sendError(res, normalized.httpStatus, normalized.code, normalized.message, req, {
+      details: err?.details,
+      hint: err?.hint,
+    });
+  }
+
+  return sendError(
+    res,
+    fallback?.status ?? 500,
+    fallback?.code ?? err?.code ?? "DB_ERROR",
+    fallback?.message ?? "Datenbankfehler.",
+    req,
+    {
+      details: err?.details,
+      hint: err?.hint,
+    }
+  );
+};
+
+const sendUnexpectedError = (res, err, req) => {
+  const requestId = req?.requestId ?? res.req?.requestId;
+  console.error(`[error] requestId=${requestId}`, err);
+  return sendError(res, 500, "UNEXPECTED_ERROR", "Unerwarteter Serverfehler.", req);
+};
 
 const isValidEmail = (value = "") => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 
 const emailJsonParser = express.json({ limit: "9mb" });
-const emailJsonErrorHandler = (err, _req, res, next) => {
+const emailJsonErrorHandler = (err, req, res, next) => {
   if (err?.type === "entity.too.large") {
-    return sendError(res, 413, "payload_too_large", "Payload too large.");
+    return sendError(res, 413, "payload_too_large", "Payload too large.", req);
   }
   if (err?.type === "entity.parse.failed") {
-    return sendError(res, 400, "invalid_json", "Invalid JSON payload.");
+    return sendError(res, 400, "invalid_json", "Invalid JSON payload.", req);
   }
   return next(err);
 };
@@ -493,7 +548,7 @@ const emailRateLimitGuard = async (req, res, next) => {
   if (req.ip) {
     const result = await checkEmailRateLimit("ip", req.ip);
     if (!result.allowed) {
-      return sendRateLimit(res, result.retryAfterSeconds);
+      return sendRateLimit(req, res, result.retryAfterSeconds);
     }
   }
   return next();
@@ -521,7 +576,7 @@ const emailAuthGuard = async (req, res, next) => {
   if (req.user?.id) {
     const result = await checkEmailRateLimit("user", req.user.id);
     if (!result.allowed) {
-      return sendRateLimit(res, result.retryAfterSeconds);
+      return sendRateLimit(req, res, result.retryAfterSeconds);
     }
   }
 
@@ -550,42 +605,90 @@ const requireAuth = async (req, res, next) => {
 const normalizeDbError = (err) => {
   const rawMessage = typeof err?.message === "string" ? err.message : "";
   const message = rawMessage.trim();
-  const code = err?.code || message;
+  const rawCode = typeof err?.code === "string" ? err.code : "";
+  const code = rawCode.trim();
+  const upperCode = code.toUpperCase();
+  const upperMessage = message.toUpperCase();
 
-  if (!code) return null;
+  if (!code && !message) return null;
 
-  switch (code) {
-    case "NOT_AUTHENTICATED":
-      return { code, message: "Not authenticated.", httpStatus: 401 };
-    case "FORBIDDEN":
-      return { code, message: "Forbidden.", httpStatus: 403 };
-    case "INVOICE_LOCKED_CONTENT":
-      return { code, message: "Invoice content is locked.", httpStatus: 409 };
-    case "INVOICE_LOCK_INVALID_STATUS":
-      return { code, message: "Invoice lock status invalid.", httpStatus: 409 };
-    case "INVOICE_NUMBER_IMMUTABLE":
-      return { code, message: "Invoice number is immutable after finalization.", httpStatus: 409 };
-    case "status_transition_not_allowed":
-      return { code, message: "Status transition not allowed.", httpStatus: 409 };
-    case "P0001":
-      if (message.includes("NOT_AUTHENTICATED")) {
-        return { code: "NOT_AUTHENTICATED", message: "Not authenticated.", httpStatus: 401 };
-      }
-      if (message.includes("FORBIDDEN")) {
-        return { code: "FORBIDDEN", message: "Forbidden.", httpStatus: 403 };
-      }
-      if (message.includes("INVOICE_LOCKED_CONTENT")) {
-        return { code: "INVOICE_LOCKED_CONTENT", message: "Invoice content is locked.", httpStatus: 409 };
-      }
-      if (message.includes("INVOICE_NUMBER_IMMUTABLE")) {
-        return { code: "INVOICE_NUMBER_IMMUTABLE", message: "Invoice number is immutable after finalization.", httpStatus: 409 };
-      }
-      if (message.includes("status transition")) {
-        return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
-      }
-      return { code: "db_error", message: message || "Database error.", httpStatus: 409 };
+  const mapKnownCode = (mappedCode) => {
+    switch (mappedCode) {
+      case "NOT_AUTHENTICATED":
+        return { code: mappedCode, message: "Bitte erneut anmelden.", httpStatus: 401 };
+      case "FORBIDDEN":
+        return { code: mappedCode, message: "Keine Berechtigung für diese Aktion.", httpStatus: 403 };
+      case "INVOICE_LOCKED_CONTENT":
+        return {
+          code: mappedCode,
+          message: "Diese Rechnung ist finalisiert und kann nicht geändert werden.",
+          httpStatus: 409,
+        };
+      case "INVOICE_LOCK_INVALID_STATUS":
+        return {
+          code: mappedCode,
+          message: "Der Rechnungsstatus erlaubt diese Aktion nicht.",
+          httpStatus: 409,
+        };
+      case "INVOICE_NUMBER_IMMUTABLE":
+        return {
+          code: mappedCode,
+          message: "Die Rechnungsnummer kann nach der Finalisierung nicht geändert werden.",
+          httpStatus: 409,
+        };
+      case "STATUS_TRANSITION_NOT_ALLOWED":
+        return { code: mappedCode, message: "Statuswechsel ist nicht erlaubt.", httpStatus: 400 };
+      case "CLIENT_REQUIRED":
+        return { code: mappedCode, message: "Bitte Kunde auswählen.", httpStatus: 400 };
+      case "CLIENT_SNAPSHOT_MISSING":
+        return { code: mappedCode, message: "Kundendaten fehlen für die Finalisierung.", httpStatus: 400 };
+      case "POSITIONS_REQUIRED":
+        return { code: mappedCode, message: "Bitte mindestens eine Position hinzufügen.", httpStatus: 400 };
+      case "UNIQUE_VIOLATION":
+        return { code: mappedCode, message: "Ein Eintrag mit diesen Daten existiert bereits.", httpStatus: 409 };
+      case "FOREIGN_KEY_VIOLATION":
+        return { code: mappedCode, message: "Verknüpfte Daten fehlen oder sind ungültig.", httpStatus: 400 };
+      case "INVALID_INPUT":
+        return { code: mappedCode, message: "Ungültige Eingabe.", httpStatus: 400 };
+      case "CHECK_VIOLATION":
+        return { code: mappedCode, message: "Ungültige Eingabe.", httpStatus: 400 };
+      default:
+        return null;
+    }
+  };
+
+  const directCode = mapKnownCode(upperCode);
+  if (directCode) return directCode;
+
+  switch (upperCode) {
+    case "23505":
+      return mapKnownCode("UNIQUE_VIOLATION");
+    case "23503":
+      return mapKnownCode("FOREIGN_KEY_VIOLATION");
+    case "22P02":
+      return mapKnownCode("INVALID_INPUT");
     case "23514":
-      return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
+      if (upperMessage.includes("STATUS_TRANSITION_NOT_ALLOWED") || upperMessage.includes("STATUS TRANSITION")) {
+        return mapKnownCode("STATUS_TRANSITION_NOT_ALLOWED");
+      }
+      return mapKnownCode("CHECK_VIOLATION");
+    case "P0001":
+      if (upperMessage.includes("NOT_AUTHENTICATED")) return mapKnownCode("NOT_AUTHENTICATED");
+      if (upperMessage.includes("FORBIDDEN")) return mapKnownCode("FORBIDDEN");
+      if (upperMessage.includes("INVOICE_LOCKED_CONTENT")) return mapKnownCode("INVOICE_LOCKED_CONTENT");
+      if (upperMessage.includes("INVOICE_LOCK_INVALID_STATUS")) return mapKnownCode("INVOICE_LOCK_INVALID_STATUS");
+      if (upperMessage.includes("INVOICE_NUMBER_IMMUTABLE")) return mapKnownCode("INVOICE_NUMBER_IMMUTABLE");
+      if (upperMessage.includes("STATUS_TRANSITION_NOT_ALLOWED") || upperMessage.includes("STATUS TRANSITION")) {
+        return mapKnownCode("STATUS_TRANSITION_NOT_ALLOWED");
+      }
+      if (upperMessage.includes("CLIENT_REQUIRED")) return mapKnownCode("CLIENT_REQUIRED");
+      if (upperMessage.includes("CLIENT_SNAPSHOT_MISSING")) return mapKnownCode("CLIENT_SNAPSHOT_MISSING");
+      if (upperMessage.includes("POSITIONS_REQUIRED")) return mapKnownCode("POSITIONS_REQUIRED");
+      return {
+        code: "DB_ERROR",
+        message: message || "Datenbankfehler.",
+        httpStatus: 500,
+      };
     default:
       return null;
   }
@@ -826,7 +929,10 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   return { doc, settings, client };
 };
 
-const createPdfBufferFromPayload = async (type, payload) => {
+const createPdfBufferFromPayload = async (type, payload, options = {}) => {
+  const requestId = options.requestId ?? null;
+  const source = options.source ?? "unknown";
+  console.info("[pdf_generate_attempt]", { requestId, source, type });
   const html = renderDocumentHtml({
     type,
     doc: payload?.doc ?? {},
@@ -839,25 +945,50 @@ const createPdfBufferFromPayload = async (type, payload) => {
   }
 
   const browser = await getBrowser();
-const context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
-const page = await context.newPage();
-
-await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
-
-const pdfBuffer = await page.pdf({
-  format: "A4",
-  printBackground: true,
-  margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
-});
-
-await page.close();
-await context.close();
-return pdfBuffer;
-
+  let context;
+  let page;
+  try {
+    context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
+    page = await context.newPage();
+    await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
+    return await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
+    });
+  } catch (error) {
+    const message = typeof error?.message === "string" ? error.message : "";
+    const err = new Error("PDF generation failed.");
+    err.cause = error;
+    err.code = message.includes("Target page, context or browser has been closed")
+      ? "PDF_ENGINE_RESET"
+      : "PDF_GENERATION_FAILED";
+    err.status = err.code === "PDF_ENGINE_RESET" ? 503 : 500;
+    console.error("[pdf_generate_failed]", {
+      requestId,
+      source,
+      type,
+      code: err.code,
+      message,
+      stack: error?.stack,
+    });
+    throw err;
+  } finally {
+    if (page) {
+      await page.close().catch((error) => {
+        console.warn("[pdf] Failed to close page", error);
+      });
+    }
+    if (context) {
+      await context.close().catch((error) => {
+        console.warn("[pdf] Failed to close context", error);
+      });
+    }
+  }
 };
 
-const createPdfAttachment = async ({ type, payload }) => {
-  const buffer = await createPdfBufferFromPayload(type, payload);
+const createPdfAttachment = async ({ type, payload, requestId, source }) => {
+  const buffer = await createPdfBufferFromPayload(type, payload, { requestId, source });
   const filename = buildPdfFilename({ type, doc: payload.doc, client: payload.client });
   return { buffer, filename };
 };
@@ -889,7 +1020,7 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
     const docId = req.body?.docId ?? req.body?.documentId ?? null;
     const type = normalizeDocType(req.body?.type ?? req.body?.documentType);
     if (!docId || !type) {
-      return sendError(res, 400, "bad_request", "Missing required fields: docId, type");
+      return sendError(res, 400, "VALIDATION_ERROR", "Missing required fields: docId, type", req);
     }
 
     const payload = await loadDocumentPayloadFromDb({
@@ -900,7 +1031,12 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
 
     enforceLegacyPayloadMatch(req.body, payload);
 
-    const { buffer, filename } = await createPdfAttachment({ type, payload });
+    const { buffer, filename } = await createPdfAttachment({
+      type,
+      payload,
+      requestId: req.requestId,
+      source: "api_pdf",
+    });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=\"${filename}\"`);
@@ -909,7 +1045,7 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
     console.error("PDF generation failed", err);
-    return sendError(res, status, code, "PDF generation failed.");
+    return sendError(res, status, code, "PDF generation failed.", req);
   }
 });
 
@@ -921,7 +1057,7 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
     const docId = req.body?.docId ?? req.body?.documentId ?? null;
     const type = normalizeDocType(req.body?.type ?? req.body?.documentType);
     if (!docId || !type) {
-      return sendError(res, 400, "bad_request", "Missing required fields: docId, type");
+      return sendError(res, 400, "VALIDATION_ERROR", "Missing required fields: docId, type", req);
     }
 
     const token = generateToken();
@@ -934,7 +1070,7 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_link_failed";
     console.error("PDF link generation failed", err);
-    return sendError(res, status, code, "PDF link generation failed.");
+    return sendError(res, status, code, "PDF link generation failed.", req);
   }
 });
 
@@ -967,12 +1103,12 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { error } = await supabase.rpc("finalize_invoice", {
@@ -980,14 +1116,10 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
     });
 
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized && (normalized.httpStatus === 401 || normalized.httpStatus === 403)) {
-        return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      }
-      const message = normalized?.message || error.message || "Invoice finalization failed.";
-      return res.status(400).json({
-        error: message,
-        code: normalized?.code || error.code || "finalize_failed",
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "FINALIZE_FAILED",
+        message: "Rechnung konnte nicht finalisiert werden.",
       });
     }
 
@@ -997,19 +1129,19 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
       .eq("id", invoiceId)
       .maybeSingle();
     if (fetchError || !invoice) {
-      return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
+      if (fetchError) {
+        return sendSupabaseError(res, fetchError, req, {
+          status: 500,
+          code: "FINALIZE_FAILED",
+          message: "Rechnung konnte nicht finalisiert werden.",
+        });
+      }
+      return sendError(res, 500, "FINALIZE_FAILED", "Invoice finalization failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...invoice, is_overdue: computeInvoiceIsOverdue(invoice) } });
   } catch (err) {
-    console.error("Finalize invoice failed", err);
-    if (err?.status === 401) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
-    }
-    if (err?.status === 403) {
-      return sendError(res, 403, "forbidden", "Forbidden");
-    }
-    return sendError(res, err?.status || 500, "finalize_failed", "Invoice finalization failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1017,25 +1149,27 @@ app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "LOAD_FAILED",
+        message: "Rechnung konnte nicht geladen werden.",
+      });
     }
     if (!invoice) {
-      return sendError(res, 404, "not_found", "Invoice not found.");
+      return sendError(res, 404, "NOT_FOUND", "Invoice not found.", req);
     }
     if (invoice.status !== "ISSUED") {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "STATUS_TRANSITION_NOT_ALLOWED", "Status transition not allowed.", req);
     }
 
     const nowIso = new Date().toISOString();
@@ -1054,18 +1188,19 @@ app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
-      const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      if (updateError) {
+        return sendSupabaseError(res, updateError, req, {
+          status: 500,
+          code: "UPDATE_FAILED",
+          message: "Rechnung konnte nicht aktualisiert werden.",
+        });
+      }
+      return sendError(res, 500, "UPDATE_FAILED", "Invoice update failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
-    const normalized = normalizeDbError(err);
-    if (normalized) {
-      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-    }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1073,25 +1208,27 @@ app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "LOAD_FAILED",
+        message: "Rechnung konnte nicht geladen werden.",
+      });
     }
     if (!invoice) {
-      return sendError(res, 404, "not_found", "Invoice not found.");
+      return sendError(res, 404, "NOT_FOUND", "Invoice not found.", req);
     }
     if (!["ISSUED", "SENT"].includes(invoice.status)) {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "STATUS_TRANSITION_NOT_ALLOWED", "Status transition not allowed.", req);
     }
 
     const nowIso = new Date().toISOString();
@@ -1108,18 +1245,19 @@ app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
-      const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      if (updateError) {
+        return sendSupabaseError(res, updateError, req, {
+          status: 500,
+          code: "UPDATE_FAILED",
+          message: "Rechnung konnte nicht aktualisiert werden.",
+        });
+      }
+      return sendError(res, 500, "UPDATE_FAILED", "Invoice update failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
-    const normalized = normalizeDbError(err);
-    if (normalized) {
-      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-    }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1127,25 +1265,27 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "LOAD_FAILED",
+        message: "Rechnung konnte nicht geladen werden.",
+      });
     }
     if (!invoice) {
-      return sendError(res, 404, "not_found", "Invoice not found.");
+      return sendError(res, 404, "NOT_FOUND", "Invoice not found.", req);
     }
     if (!["ISSUED", "SENT"].includes(invoice.status)) {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "STATUS_TRANSITION_NOT_ALLOWED", "Status transition not allowed.", req);
     }
 
     const nowIso = new Date().toISOString();
@@ -1161,18 +1301,19 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
-      const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      if (updateError) {
+        return sendSupabaseError(res, updateError, req, {
+          status: 500,
+          code: "UPDATE_FAILED",
+          message: "Rechnung konnte nicht aktualisiert werden.",
+        });
+      }
+      return sendError(res, 500, "UPDATE_FAILED", "Invoice update failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
-    const normalized = normalizeDbError(err);
-    if (normalized) {
-      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-    }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1180,12 +1321,12 @@ app.get("/api/pdf/download", async (req, res) => {
   try {
     const token = typeof req.query.token === "string" ? req.query.token : "";
     if (!token) {
-      return sendError(res, 400, "bad_request", "Missing token.");
+      return sendError(res, 400, "VALIDATION_ERROR", "Missing token.", req);
     }
 
     const tokenPayload = await consumePdfDownloadToken(token);
     if (!tokenPayload?.userId || !tokenPayload?.docId || !tokenPayload?.type) {
-      return sendError(res, 401, "invalid_token", "Invalid or expired token.");
+      return sendError(res, 401, "invalid_token", "Invalid or expired token.", req);
     }
 
     const payload = await loadDocumentPayloadFromDb({
@@ -1197,6 +1338,8 @@ app.get("/api/pdf/download", async (req, res) => {
     const { buffer, filename } = await createPdfAttachment({
       type: tokenPayload.type,
       payload,
+      requestId: req.requestId,
+      source: "api_pdf_download",
     });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -1206,7 +1349,7 @@ app.get("/api/pdf/download", async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
     console.error("PDF download failed", err);
-    return sendError(res, status, code, "PDF generation failed.");
+    return sendError(res, status, code, "PDF generation failed.", req);
   }
 });
 
@@ -1617,8 +1760,8 @@ app.post(
   async (req, res) => {
     try {
       if (!req.user?.id) {
-        return sendError(res, 401, "unauthorized", "Unauthorized");
-      }
+      return sendError(res, 401, "unauthorized", "Unauthorized", req);
+    }
       const userId = req.user.id;
 
       const {
@@ -1640,31 +1783,32 @@ app.post(
           res,
           400,
           "bad_request",
-          "Missing required fields: docId, type, to, subject, senderIdentityId"
+          "Missing required fields: docId, type, to, subject, senderIdentityId",
+          req
         );
       }
 
       const toList = parseEmailList(to);
       if (!toList.length || toList.some((entry) => !isValidEmail(entry))) {
-        return sendError(res, 400, "invalid_email", "Invalid recipient email.");
+        return sendError(res, 400, "invalid_email", "Invalid recipient email.", req);
       }
       const ccList = parseEmailList(cc);
       if (ccList.some((entry) => !isValidEmail(entry))) {
-        return sendError(res, 400, "invalid_cc", "Invalid CC email.");
+        return sendError(res, 400, "invalid_cc", "Invalid CC email.", req);
       }
       const bccList = parseEmailList(bcc);
       if (bccList.some((entry) => !isValidEmail(entry))) {
-        return sendError(res, 400, "invalid_bcc", "Invalid BCC email.");
+        return sendError(res, 400, "invalid_bcc", "Invalid BCC email.", req);
       }
 
       const subjectText = String(subject ?? "");
       if (subjectText.length > EMAIL_SUBJECT_MAX) {
-        return sendError(res, 400, "subject_too_long", "Subject too long.");
+        return sendError(res, 400, "subject_too_long", "Subject too long.", req);
       }
 
       const messageText = String(message ?? "");
       if (messageText.length > EMAIL_MESSAGE_MAX) {
-        return sendError(res, 400, "message_too_long", "Message too long.");
+        return sendError(res, 400, "message_too_long", "Message too long.", req);
       }
 
       const payload = await loadDocumentPayloadFromDb({
@@ -1679,7 +1823,7 @@ app.post(
       const resolvedFrom = DEFAULT_FROM_EMAIL;
 
       if (!resolvedFrom) {
-        return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.");
+        return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.", req);
       }
 
       const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
@@ -1694,7 +1838,12 @@ app.post(
       const fromName = displayName || SENDER_DOMAIN_NAME;
       const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${resolvedFrom}>`;
 
-      const { buffer, filename } = await createPdfAttachment({ type, payload });
+      const { buffer, filename } = await createPdfAttachment({
+        type,
+        payload,
+        requestId: req.requestId,
+        source: "api_email",
+      });
 
       const info = await transporter.sendMail({
         from,
@@ -1729,7 +1878,7 @@ app.post(
 
       const userToken = getBearerToken(req);
       if (!userToken) {
-        return sendError(res, 401, "NOT_AUTHENTICATED", "Missing auth token.");
+        return sendError(res, 401, "NOT_AUTHENTICATED", "Missing auth token.", req);
       }
       const supabaseUser = createUserSupabaseClient(userToken);
       const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
@@ -1759,26 +1908,27 @@ app.post(
       console.error("Email send failed", err);
       const dbError = normalizeDbError(err);
       if (dbError) {
-        return sendError(res, dbError.httpStatus, dbError.code, dbError.message);
+        return sendError(res, dbError.httpStatus, dbError.code, dbError.message, req);
       }
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
-        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
+        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.", req);
       }
       if (err?.code === "SUPABASE_ANON_KEY_MISSING") {
-        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase anon key missing.");
+        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase anon key missing.", req);
       }
       if (err?.code === "SMTP_NOT_CONFIGURED") {
         return sendError(
           res,
           501,
           "EMAIL_NOT_CONFIGURED",
-          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
+          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen.",
+          req
         );
       }
       const message = typeof err?.message === "string" && err.message.trim().length > 0
         ? err.message
         : "Email send failed.";
-      return sendError(res, 500, "EMAIL_SEND_FAILED", message);
+      return sendError(res, err?.status || 500, err?.code || "EMAIL_SEND_FAILED", message, req);
     }
   }
 );

@@ -14,7 +14,7 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { supabase } from "@/supabaseClient";
-import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import { formatErrorToast } from "@/utils/errorMapping";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -455,10 +455,12 @@ export function DocumentEditor({
       if (!code && error instanceof Error) {
         code = error.message;
       }
-      const message =
-        mapErrorCodeToToast(code) ||
-        getErrorMessage(error, "Dokument konnte nicht gespeichert werden.");
-      toast.error(message);
+      toast.error(
+        formatErrorToast({
+          code,
+          message: getErrorMessage(error, "Dokument konnte nicht gespeichert werden."),
+        })
+      );
       return false;
     } finally {
       setSaving(false);
@@ -586,9 +588,14 @@ export function DocumentEditor({
         setFormData({ ...formData, ...updated });
       }
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht finalisiert werden.",
+        })
       );
       return null;
     }
@@ -651,8 +658,11 @@ export function DocumentEditor({
 
     if (error) {
       toast.error(
-        mapErrorCodeToToast(error.code ?? error.message) ||
-          "Angebot konnte nicht umgewandelt werden."
+        formatErrorToast({
+          code: error.code,
+          message: error.message,
+          fallback: "Angebot konnte nicht umgewandelt werden.",
+        })
       );
       return;
     }

@@ -15,7 +15,7 @@ import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { supabase } from "@/supabaseClient";
-import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import { formatErrorToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
@@ -199,9 +199,14 @@ export default function DocumentDetailPage() {
       if (updated) setDoc(updated);
       toast.success("Rechnung als bezahlt markiert.");
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht aktualisiert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht aktualisiert werden.",
+        })
       );
     }
   };
@@ -219,9 +224,14 @@ export default function DocumentDetailPage() {
       if (updated) setDoc(updated);
       toast.success("Rechnung als gesendet markiert.");
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht aktualisiert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht aktualisiert werden.",
+        })
       );
     }
   };
@@ -239,9 +249,14 @@ export default function DocumentDetailPage() {
       if (updated) setDoc(updated);
       toast.success("Rechnung storniert.");
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht storniert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht storniert werden.",
+        })
       );
     }
   };
@@ -287,7 +302,13 @@ export default function DocumentDetailPage() {
       offer_id: offer.id,
     });
     if (rpcError) {
-      toast.error(mapErrorCodeToToast(rpcError.code ?? rpcError.message) || "Angebot konnte nicht umgewandelt werden.");
+      toast.error(
+        formatErrorToast({
+          code: rpcError.code,
+          message: rpcError.message,
+          fallback: "Angebot konnte nicht umgewandelt werden.",
+        })
+      );
       return;
     }
     const invoiceId = data?.id;
@@ -319,9 +340,14 @@ export default function DocumentDetailPage() {
         setDoc(updated);
       }
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht finalisiert werden.",
+        })
       );
       return;
     }
