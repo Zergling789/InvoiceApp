@@ -429,6 +429,11 @@ export default function TodosPage() {
     }
   };
 
+  const openNewCustomer = () => {
+    setFabOpen(false);
+    navigate("/app/customers/new", { state: { backgroundLocation: location } });
+  };
+
   return (
     <div className="space-y-6">
       {sendOpen && selectedDoc && selectedType && settings && (
@@ -716,10 +721,7 @@ export default function TodosPage() {
               <AppButton
                 variant="secondary"
                 className="w-full justify-center"
-                onClick={() => {
-                  setFabOpen(false);
-                  navigate("/app/clients");
-                }}
+                onClick={openNewCustomer}
               >
                 Neuer Kunde
               </AppButton>

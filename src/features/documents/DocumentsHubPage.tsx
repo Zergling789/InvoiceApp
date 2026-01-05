@@ -352,6 +352,11 @@ export default function DocumentsHubPage() {
     navigate(target, { state: { backgroundLocation: location } });
   };
 
+  const openNewCustomer = () => {
+    setFabOpen(false);
+    navigate("/app/customers/new", { state: { backgroundLocation: location } });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
@@ -499,10 +504,7 @@ export default function DocumentsHubPage() {
               <AppButton
                 variant="secondary"
                 className="w-full justify-center"
-                onClick={() => {
-                  setFabOpen(false);
-                  navigate("/app/clients");
-                }}
+                onClick={openNewCustomer}
               >
                 Neuer Kunde
               </AppButton>
