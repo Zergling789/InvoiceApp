@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
@@ -105,6 +105,7 @@ export default function DocumentsHubPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [searchParams] = useSearchParams();
+  const lastRefreshTokenRef = useRef<number | null>(null);
 
   const refreshDocuments = async () => {
     setLoading(true);
@@ -154,6 +155,14 @@ export default function DocumentsHubPage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const refreshToken = (location.state as { refreshDocuments?: number } | null)?.refreshDocuments;
+    if (!refreshToken || refreshToken === lastRefreshTokenRef.current) return;
+    lastRefreshTokenRef.current = refreshToken;
+    void refreshDocuments();
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: {} });
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
 
   useEffect(() => {
     const param = searchParams.get("mode") ?? searchParams.get("type");
@@ -352,6 +361,11 @@ export default function DocumentsHubPage() {
     navigate(target, { state: { backgroundLocation: location } });
   };
 
+  const openNewCustomer = () => {
+    setFabOpen(false);
+    navigate("/app/customers/new", { state: { backgroundLocation: location } });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
@@ -476,8 +490,14 @@ export default function DocumentsHubPage() {
       </div>
 
       {fabOpen && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden">
-          <div className="w-full rounded-t-2xl bg-white p-6 shadow-xl">
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
+          onPointerDown={() => setFabOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-2xl bg-white p-6 shadow-xl"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
             <div className="space-y-3">
               <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
@@ -493,10 +513,7 @@ export default function DocumentsHubPage() {
               <AppButton
                 variant="secondary"
                 className="w-full justify-center"
-                onClick={() => {
-                  setFabOpen(false);
-                  navigate("/app/clients");
-                }}
+                onClick={openNewCustomer}
               >
                 Neuer Kunde
               </AppButton>

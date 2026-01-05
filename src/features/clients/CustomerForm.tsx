@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { MoreVertical, Save } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 
 import type { Client } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { ActionSheet } from "@/components/ui/ActionSheet";
+import BottomActionBar from "@/components/BottomActionBar";
 
 type CustomerFormProps = {
   value: Client;
@@ -45,7 +46,7 @@ export function CustomerForm({
   }, [isDirty, onDirtyChange]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 bottom-action-spacer">
       {showHeader && (
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -149,16 +150,14 @@ export function CustomerForm({
         </div>
       </AppCard>
 
-      <div className="bottom-action-bar safe-area-container">
-        <div className="flex flex-wrap gap-2">
-          <AppButton variant="secondary" onClick={onCancel} disabled={isBusy} className="flex-1 justify-center">
-            Abbrechen
-          </AppButton>
-          <AppButton onClick={onSave} disabled={isBusy} className="flex-1 justify-center">
-            <Save size={16} /> Speichern
-          </AppButton>
-        </div>
-      </div>
+      <BottomActionBar
+        primaryLabel="Speichern"
+        onPrimary={onSave}
+        primaryDisabled={isBusy}
+        loading={isBusy}
+        secondaryLabel="Schließen"
+        onSecondary={onCancel}
+      />
     </div>
   );
 }

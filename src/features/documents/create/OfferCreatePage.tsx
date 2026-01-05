@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 
 import ModalSheet from "@/components/ui/ModalSheet";
@@ -8,33 +8,59 @@ export default function OfferCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDirty, setIsDirty] = useState(false);
+  const skipConfirmRef = useRef(false);
+  const refreshTokenRef = useRef<number | null>(null);
 
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
 
-  const handleClose = () => {
-    if (isDirty && !window.confirm("Änderungen verwerfen?")) return;
+  const handleClose = ({ skipConfirm = false }: { skipConfirm?: boolean } = {}) => {
+    const shouldSkipConfirm = skipConfirm || skipConfirmRef.current;
+    if (!shouldSkipConfirm && isDirty && !window.confirm("Änderungen verwerfen?")) return;
+
+    skipConfirmRef.current = false;
+    const refreshDocuments = refreshTokenRef.current;
+    refreshTokenRef.current = null;
+
+    const buildState = (targetState?: unknown) => {
+      if (!refreshDocuments) return targetState;
+      return {
+        ...(targetState && typeof targetState === "object" ? (targetState as Record<string, unknown>) : {}),
+        refreshDocuments,
+      };
+    };
 
     if (backgroundLocation) {
-      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
+      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, {
+        replace: true,
+        state: buildState(backgroundLocation.state),
+      });
       return;
     }
 
     if (returnUrl) {
-      navigate(returnUrl, { replace: true });
+      navigate(returnUrl, { replace: true, state: buildState(undefined) });
       return;
     }
 
     if (window.history.length > 1) {
       navigate(-1);
     } else {
-      navigate("/app");
+      navigate("/app", { state: buildState(undefined) });
     }
   };
 
   return (
     <ModalSheet title="Neues Angebot" isOpen onClose={handleClose}>
-      <OfferForm onClose={handleClose} onDirtyChange={setIsDirty} />
+      <OfferForm
+        onClose={handleClose}
+        onDirtyChange={setIsDirty}
+        onSaved={() => {
+          skipConfirmRef.current = true;
+          refreshTokenRef.current = Date.now();
+          setIsDirty(false);
+        }}
+      />
     </ModalSheet>
   );
 }
