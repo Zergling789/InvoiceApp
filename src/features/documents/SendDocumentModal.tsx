@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, Mail, X } from "lucide-react";
+import { FileDown, Loader2, Mail, X } from "lucide-react";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { InvoiceStatus } from "@/types";
@@ -8,7 +8,7 @@ import { useToast } from "@/ui/FeedbackProvider";
 import { fetchDocumentPdf } from "@/app/pdf/documentPdfService";
 import { sendDocumentEmail } from "@/app/email/emailService";
 import { getSendWarnings } from "@/domain/rules/sendWarnings";
-import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import { formatErrorToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 
 type SendDocumentModalProps = {
@@ -188,6 +188,7 @@ export function SendDocumentModal({
   };
 
   const handleSend = async (docOverride?: Offer | Invoice) => {
+    if (sending) return;
     if (emailErrors.length > 0) return;
     setSending(true);
     try {
@@ -208,8 +209,22 @@ export function SendDocumentModal({
       });
 
       if (!result.ok) {
-        toast.error(mapErrorCodeToToast(result.code));
+        toast.error(
+          formatErrorToast({
+            code: result.code,
+            fallback: "E-Mail konnte nicht gesendet werden.",
+          })
+        );
         return;
+      }
+      if (result.warningCode) {
+        toast.error(
+          formatErrorToast({
+            code: result.warningCode,
+            message: "E-Mail gesendet, aber ohne PDF-Anhang.",
+            requestId: result.requestId,
+          })
+        );
       }
 
       const nowIso = new Date().toISOString();
@@ -230,15 +245,22 @@ export function SendDocumentModal({
       toast.success("E-Mail wurde erfolgreich versendet.");
       onClose();
     } catch (error) {
-      const errAny = error as { code?: string; message?: string } | null;
-      const messageText = mapErrorCodeToToast(errAny?.code) || errAny?.message;
-      toast.error(messageText ?? "E-Mail konnte nicht gesendet werden.");
+      const errAny = error as { code?: string; message?: string; requestId?: string } | null;
+      toast.error(
+        formatErrorToast({
+          code: errAny?.code,
+          message: errAny?.message,
+          requestId: errAny?.requestId,
+          fallback: "E-Mail konnte nicht gesendet werden.",
+        })
+      );
     } finally {
       setSending(false);
     }
   };
 
   const handleFinalizeAndSend = async () => {
+    if (sending) return;
     if (!onFinalize) return;
     const next = await onFinalize();
     if (next) {
@@ -402,7 +424,8 @@ export function SendDocumentModal({
             onClick={() => void handleSend()}
             disabled={sending || emailErrors.length > 0}
           >
-            <Mail size={16} /> {sending ? "Sende..." : "Senden"}
+            {sending ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}{" "}
+            {sending ? "Sende..." : "Senden"}
           </AppButton>
         </div>
       </div>

@@ -15,7 +15,8 @@ export const finalizeInvoice = async (id: string): Promise<Invoice | null> => {
     const err = await readApiError(res);
     const message = err.message ?? "Rechnung konnte nicht finalisiert werden.";
     const error = new Error(message);
-    (error as Error & { code?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).requestId = err.requestId;
     throw error;
   }
   return getInvoice(id);
@@ -27,7 +28,8 @@ export const markInvoiceSent = async (id: string): Promise<Invoice | null> => {
     const err = await readApiError(res);
     const message = err.message ?? "Rechnung konnte nicht aktualisiert werden.";
     const error = new Error(message);
-    (error as Error & { code?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).requestId = err.requestId;
     throw error;
   }
   return getInvoice(id);
@@ -39,7 +41,8 @@ export const markInvoicePaid = async (id: string): Promise<Invoice | null> => {
     const err = await readApiError(res);
     const message = err.message ?? "Rechnung konnte nicht aktualisiert werden.";
     const error = new Error(message);
-    (error as Error & { code?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).requestId = err.requestId;
     throw error;
   }
   return getInvoice(id);
@@ -51,7 +54,8 @@ export const cancelInvoice = async (id: string): Promise<Invoice | null> => {
     const err = await readApiError(res);
     const message = err.message ?? "Rechnung konnte nicht storniert werden.";
     const error = new Error(message);
-    (error as Error & { code?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).code = err.code;
+    (error as Error & { code?: string; requestId?: string }).requestId = err.requestId;
     throw error;
   }
   return getInvoice(id);
