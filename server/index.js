@@ -173,7 +173,17 @@ const getBrowser = async () => {
       throw error;
     }
   }
-  return browserPromise;
+  const browser = await browserPromise;
+  if (browser && !browser.isConnected()) {
+    try {
+      await browser.close();
+    } catch (error) {
+      console.warn("[pdf] Failed to close disconnected browser", error);
+    }
+    browserPromise = null;
+    return getBrowser();
+  }
+  return browser;
 };
 
 let mailerPromise = null;
@@ -932,21 +942,29 @@ const createPdfBufferFromPayload = async (type, payload) => {
   }
 
   const browser = await getBrowser();
-const context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
-const page = await context.newPage();
-
-await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
-
-const pdfBuffer = await page.pdf({
-  format: "A4",
-  printBackground: true,
-  margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
-});
-
-await page.close();
-await context.close();
-return pdfBuffer;
-
+  let context;
+  let page;
+  try {
+    context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
+    page = await context.newPage();
+    await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
+    return await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
+    });
+  } finally {
+    if (page) {
+      await page.close().catch((error) => {
+        console.warn("[pdf] Failed to close page", error);
+      });
+    }
+    if (context) {
+      await context.close().catch((error) => {
+        console.warn("[pdf] Failed to close context", error);
+      });
+    }
+  }
 };
 
 const createPdfAttachment = async ({ type, payload }) => {
