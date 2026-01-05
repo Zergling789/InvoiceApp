@@ -476,8 +476,14 @@ export default function DocumentsHubPage() {
       </div>
 
       {fabOpen && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden">
-          <div className="w-full rounded-t-2xl bg-white p-6 shadow-xl">
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
+          onPointerDown={() => setFabOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-2xl bg-white p-6 shadow-xl"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
             <div className="space-y-3">
               <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
