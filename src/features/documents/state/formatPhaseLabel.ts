@@ -12,6 +12,8 @@ export const formatInvoicePhaseLabel = (phase: InvoicePhase): string => {
       return "Überfällig";
     case "paid":
       return "Bezahlt";
+    case "canceled":
+      return "Storniert";
   }
 };
 

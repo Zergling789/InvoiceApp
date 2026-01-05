@@ -1,3 +1,5 @@
+import { formatMoney } from "@/utils/money";
+
 export interface UserSettings {
   name: string;
   companyName: string;
@@ -11,6 +13,8 @@ export interface UserSettings {
   email: string;
   emailDefaultSubject: string;
   emailDefaultText: string;
+  isSmallBusiness: boolean;
+  smallBusinessNote?: string | null;
   logoUrl?: string;
   primaryColor?: string;
   templateId?: string;
@@ -19,6 +23,10 @@ export interface UserSettings {
   prefixInvoice?: string;
   prefixOffer?: string;
   numberPadding?: number;
+  invoiceNumberPrefix?: string;
+  invoiceNumberNext?: number;
+  invoiceNumberPadding?: number;
+  invoiceNumberIncludeYear?: boolean;
   footerText?: string;
   defaultSenderIdentityId?: string | null;
 }
@@ -72,6 +80,7 @@ export interface Offer {
   number: string;
   clientId: string;
   projectId?: string;
+  currency: string;
   date: string;
   validUntil?: string;
   positions: Position[];
@@ -91,24 +100,37 @@ export enum InvoiceStatus {
   DRAFT = "DRAFT",
   ISSUED = "ISSUED",
   SENT = "SENT",
-  OVERDUE = "OVERDUE",
   PAID = "PAID",
+  CANCELED = "CANCELED",
 }
 
 export interface Invoice {
   id: string;
-  number: string;
+  number: string | null;
   offerId?: string;
   clientId: string;
+  clientName?: string;
+  clientCompanyName?: string | null;
+  clientContactPerson?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  clientVatId?: string | null;
+  clientAddress?: string | null;
   projectId?: string;
   date: string;
+  paymentTermsDays: number;
   dueDate?: string;
   positions: Position[];
   vatRate: number;
+  isSmallBusiness: boolean;
+  smallBusinessNote?: string | null;
   introText: string;
   footerText: string;
   status: InvoiceStatus;
   paymentDate?: string;
+  paidAt?: string | null;
+  canceledAt?: string | null;
+  isOverdue?: boolean;
   isLocked?: boolean;
   finalizedAt?: string | null;
   sentAt?: string | null;
@@ -120,15 +142,8 @@ export interface Invoice {
 
 export type DocumentType = "offer" | "invoice";
 
-export const formatCurrency = (
-  amount: number,
-  locale = "de-DE",
-  currency = "EUR"
-) => {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-  }).format(amount);
+export const formatCurrency = (amount: number, locale = "de-DE", currency = "EUR") => {
+  return formatMoney(amount, currency, locale);
 };
 
 export const formatDate = (dateStr: string, locale = "de-DE") => {

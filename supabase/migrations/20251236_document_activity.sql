@@ -20,10 +20,26 @@ alter table public.document_activity enable row level security;
 drop policy if exists document_activity_select_own on public.document_activity;
 drop policy if exists document_activity_insert_own on public.document_activity;
 
-create policy document_activity_select_own
-  on public.document_activity for select
-  using (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'document_activity' and policyname = 'document_activity_select_own'
+  ) then
+    create policy document_activity_select_own
+      on public.document_activity for select
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-create policy document_activity_insert_own
-  on public.document_activity for insert
-  with check (user_id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'document_activity' and policyname = 'document_activity_insert_own'
+  ) then
+    create policy document_activity_insert_own
+      on public.document_activity for insert
+      with check (user_id = auth.uid());
+  end if;
+end$$;

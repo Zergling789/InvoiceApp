@@ -1,12 +1,14 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
-import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
+import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
+import { formatMoney } from "@/utils/money";
 
 import { AppButton } from "@/ui/AppButton";
+import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
@@ -19,31 +21,49 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
+import { ApiRequestError, getErrorMessage, logError } from "@/utils/errors";
 
 export type EditorSeed = {
   id: string;
-  number: string;
+  number: string | null;
   date: string;
+  paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
   introText: string;
   footerText: string;
+  currency?: string;
 };
 
 type FormData = {
   id: string;
-  number: string;
+  number: string | null;
   date: string;
+  paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
   clientId: string;
+  clientName?: string;
+  clientCompanyName?: string | null;
+  clientContactPerson?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  clientVatId?: string | null;
+  clientAddress?: string | null;
   positions: Position[];
   introText: string;
   footerText: string;
   status: InvoiceStatus | OfferStatus;
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
+  currency?: string;
   paymentDate?: string;
+  paidAt?: string | null;
+  canceledAt?: string | null;
   offerId?: string;
   projectId?: string;
   isLocked?: boolean;
@@ -71,23 +91,49 @@ function applyTemplate(template: string, data: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (match, key) => data[key] ?? match);
 }
 
+function buildSnapshotFromClient(client?: Client | null) {
+  const companyName = client?.companyName ?? "";
+  const contactPerson = client?.contactPerson ?? "";
+  return {
+    clientName: companyName.trim() ? companyName : contactPerson,
+    clientCompanyName: companyName,
+    clientContactPerson: contactPerson,
+    clientEmail: client?.email ?? "",
+    clientPhone: null,
+    clientVatId: null,
+    clientAddress: client?.address ?? "",
+  };
+}
+
 function buildFormData(
   seed: EditorSeed,
   initial: Partial<FormData> | undefined,
-  isInvoice: boolean
+  isInvoice: boolean,
+  defaultCurrency?: string
 ): FormData {
   const base: FormData = {
     id: seed.id,
-    number: seed.number,
+    number: seed.number ?? null,
     date: seed.date,
+    paymentTermsDays: seed.paymentTermsDays ?? 14,
     dueDate: seed.dueDate,
     validUntil: seed.validUntil,
     clientId: "",
+    clientName: "",
+    clientCompanyName: "",
+    clientContactPerson: "",
+    clientEmail: "",
+    clientPhone: null,
+    clientVatId: null,
+    clientAddress: "",
     positions: [],
     introText: seed.introText ?? "",
     footerText: seed.footerText ?? "",
     status: isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT,
     vatRate: seed.vatRate ?? 0,
+    isSmallBusiness: seed.isSmallBusiness ?? false,
+    smallBusinessNote: seed.smallBusinessNote ?? "",
+    currency: isInvoice ? undefined : defaultCurrency ?? "EUR",
     paymentDate: undefined,
     offerId: undefined,
     projectId: undefined,
@@ -106,10 +152,21 @@ function buildFormData(
   return {
     ...merged,
     clientId: merged.clientId ?? "",
+    clientName: merged.clientName ?? "",
+    clientCompanyName: merged.clientCompanyName ?? "",
+    clientContactPerson: merged.clientContactPerson ?? "",
+    clientEmail: merged.clientEmail ?? "",
+    clientPhone: merged.clientPhone ?? null,
+    clientVatId: merged.clientVatId ?? null,
+    clientAddress: merged.clientAddress ?? "",
     positions: Array.isArray(merged.positions) ? (merged.positions as Position[]) : [],
     introText: merged.introText ?? "",
     footerText: merged.footerText ?? "",
     vatRate: Number(merged.vatRate ?? 0),
+    paymentTermsDays: Number(merged.paymentTermsDays ?? 14),
+    isSmallBusiness: Boolean(merged.isSmallBusiness ?? false),
+    smallBusinessNote: merged.smallBusinessNote ?? "",
+    currency: isInvoice ? undefined : merged.currency ?? defaultCurrency ?? "EUR",
   };
 }
 
@@ -128,6 +185,8 @@ export function DocumentEditor({
   actionMode = "full",
   primaryActionLabel = "Speichern",
   disableOfferWizard = false,
+  showHeader = true,
+  onDirtyChange,
 }: {
   type: "offer" | "invoice";
   seed: EditorSeed;
@@ -138,14 +197,17 @@ export function DocumentEditor({
   initial?: Partial<FormData>;
   readOnly?: boolean;
   startInPrint?: boolean;
-  layout?: "modal" | "page";
+  layout?: "modal" | "page" | "embedded";
   showTabs?: boolean;
   actionMode?: "full" | "save-only";
   primaryActionLabel?: string;
   disableOfferWizard?: boolean;
+  showHeader?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const isInvoice = type === "invoice";
   const isPageLayout = layout === "page";
+  const isEmbeddedLayout = layout === "embedded";
   const showStatusActions = actionMode === "full";
 
   const [saving, setSaving] = useState(false);
@@ -154,37 +216,91 @@ export function DocumentEditor({
   const navigate = useNavigate();
   const [showPrint, setShowPrint] = useState(startInPrint);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [pdfError, setPdfError] = useState<{ status?: number; message: string } | null>(null);
 
   const [formData, setFormData] = useState<FormData>(() =>
-    buildFormData(seed, initial, isInvoice)
+    buildFormData(seed, initial, isInvoice, settings.currency)
+  );
+  const [initialFormData, setInitialFormData] = useState<FormData>(() =>
+    buildFormData(seed, initial, isInvoice, settings.currency)
   );
   const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
 
   // ✅ WICHTIG: wenn seed/initial wechseln (Viewer lädt async), state neu setzen
   useEffect(() => {
-    setFormData(buildFormData(seed, initial, isInvoice));
+    const next = buildFormData(seed, initial, isInvoice, settings.currency);
+    setFormData(next);
+    setInitialFormData(next);
     setActiveTab("details");
     setShowPrint(startInPrint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed.id, startInPrint]);
+  }, [seed.id, startInPrint, settings.currency]);
 
   useEffect(() => {
     // initial kann nachträglich gesetzt werden (async)
     if (initial) {
-      setFormData((prev) => buildFormData({ ...seed }, { ...prev, ...initial }, isInvoice));
+      setFormData((prev) => {
+        const next = buildFormData({ ...seed }, { ...prev, ...initial }, isInvoice, settings.currency);
+        setInitialFormData(next);
+        return next;
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial]);
+  }, [initial, settings.currency]);
+
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    const dirty = JSON.stringify(formData) !== JSON.stringify(initialFormData);
+    onDirtyChange(dirty);
+  }, [formData, initialFormData, onDirtyChange]);
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+  const invoiceMetaDisabled = disabled || (isInvoice && formData.status !== InvoiceStatus.DRAFT);
+  const currencyOptions = ["EUR", "USD", "CHF", "GBP"];
+  const documentCurrency = isInvoice
+    ? settings.currency ?? "EUR"
+    : formData.currency ?? settings.currency ?? "EUR";
+  const locale = settings.locale ?? "de-DE";
   const showOfferWizard =
     !disableOfferWizard &&
     !isInvoice &&
     !readOnly &&
     formData.status === OfferStatus.DRAFT &&
     !formData.invoiceId;
+  const isSmallBusiness = isInvoice && Boolean(formData.isSmallBusiness);
   const selectedClient = clients.find((c) => c.id === formData.clientId);
+  const invoiceSnapshotClient = useMemo(() => {
+    if (!isInvoice) return undefined;
+    return {
+      id: formData.clientId,
+      companyName: formData.clientCompanyName?.trim() || formData.clientName?.trim() || "",
+      contactPerson: formData.clientContactPerson ?? "",
+      email: formData.clientEmail ?? "",
+      address: formData.clientAddress ?? "",
+      notes: "",
+    } as Client;
+  }, [
+    formData.clientAddress,
+    formData.clientCompanyName,
+    formData.clientContactPerson,
+    formData.clientEmail,
+    formData.clientId,
+    formData.clientName,
+    isInvoice,
+  ]);
+  const displayClient = isInvoice ? invoiceSnapshotClient : selectedClient;
+
+  const handleClientChange = (clientId: string) => {
+    if (!isInvoice || readOnly || locked || formData.status !== InvoiceStatus.DRAFT) {
+      setFormData((prev) => ({ ...prev, clientId }));
+      return;
+    }
+
+    const client = clients.find((c) => c.id === clientId);
+    const snapshot = client ? buildSnapshotFromClient(client) : buildSnapshotFromClient();
+    setFormData((prev) => ({ ...prev, clientId, ...snapshot }));
+  };
   const { defaultSubject, defaultMessage } = useMemo(
     () => buildTemplateDefaults(formData),
     [
@@ -236,9 +352,20 @@ export function DocumentEditor({
 
   const totals = useMemo(() => {
     const subtotal = calcNet(formData.positions ?? []);
-    const tax = calcVat(subtotal, toNumberOrZero(formData.vatRate));
-    return { subtotal, tax, total: calcGross(subtotal, tax) };
-  }, [formData.positions, formData.vatRate]);
+    const tax = isSmallBusiness ? 0 : calcVat(subtotal, toNumberOrZero(formData.vatRate));
+    return { subtotal, tax, total: isSmallBusiness ? subtotal : calcGross(subtotal, tax) };
+  }, [formData.positions, formData.vatRate, isSmallBusiness]);
+
+  useEffect(() => {
+    if (!isInvoice || readOnly || locked || formData.status !== InvoiceStatus.DRAFT) return;
+    if (!formData.date) return;
+    const nextDueDate = invoiceService.buildDueDate(
+      formData.date,
+      Number(formData.paymentTermsDays ?? 0)
+    );
+    if (nextDueDate === formData.dueDate) return;
+    setFormData((prev) => ({ ...prev, dueDate: nextDueDate }));
+  }, [formData.date, formData.paymentTermsDays, formData.dueDate, isInvoice, readOnly, locked]);
 
   const handleSave = async (opts?: {
     closeAfterSave?: boolean;
@@ -254,10 +381,6 @@ export function DocumentEditor({
       toast.error("Bitte Kunde wählen");
       return false;
     }
-    if (isInvoice && !data.dueDate) {
-      toast.error("Bitte Fälligkeitsdatum setzen");
-      return false;
-    }
     if (!isInvoice && !data.validUntil) {
       toast.error("Bitte Gültig-bis Datum setzen");
       return false;
@@ -271,11 +394,20 @@ export function DocumentEditor({
           number: data.number,
           offerId: data.offerId,
           clientId: data.clientId,
+          clientName: data.clientName ?? "",
+          clientCompanyName: data.clientCompanyName ?? "",
+          clientContactPerson: data.clientContactPerson ?? "",
+          clientEmail: data.clientEmail ?? "",
+          clientPhone: data.clientPhone ?? null,
+          clientVatId: data.clientVatId ?? null,
+          clientAddress: data.clientAddress ?? "",
           projectId: data.projectId,
           date: data.date,
-          dueDate: data.dueDate!,
+          paymentTermsDays: Number(data.paymentTermsDays ?? 14),
           positions: data.positions ?? [],
           vatRate: toNumberOrZero(data.vatRate),
+          isSmallBusiness: data.isSmallBusiness ?? false,
+          smallBusinessNote: data.smallBusinessNote ?? "",
           status: (data.status as InvoiceStatus) ?? InvoiceStatus.DRAFT,
           paymentDate: data.paymentDate,
           introText: data.introText ?? "",
@@ -294,6 +426,7 @@ export function DocumentEditor({
           number: data.number,
           clientId: data.clientId,
           projectId: data.projectId,
+          currency: data.currency ?? settings.currency ?? "EUR",
           date: data.date,
           validUntil: data.validUntil!,
           positions: data.positions ?? [],
@@ -314,26 +447,55 @@ export function DocumentEditor({
 
       if (closeAfterSave) onClose();
       return true;
+    } catch (error) {
+      let code = (error as Error & { code?: string }).code;
+      if (!code && error instanceof Error) {
+        code = error.message;
+      }
+      const message =
+        mapErrorCodeToToast(code) ||
+        getErrorMessage(error, "Dokument konnte nicht gespeichert werden.");
+      toast.error(message);
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
   const handleDownloadPdf = async () => {
+    setPdfError(null);
     try {
       await downloadDocumentPdf({
         type: isInvoice ? "invoice" : "offer",
         docId: formData.id,
       });
     } catch (error) {
+      logError(error);
+      const status = error instanceof ApiRequestError ? error.status : undefined;
       const message =
-        error instanceof Error && error.message ? error.message : "PDF konnte nicht erstellt werden.";
+        status === 401
+          ? "Session abgelaufen – bitte neu einloggen."
+          : status === 403
+          ? "Kein Zugriff auf dieses Dokument."
+          : status === 404
+          ? "Dokument nicht gefunden."
+          : getErrorMessage(error, "PDF konnte nicht erstellt werden.");
+      setPdfError({ status, message });
       toast.error(message);
     }
   };
 
   function buildTemplateDefaults(data: FormData) {
-    const client = clients.find((c) => c.id === data.clientId);
+    const client = isInvoice
+      ? ({
+          id: data.clientId,
+          companyName: data.clientCompanyName?.trim() || data.clientName?.trim() || "",
+          contactPerson: data.clientContactPerson ?? "",
+          email: data.clientEmail ?? "",
+          address: data.clientAddress ?? "",
+          notes: "",
+        } as Client)
+      : clients.find((c) => c.id === data.clientId);
     const templateData = {
       dokument: isInvoice ? "Rechnung" : "Angebot",
       nummer: data.number ?? "",
@@ -351,9 +513,13 @@ export function DocumentEditor({
     return { defaultSubject, defaultMessage };
   }
 
-  const handleSendSuccess = async (nextData: FormData) => {
-    setFormData(nextData);
-    await handleSave({ closeAfterSave: false, data: nextData, allowLocked: true });
+  const handleSendSuccess = async () => {
+    const refreshed = isInvoice
+      ? await invoiceService.getInvoice(formData.id)
+      : await offerService.getOffer(formData.id);
+    if (refreshed) {
+      setFormData(refreshed as FormData);
+    }
     await onSaved();
   };
 
@@ -362,19 +528,15 @@ export function DocumentEditor({
       toast.error("Bitte Kunde wählen");
       return false;
     }
-    if (!formData.number?.trim()) {
-      toast.error("Bitte Rechnungsnummer vergeben");
+    if (!formData.clientName?.trim()) {
+      toast.error("Bitte Kunde auswählen");
       return false;
     }
     if (!formData.date) {
       toast.error("Bitte Rechnungsdatum setzen");
       return false;
     }
-    if (!formData.dueDate) {
-      toast.error("Bitte Fälligkeitsdatum setzen");
-      return false;
-    }
-    if (!selectedClient?.address?.trim()) {
+    if (!formData.clientAddress?.trim()) {
       toast.error("Bitte Kundenadresse hinterlegen");
       return false;
     }
@@ -387,11 +549,14 @@ export function DocumentEditor({
       return false;
     }
     if (!Number.isFinite(formData.vatRate)) {
-      toast.error("Bitte einen gültigen MwSt.-Satz setzen");
-      return false;
+      if (!isSmallBusiness) {
+        toast.error("Bitte einen gültigen MwSt.-Satz setzen");
+        return false;
+      }
     }
-    if (!Number.isFinite(settings.defaultPaymentTerms) || settings.defaultPaymentTerms <= 0) {
-      toast.error("Bitte Zahlungsziel in den Einstellungen prüfen");
+    const paymentTermsDays = Number(formData.paymentTermsDays ?? settings.defaultPaymentTerms ?? 14);
+    if (!Number.isFinite(paymentTermsDays) || paymentTermsDays < 0 || paymentTermsDays > 365) {
+      toast.error("Bitte Zahlungsziel zwischen 0 und 365 Tagen setzen");
       return false;
     }
     if ((formData.positions ?? []).length === 0) {
@@ -412,27 +577,27 @@ export function DocumentEditor({
     });
     if (!ok) return;
 
-    const { error } = await supabase.rpc("finalize_invoice", {
-      invoice_id: formData.id,
-    });
-
-    if (error) {
+    try {
+      const updated = await invoiceService.finalizeInvoice(formData.id);
+      if (updated) {
+        setFormData({ ...formData, ...updated });
+      }
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
       toast.error(
-        mapErrorCodeToToast(error.code ?? error.message) ||
-          "Rechnung konnte nicht finalisiert werden."
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
       );
       return null;
     }
-
-    const updated = await invoiceService.getInvoice(formData.id);
-    if (!updated) {
+    const refreshed = await invoiceService.getInvoice(formData.id);
+    if (!refreshed) {
       toast.error("Rechnung konnte nicht geladen werden.");
       return null;
     }
 
     const nextData: FormData = {
       ...formData,
-      ...updated,
+      ...refreshed,
     };
     setFormData(nextData);
     await onSaved();
@@ -506,20 +671,20 @@ export function DocumentEditor({
       onClose={() => setShowSendModal(false)}
       documentType={isInvoice ? "invoice" : "offer"}
       document={formData as any}
-      client={selectedClient}
+      client={displayClient}
       settings={settings}
       defaultSubject={defaultSubject}
       defaultMessage={defaultMessage}
       onFinalize={isInvoice ? handleFinalizeInvoice : undefined}
-      onSent={async (nextData) => {
-        await handleSendSuccess(nextData as FormData);
+      onSent={async () => {
+        await handleSendSuccess();
       }}
     />
   );
 
   // ---------- Print Overlay ----------
   if (showPrint) {
-    const client = clients.find((c) => c.id === formData.clientId);
+    const client = displayClient;
 
     return (
       <div className="fixed inset-0 bg-white z-50 overflow-hidden">
@@ -552,6 +717,21 @@ export function DocumentEditor({
                   </AppButton>
                 </div>
               </div>
+              {pdfError && (
+                <div className="no-print mb-6">
+                  <Alert
+                    tone="error"
+                    message={pdfError.message}
+                    action={
+                      pdfError.status === 401 ? (
+                        <Link to="/login">
+                          <AppButton variant="secondary">Zum Login</AppButton>
+                        </Link>
+                      ) : undefined
+                    }
+                  />
+                </div>
+              )}
 
               <div className="flex justify-between mb-12">
                 <div>
@@ -562,13 +742,15 @@ export function DocumentEditor({
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">
                     {isInvoice ? "RECHNUNG" : "ANGEBOT"}
                   </h2>
-                  <p className="text-gray-500">Nr: {formData.number}</p>
-                  <p className="text-gray-500">Datum: {formatDate(formData.date, settings.locale ?? "de-DE")}</p>
+                  <p className="text-gray-500">
+                    Nr: {formData.number ?? (isInvoice ? "Wird bei Finalisierung vergeben" : "-")}
+                  </p>
+                  <p className="text-gray-500">Datum: {formatDate(formData.date, locale)}</p>
                   {isInvoice && formData.dueDate && (
-                    <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, settings.locale ?? "de-DE")}</p>
+                    <p className="text-gray-500">Fällig: {formatDate(formData.dueDate, locale)}</p>
                   )}
                   {!isInvoice && formData.validUntil && (
-                    <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil, settings.locale ?? "de-DE")}</p>
+                    <p className="text-gray-500">Gültig bis: {formatDate(formData.validUntil, locale)}</p>
                   )}
                 </div>
               </div>
@@ -597,7 +779,9 @@ export function DocumentEditor({
 
               <div className="mb-8">
                 <h3 className="font-bold text-lg mb-2">
-                  {isInvoice ? `Rechnung ${formData.number}` : `Angebot ${formData.number}`}
+                  {isInvoice
+                    ? `Rechnung ${formData.number ?? "Entwurf"}`
+                    : `Angebot ${formData.number ?? ""}`}
                 </h3>
 
                 {formData.introText && (
@@ -622,9 +806,13 @@ export function DocumentEditor({
                         <td className="py-3 text-right">
                           {toNumberOrZero(pos.quantity)} {pos.unit}
                         </td>
-                        <td className="py-3 text-right">{formatCurrency(toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
+                        <td className="py-3 text-right">{formatMoney(toNumberOrZero(pos.price), documentCurrency, locale)}</td>
                         <td className="py-3 text-right font-medium">
-                          {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), settings.locale ?? "de-DE", settings.currency ?? "EUR")}
+                          {formatMoney(
+                            toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price),
+                            documentCurrency,
+                            locale
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -638,27 +826,43 @@ export function DocumentEditor({
                   </tbody>
 
                   <tfoot className="border-t-2 border-gray-200">
-                    <tr>
-                      <td colSpan={3} className="pt-4 text-right">
-                        Zwischensumme:
-                      </td>
-                      <td className="pt-4 text-right">{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="text-right text-gray-500">
-                        Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
-                      </td>
-                      <td className="text-right text-gray-500">{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="pt-2 text-right font-bold text-lg">
-                        Gesamtsumme:
-                      </td>
-                      <td className="pt-2 text-right font-bold text-lg">{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</td>
-                    </tr>
+                    {isSmallBusiness ? (
+                      <tr>
+                        <td colSpan={3} className="pt-4 text-right font-bold text-lg">
+                          Gesamtbetrag:
+                        </td>
+                        <td className="pt-4 text-right font-bold text-lg">
+                          {formatMoney(totals.total, documentCurrency, locale)}
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr>
+                          <td colSpan={3} className="pt-4 text-right">
+                            Zwischensumme:
+                          </td>
+                          <td className="pt-4 text-right">{formatMoney(totals.subtotal, documentCurrency, locale)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="text-right text-gray-500">
+                            Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
+                          </td>
+                          <td className="text-right text-gray-500">{formatMoney(totals.tax, documentCurrency, locale)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="pt-2 text-right font-bold text-lg">
+                            Gesamtsumme:
+                          </td>
+                          <td className="pt-2 text-right font-bold text-lg">{formatMoney(totals.total, documentCurrency, locale)}</td>
+                        </tr>
+                      </>
+                    )}
                   </tfoot>
                 </table>
                 </div>
+                {isSmallBusiness && formData.smallBusinessNote && (
+                  <p className="mt-4 text-xs text-gray-500">{formData.smallBusinessNote}</p>
+                )}
               </div>
 
               <div className="mt-12 pt-8 border-t border-gray-100 text-sm">
@@ -722,6 +926,8 @@ export function DocumentEditor({
       className={
         isPageLayout
           ? "min-h-screen-safe bg-gray-50"
+          : isEmbeddedLayout
+          ? "bg-white flex flex-col min-h-0"
           : "fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40"
       }
     >
@@ -730,20 +936,24 @@ export function DocumentEditor({
         className={
           isPageLayout
             ? "bg-white min-h-screen-safe flex flex-col"
+            : isEmbeddedLayout
+            ? "bg-white flex flex-col min-h-0"
             : "bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom"
         }
       >
         {showOfferWizard ? (
           <>
-            <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-              <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
-                <ArrowLeft size={20} />
-              </AppButton>
-              <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
-              <AppButton variant="ghost" aria-label="Einstellungen">
-                <Settings size={20} />
-              </AppButton>
-            </div>
+            {showHeader && (
+              <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
+                <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                  <ArrowLeft size={20} />
+                </AppButton>
+                <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
+                <AppButton variant="ghost" aria-label="Einstellungen">
+                  <Settings size={20} />
+                </AppButton>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto bg-gray-50">
               <div className="px-6 pt-4 pb-3 border-b bg-white">
@@ -768,7 +978,7 @@ export function DocumentEditor({
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
                         value={formData.clientId}
                         disabled={disabled}
-                        onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                        onChange={(e) => handleClientChange(e.target.value)}
                       >
                         <option value="">Kunde auswählen</option>
                         {clients.map((c) => (
@@ -778,24 +988,31 @@ export function DocumentEditor({
                         ))}
                       </select>
                     </div>
+                    {isInvoice && (
+                      <div className="px-4 py-3 text-xs text-gray-500">
+                        Kundendaten werden in die Rechnung übernommen.
+                      </div>
+                    )}
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">Ansprechpartner</span>
-                      <input
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                        placeholder="z.B. Max Mustermann"
-                        value={selectedClient?.contactPerson ?? ""}
-                        readOnly
-                      />
+                      <span className="w-full sm:max-w-[260px] text-sm text-gray-700">
+                        {displayClient?.contactPerson || "—"}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">E-Mail</span>
-                      <input
-                        className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm text-gray-700 bg-gray-50"
-                        placeholder="E-Mail-Adresse"
-                        value={selectedClient?.email ?? ""}
-                        readOnly
-                      />
+                      <span className="w-full sm:max-w-[260px] text-sm text-gray-700">
+                        {displayClient?.email || "—"}
+                      </span>
                     </div>
+                    {isInvoice && (
+                      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                        <span className="text-sm font-medium text-gray-700">Adresse</span>
+                        <div className="w-full sm:max-w-[260px] text-sm text-gray-700 whitespace-pre-line">
+                          {displayClient?.address || "—"}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -811,7 +1028,7 @@ export function DocumentEditor({
                       <input
                         id="document-number"
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
-                        value={formData.number}
+                        value={formData.number ?? ""}
                         disabled={disabled}
                         onChange={(e) => setFormData({ ...formData, number: e.target.value })}
                         placeholder="z.B. ANG-2023-001"
@@ -819,14 +1036,14 @@ export function DocumentEditor({
                     </div>
                     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <label className="text-sm font-medium text-gray-700" htmlFor="document-date">
-                        Datum
+                        {isInvoice ? "Rechnungsdatum" : "Datum"}
                       </label>
                       <input
                         id="document-date"
                         type="date"
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
                         value={formData.date}
-                        disabled={disabled}
+                        disabled={isInvoice ? invoiceMetaDisabled : disabled}
                         onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                       />
                     </div>
@@ -862,6 +1079,29 @@ export function DocumentEditor({
                         inputMode="decimal"
                       />
                     </div>
+                    {!isInvoice && (
+                      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label
+                          className="text-sm font-medium text-gray-700"
+                          htmlFor="document-currency"
+                        >
+                          Währung
+                        </label>
+                        <select
+                          id="document-currency"
+                          className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
+                          value={formData.currency ?? documentCurrency}
+                          disabled={disabled}
+                          onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                        >
+                          {currencyOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -895,15 +1135,22 @@ export function DocumentEditor({
                             disabled={disabled}
                             onChange={(e) => updatePosition(idx, "unit", e.target.value)}
                           />
-                          <input
-                            type="number"
-                            className="w-full border rounded-lg p-2 text-sm"
-                            placeholder="Preis"
-                            value={pos.price ?? 0}
-                            disabled={disabled}
-                            onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
-                            inputMode="decimal"
-                          />
+                          <div className="relative">
+                            <input
+                              type="number"
+                              className="w-full border rounded-lg p-2 pr-12 text-sm"
+                              placeholder="Preis/Std"
+                              value={pos.price ?? 0}
+                              disabled={disabled}
+                              onChange={(e) =>
+                                updatePosition(idx, "price", toNumberOrZero(e.target.value))
+                              }
+                              inputMode="decimal"
+                            />
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                              {documentCurrency}
+                            </span>
+                          </div>
                           {!readOnly && (
                             <button
                               onClick={() => removePosition(idx)}
@@ -937,31 +1184,19 @@ export function DocumentEditor({
                     <div className="flex justify-between text-gray-600">
                       <span>Zwischensumme:</span>
                       <span>
-                        {formatCurrency(
-                          totals.subtotal,
-                          settings.locale ?? "de-DE",
-                          settings.currency ?? "EUR"
-                        )}
+                        {formatMoney(totals.subtotal, documentCurrency, locale)}
                       </span>
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>zzgl. MwSt. ({toNumberOrZero(formData.vatRate)}%):</span>
                       <span>
-                        {formatCurrency(
-                          totals.tax,
-                          settings.locale ?? "de-DE",
-                          settings.currency ?? "EUR"
-                        )}
+                        {formatMoney(totals.tax, documentCurrency, locale)}
                       </span>
                     </div>
                     <div className="flex justify-between text-base font-semibold text-blue-700 pt-2 border-t">
                       <span>Gesamtbetrag:</span>
                       <span>
-                        {formatCurrency(
-                          totals.total,
-                          settings.locale ?? "de-DE",
-                          settings.currency ?? "EUR"
-                        )}
+                        {formatMoney(totals.total, documentCurrency, locale)}
                       </span>
                     </div>
                   </div>
@@ -1025,34 +1260,36 @@ export function DocumentEditor({
           </>
         ) : (
           <>
-            <div className="flex justify-between items-center p-6 border-b">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold">
-                  {readOnly
-                    ? isInvoice
-                      ? "Rechnung ansehen"
-                      : "Angebot ansehen"
-                    : isInvoice
-                    ? "Rechnung bearbeiten"
-                    : "Angebot bearbeiten"}
-                </h2>
-                {isInvoice && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="px-2 py-1 rounded border bg-gray-100 text-gray-700">
-                      {formatDocumentStatus(type, formData.status)}
-                    </span>
-                    {locked && (
-                      <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">
-                        Locked
+            {showHeader && (
+              <div className="flex justify-between items-center p-6 border-b">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold">
+                    {readOnly
+                      ? isInvoice
+                        ? "Rechnung ansehen"
+                        : "Angebot ansehen"
+                      : isInvoice
+                      ? "Rechnung bearbeiten"
+                      : "Angebot bearbeiten"}
+                  </h2>
+                  {isInvoice && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="px-2 py-1 rounded border bg-gray-100 text-gray-700">
+                        {formatDocumentStatus(type, formData.status)}
                       </span>
-                    )}
-                  </div>
-                )}
+                      {locked && (
+                        <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">
+                          Locked
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                  {isPageLayout ? <ArrowLeft size={20} /> : <X size={20} />}
+                </AppButton>
               </div>
-              <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
-                {isPageLayout ? <ArrowLeft size={20} /> : <X size={20} />}
-              </AppButton>
-            </div>
+            )}
 
             <div className={`flex-1 overflow-y-auto p-6 space-y-6 ${actionMode === "save-only" ? "bottom-action-spacer" : ""}`}>
               {showTabs && (
@@ -1101,7 +1338,7 @@ export function DocumentEditor({
                     className="w-full border rounded p-2"
                     value={formData.clientId}
                     disabled={disabled}
-                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                    onChange={(e) => handleClientChange(e.target.value)}
                   >
                     <option value="">Wählen...</option>
                     {clients.map((c) => (
@@ -1110,6 +1347,30 @@ export function DocumentEditor({
                       </option>
                     ))}
                   </select>
+                  {isInvoice && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Kundendaten werden in die Rechnung übernommen.
+                    </p>
+                  )}
+                  {isInvoice && (
+                    <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm text-gray-700">
+                      <div className="font-semibold">
+                        {displayClient?.companyName || displayClient?.contactPerson || "—"}
+                      </div>
+                      {displayClient?.contactPerson &&
+                        displayClient.contactPerson !== displayClient.companyName && (
+                          <div>{displayClient.contactPerson}</div>
+                        )}
+                      {displayClient?.address && (
+                        <div className="mt-1 whitespace-pre-line">{displayClient.address}</div>
+                      )}
+                      <div className="mt-2">
+                        <Link to="/app/clients" className="text-xs text-blue-600 hover:underline">
+                          Kunde bearbeiten
+                        </Link>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1122,9 +1383,11 @@ export function DocumentEditor({
                   <input
                     id="document-number"
                     className="w-full border rounded p-2"
-                    value={formData.number}
-                    disabled={disabled}
+                    value={formData.number ?? ""}
+                    disabled={disabled || isInvoice}
+                    readOnly={isInvoice}
                     onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                    placeholder={isInvoice ? "Wird bei Finalisierung vergeben" : undefined}
                   />
                 </div>
 
@@ -1133,14 +1396,14 @@ export function DocumentEditor({
                     className="block text-sm font-medium text-gray-700 mb-1"
                     htmlFor="document-date"
                   >
-                    Datum
+                    {isInvoice ? "Rechnungsdatum" : "Datum"}
                   </label>
                   <input
                     id="document-date"
                     type="date"
                     className="w-full border rounded p-2"
                     value={formData.date}
-                    disabled={disabled}
+                    disabled={isInvoice ? invoiceMetaDisabled : disabled}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   />
                 </div>
@@ -1148,6 +1411,33 @@ export function DocumentEditor({
 
               {isInvoice ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-payment-terms"
+                    >
+                      Zahlungsziel (Tage)
+                    </label>
+                    <input
+                      id="document-payment-terms"
+                      type="number"
+                      className="w-full border rounded p-2"
+                      value={formData.paymentTermsDays ?? 14}
+                      disabled={invoiceMetaDisabled}
+                      min={0}
+                      max={365}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          paymentTermsDays: Math.min(
+                            365,
+                            Math.max(0, Math.trunc(toNumberOrZero(e.target.value)))
+                          ),
+                        })
+                      }
+                      inputMode="numeric"
+                    />
+                  </div>
                   <div>
                     <label
                       className="block text-sm font-medium text-gray-700 mb-1"
@@ -1160,29 +1450,79 @@ export function DocumentEditor({
                       type="date"
                       className="w-full border rounded p-2"
                       value={formData.dueDate ?? ""}
+                      readOnly
                       disabled={disabled}
-                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                     />
                   </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                      htmlFor="document-vat"
-                    >
-                      MwSt (%)
+                  {!isSmallBusiness && (
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                        htmlFor="document-vat"
+                      >
+                        MwSt (%)
+                      </label>
+                      <input
+                        id="document-vat"
+                        type="number"
+                        className="w-full border rounded p-2"
+                        value={formData.vatRate ?? 0}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                        }
+                        inputMode="decimal"
+                      />
+                    </div>
+                  )}
+                  <div className="md:col-span-2">
+                    <label className="flex items-start gap-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4"
+                        checked={isSmallBusiness}
+                        disabled={disabled}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => ({
+                            ...prev,
+                            isSmallBusiness: checked,
+                            smallBusinessNote: checked
+                              ? prev.smallBusinessNote?.trim() ||
+                                settings.smallBusinessNote ||
+                                ""
+                              : prev.smallBusinessNote ?? "",
+                          }));
+                        }}
+                      />
+                      <span>
+                        <span className="font-medium">Kleinunternehmer (§ 19 UStG)</span>
+                        <span className="block text-xs text-gray-500">
+                          Keine Umsatzsteuer ausweisen und Hinweistext auf der Rechnung anzeigen.
+                        </span>
+                      </span>
                     </label>
-                    <input
-                      id="document-vat"
-                      type="number"
-                      className="w-full border rounded p-2"
-                      value={formData.vatRate ?? 0}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
-                      }
-                      inputMode="decimal"
-                    />
                   </div>
+                  {isSmallBusiness && (
+                    <div className="md:col-span-2">
+                      <label
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                        htmlFor="document-small-business-note"
+                      >
+                        Hinweistext
+                      </label>
+                      <textarea
+                        id="document-small-business-note"
+                        className="w-full border rounded p-2"
+                        rows={2}
+                        value={formData.smallBusinessNote ?? ""}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setFormData({ ...formData, smallBusinessNote: e.target.value })
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1220,6 +1560,27 @@ export function DocumentEditor({
                       }
                       inputMode="decimal"
                     />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="document-currency"
+                    >
+                      Währung
+                    </label>
+                    <select
+                      id="document-currency"
+                      className="w-full border rounded p-2"
+                      value={formData.currency ?? documentCurrency}
+                      disabled={disabled}
+                      onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                    >
+                      {currencyOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               )}
@@ -1282,7 +1643,7 @@ export function DocumentEditor({
                   )}
                   {formData.sentCount && formData.lastSentAt ? (
                     <div className="text-gray-500">
-                      Sent {formData.sentCount}x - zuletzt {formatDate(formData.lastSentAt, settings.locale ?? "de-DE")}
+                      Sent {formData.sentCount}x - zuletzt {formatDate(formData.lastSentAt, locale)}
                     </div>
                   ) : (
                     <div className="text-gray-500">Not sent yet</div>
@@ -1349,16 +1710,19 @@ export function DocumentEditor({
                     />
                   </div>
 
-                  <div className="w-full sm:w-24">
+                  <div className="relative w-full sm:w-28">
                     <input
                       type="number"
-                      className="w-full border rounded p-2"
-                      placeholder="Preis"
+                      className="w-full border rounded p-2 pr-12"
+                      placeholder="Preis/Std"
                       value={pos.price ?? 0}
                       disabled={disabled}
                       onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
                       inputMode="decimal"
                     />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                      {documentCurrency}
+                    </span>
                   </div>
 
                   {!readOnly && (
@@ -1387,16 +1751,27 @@ export function DocumentEditor({
 
           <div className="flex justify-end pt-4 border-t">
             <div className="w-full sm:w-64 space-y-2 text-right">
-              <div className="flex justify-between">
-                <span>Netto:</span> <span>{formatCurrency(totals.subtotal, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
-                <span>{formatCurrency(totals.tax, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg">
-                <span>Gesamt:</span> <span>{formatCurrency(totals.total, settings.locale ?? "de-DE", settings.currency ?? "EUR")}</span>
-              </div>
+              {isSmallBusiness ? (
+                <div className="flex justify-between font-bold text-lg">
+                  <span>Gesamtbetrag:</span> <span>{formatMoney(totals.total, documentCurrency, locale)}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span>Netto:</span> <span>{formatMoney(totals.subtotal, documentCurrency, locale)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>MwSt ({toNumberOrZero(formData.vatRate)}%):</span>{" "}
+                    <span>{formatMoney(totals.tax, documentCurrency, locale)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg">
+                    <span>Gesamt:</span> <span>{formatMoney(totals.total, documentCurrency, locale)}</span>
+                  </div>
+                </>
+              )}
+              {isSmallBusiness && formData.smallBusinessNote && (
+                <p className="pt-2 text-xs text-gray-500 text-left">{formData.smallBusinessNote}</p>
+              )}
             </div>
           </div>
 

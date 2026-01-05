@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { loadDashboardData } from "@/app/dashboard/dashboardService";
@@ -17,7 +17,6 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
-import { supabase } from "@/supabaseClient";
 import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
@@ -81,6 +80,7 @@ const newId = () =>
 
 export default function TodosPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const { confirm } = useConfirm();
   const [filter, setFilter] = useState<FilterType>("all");
@@ -164,7 +164,9 @@ export default function TodosPage() {
       data.invoices.forEach((invoice) => {
         const isIncomplete =
           getInvoicePhase(invoice, today) === "draft" &&
-          ((invoice.positions ?? []).length === 0 || !invoice.clientId || invoice.vatRate == null);
+          ((invoice.positions ?? []).length === 0 ||
+            !invoice.clientId ||
+            (!invoice.isSmallBusiness && invoice.vatRate == null));
         if (isIncomplete) items.push({ type: "invoice", data: invoice });
       });
     }
@@ -188,12 +190,20 @@ export default function TodosPage() {
       secondaryAction?: TodoCard["secondaryAction"];
     }
   ) => {
-    const total = calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0));
+    const total = calculateDocumentTotal(
+      invoice.positions ?? [],
+      Number(invoice.vatRate ?? 0),
+      invoice.isSmallBusiness
+    );
     return {
       id: invoice.id,
       type: "invoice" as const,
-      number: invoice.number,
-      clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
+      number: invoice.number ?? "Entwurf",
+      clientName:
+        invoice.clientName?.trim() ||
+        invoice.clientCompanyName?.trim() ||
+        clientNameById.get(invoice.clientId) ||
+        "Unbekannter Kunde",
       amountLabel: formatCurrencyEur(total),
       statusLabel: options.statusLabel,
       statusTone: options.tone,
@@ -292,7 +302,7 @@ export default function TodosPage() {
     followUpOfferCards.length +
     draftCards.length;
 
-  const getDefaultSubject = (docType: "invoice" | "offer", docNumber: string) => {
+  const getDefaultSubject = (docType: "invoice" | "offer", docNumber: string | null) => {
     if (!settings) return "";
     const label = docType === "invoice" ? "Rechnung" : "Angebot";
     const template = settings.emailDefaultSubject?.trim() || `${label} {nummer}`;
@@ -317,14 +327,12 @@ export default function TodosPage() {
     });
     if (!ok) return null;
 
-    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
-      invoice_id: invoice.id,
-    });
-
-    if (finalizeError) {
+    try {
+      await invoiceService.finalizeInvoice(invoice.id);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
       toast.error(
-        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
-          "Rechnung konnte nicht finalisiert werden."
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
       );
       return null;
     }
@@ -386,23 +394,30 @@ export default function TodosPage() {
   };
 
   const openNewEditor = async (type: "invoice" | "offer") => {
+    if (type === "offer") {
+      setFabOpen(false);
+      navigate("/app/offers/new", { state: { backgroundLocation: location } });
+      return;
+    }
     try {
       const nextSettings = settings ?? (await fetchSettings());
       setSettings(nextSettings);
-      const num = await getNextDocumentNumber(type, nextSettings);
       const isInvoice = type === "invoice";
+      const defaultTerms = Number(nextSettings.defaultPaymentTerms ?? 14);
+      const num = isInvoice ? null : await getNextDocumentNumber(type, nextSettings);
       const seed: EditorSeed = {
         id: newId(),
         number: num,
         date: todayISO(),
         dueDate: isInvoice
-          ? invoiceService.buildDueDate(todayISO(), Number(nextSettings.defaultPaymentTerms ?? 14))
+          ? invoiceService.buildDueDate(todayISO(), defaultTerms)
           : undefined,
+        paymentTermsDays: isInvoice ? defaultTerms : undefined,
         validUntil: !isInvoice ? addDaysISO(14) : undefined,
         vatRate: Number(nextSettings.defaultVatRate ?? 0),
         introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
         footerText: isInvoice
-          ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
+          ? `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`
           : "Ich freue mich auf Ihre Rückmeldung.",
       };
       setEditorType(type);
@@ -424,7 +439,7 @@ export default function TodosPage() {
           document={selectedDoc}
           client={data.clients.find((entry) => entry.id === selectedDoc.clientId)}
           settings={settings}
-          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number)}
+          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number ?? "")}
           defaultMessage={getDefaultMessage()}
           templateType={sendIntent ?? undefined}
           onFinalize={selectedType === "invoice" ? handleFinalizeInvoice : undefined}
@@ -506,7 +521,7 @@ export default function TodosPage() {
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/app/documents?mode=offers">
+            <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
               <AppButton>Neues Angebot</AppButton>
             </Link>
             <Link to="/app/documents?mode=invoices">
@@ -666,7 +681,7 @@ export default function TodosPage() {
         </section>
       )}
 
-      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+      <div className="mobile-fab sm:hidden">
         <button
           type="button"
           onClick={() => setFabOpen(true)}

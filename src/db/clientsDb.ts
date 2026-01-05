@@ -1,17 +1,21 @@
 import { supabase } from "@/supabaseClient";
+import type { Database } from "@/lib/supabase.types";
 import type { Client } from "@/types";
 
-type DbClientRow = {
-  id: string;
-  user_id: string;
-  company_name: string | null;
-  contact_person: string | null;
-  email: string | null;
-  address: string | null;
-  notes: string | null;
-  updated_at?: string | null;
-  created_at?: string | null;
-};
+type DbClientRow = Database["public"]["Tables"]["clients"]["Row"];
+type DbClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
+
+const CLIENT_FIELDS = [
+  "id",
+  "user_id",
+  "company_name",
+  "contact_person",
+  "email",
+  "address",
+  "notes",
+  "updated_at",
+  "created_at",
+] as const satisfies readonly (keyof DbClientRow)[];
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -31,7 +35,7 @@ function toClient(r: DbClientRow): Client {
   };
 }
 
-function toPayload(uid: string, c: Client) {
+function toPayload(uid: string, c: Client): DbClientInsert {
   return {
     id: c.id,
     user_id: uid,
@@ -50,13 +54,13 @@ export async function dbListClients(): Promise<Client[]> {
 
   const { data, error } = await supabase
     .from("clients")
-    .select("*")
+    .select(CLIENT_FIELDS.join(","))
     .eq("user_id", uid)
     .order("company_name", { ascending: true });
 
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as DbClientRow[]).map(toClient);
+  return (data ?? []).map(toClient);
 }
 
 // ---------- GET ----------
@@ -65,14 +69,14 @@ export async function dbGetClientById(id: string): Promise<Client | null> {
 
   const { data, error } = await supabase
     .from("clients")
-    .select("*")
+    .select(CLIENT_FIELDS.join(","))
     .eq("id", id)
     .eq("user_id", uid)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
 
-  return data ? toClient(data as DbClientRow) : null;
+  return data ? toClient(data) : null;
 }
 
 // ---------- UPSERT ----------

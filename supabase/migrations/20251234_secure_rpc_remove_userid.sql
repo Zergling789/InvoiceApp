@@ -1,3 +1,21 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.document_activity (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  doc_type text not null check (doc_type in ('offer', 'invoice')),
+  doc_id uuid not null,
+  event_type text not null,
+  meta jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_document_activity_user_id
+  on public.document_activity(user_id);
+create index if not exists idx_document_activity_doc
+  on public.document_activity(doc_type, doc_id, created_at desc);
+
+
 create or replace function public.finalize_invoice(invoice_id uuid)
 returns public.invoices
 language plpgsql

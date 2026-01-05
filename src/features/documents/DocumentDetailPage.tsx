@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { MoreVertical } from "lucide-react";
 
 import type { Client, Invoice, Offer, Position, UserSettings } from "@/types";
-import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
+import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
+import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -18,7 +19,7 @@ import { mapErrorCodeToToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
-import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
+import { formatDocumentStatus, formatInvoiceDisplayStatus } from "@/features/documents/utils/formatStatus";
 import {
   getDocumentCapabilities,
   getInvoicePhase,
@@ -29,6 +30,7 @@ const statusTone = (phase: string) => {
   if (phase === "paid" || phase === "accepted" || phase === "invoiced") return "green";
   if (phase === "overdue" || phase === "rejected") return "red";
   if (phase === "sent" || phase === "issued") return "blue";
+  if (phase === "canceled") return "gray";
   return "gray";
 };
 
@@ -39,13 +41,17 @@ const toNumberOrZero = (value: unknown) => {
 
 const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): EditorSeed => ({
   id: doc.id,
-  number: String(doc.number ?? ""),
+  number: doc.number ?? null,
   date: doc.date,
+  paymentTermsDays: type === "invoice" ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
   dueDate: type === "invoice" ? (doc as Invoice).dueDate : undefined,
   validUntil: type === "offer" ? (doc as Offer).validUntil : undefined,
   vatRate: Number(doc.vatRate ?? 0),
+  isSmallBusiness: type === "invoice" ? (doc as Invoice).isSmallBusiness ?? false : undefined,
+  smallBusinessNote: type === "invoice" ? (doc as Invoice).smallBusinessNote ?? null : undefined,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
+  currency: type === "offer" ? (doc as Offer).currency ?? undefined : undefined,
 });
 
 export default function DocumentDetailPage() {
@@ -115,15 +121,29 @@ export default function DocumentDetailPage() {
 
   const client = useMemo(() => {
     if (!doc) return undefined;
+    if (docType === "invoice") {
+      const invoice = doc as Invoice;
+      return {
+        id: invoice.clientId,
+        companyName: invoice.clientCompanyName?.trim() || invoice.clientName?.trim() || "",
+        contactPerson: invoice.clientContactPerson ?? "",
+        email: invoice.clientEmail ?? "",
+        address: invoice.clientAddress ?? "",
+        notes: "",
+      } as Client;
+    }
     return clients.find((entry) => entry.id === doc.clientId);
-  }, [clients, doc]);
+  }, [clients, doc, docType]);
+
+  const isSmallBusiness =
+    docType === "invoice" && doc ? Boolean((doc as Invoice).isSmallBusiness) : false;
 
   const totals = useMemo(() => {
     if (!doc) return { net: 0, vat: 0, gross: 0 };
     const net = calcNet(doc.positions ?? []);
-    const vat = calcVat(net, toNumberOrZero(doc.vatRate));
-    return { net, vat, gross: calcGross(net, vat) };
-  }, [doc]);
+    const vat = isSmallBusiness ? 0 : calcVat(net, toNumberOrZero(doc.vatRate));
+    return { net, vat, gross: isSmallBusiness ? net : calcGross(net, vat) };
+  }, [doc, isSmallBusiness]);
 
   const timeline = useMemo(() => {
     if (!doc) return [];
@@ -169,20 +189,61 @@ export default function DocumentDetailPage() {
   const handleMarkPaid = async () => {
     if (!doc || docType !== "invoice") return;
     if (!capabilities?.canMarkPaid) return;
-    const invoice = doc as Invoice;
     const ok = await confirm({
       title: "Als bezahlt markieren",
       message: "Soll die Rechnung als bezahlt markiert werden?",
     });
     if (!ok) return;
-    const now = new Date().toISOString();
-    await invoiceService.saveInvoice({
-      ...invoice,
-      status: InvoiceStatus.PAID,
-      paymentDate: now,
+    try {
+      const updated = await invoiceService.markInvoicePaid((doc as Invoice).id);
+      if (updated) setDoc(updated);
+      toast.success("Rechnung als bezahlt markiert.");
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      toast.error(
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht aktualisiert werden."
+      );
+    }
+  };
+
+  const handleMarkSent = async () => {
+    if (!doc || docType !== "invoice") return;
+    if (!capabilities?.canMarkSent) return;
+    const ok = await confirm({
+      title: "Als gesendet markieren",
+      message: "Soll die Rechnung als gesendet markiert werden?",
     });
-    setDoc({ ...invoice, status: InvoiceStatus.PAID, paymentDate: now });
-    toast.success("Rechnung als bezahlt markiert.");
+    if (!ok) return;
+    try {
+      const updated = await invoiceService.markInvoiceSent((doc as Invoice).id);
+      if (updated) setDoc(updated);
+      toast.success("Rechnung als gesendet markiert.");
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      toast.error(
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht aktualisiert werden."
+      );
+    }
+  };
+
+  const handleCancelInvoice = async () => {
+    if (!doc || docType !== "invoice") return;
+    if (!capabilities?.canCancel) return;
+    const ok = await confirm({
+      title: "Rechnung stornieren",
+      message: "Soll die Rechnung storniert werden?",
+    });
+    if (!ok) return;
+    try {
+      const updated = await invoiceService.cancelInvoice((doc as Invoice).id);
+      if (updated) setDoc(updated);
+      toast.success("Rechnung storniert.");
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      toast.error(
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht storniert werden."
+      );
+    }
   };
 
   const handleOfferAccepted = async () => {
@@ -252,24 +313,18 @@ export default function DocumentDetailPage() {
     });
     if (!ok) return;
 
-    const { error: finalizeError } = await supabase.rpc("finalize_invoice", {
-      invoice_id: invoice.id,
-    });
-
-    if (finalizeError) {
+    try {
+      const updated = await invoiceService.finalizeInvoice(invoice.id);
+      if (updated) {
+        setDoc(updated);
+      }
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
       toast.error(
-        mapErrorCodeToToast(finalizeError.code ?? finalizeError.message) ||
-          "Rechnung konnte nicht finalisiert werden."
+        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
       );
       return;
     }
-
-    const updated = await invoiceService.getInvoice(invoice.id);
-    if (!updated) {
-      toast.error("Rechnung konnte nicht geladen werden.");
-      return;
-    }
-    setDoc(updated);
   };
 
   const actions =
@@ -297,6 +352,17 @@ export default function DocumentDetailPage() {
                 },
               ]
             : []),
+          ...(capabilities?.canMarkSent
+            ? [
+                {
+                  label: "Als gesendet markieren",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    void handleMarkSent();
+                  },
+                },
+              ]
+            : []),
           ...(capabilities?.canSendReminder
             ? [
                 {
@@ -315,6 +381,28 @@ export default function DocumentDetailPage() {
                   onSelect: () => {
                     setShowActionSheet(false);
                     handleOpenSend("dunning");
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canMarkPaid
+            ? [
+                {
+                  label: "Als bezahlt markieren",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    void handleMarkPaid();
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canCancel
+            ? [
+                {
+                  label: "Stornieren",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    void handleCancelInvoice();
                   },
                 },
               ]
@@ -391,8 +479,9 @@ export default function DocumentDetailPage() {
     setEditorSeed(buildEditorSeed(doc, docType));
     setEditorInitial({
       id: doc.id,
-      number: String(doc.number ?? ""),
+      number: doc.number ?? null,
       date: doc.date,
+      paymentTermsDays: "paymentTermsDays" in doc ? doc.paymentTermsDays ?? 14 : undefined,
       clientId: doc.clientId ?? "",
       projectId: doc.projectId ?? undefined,
       offerId: "offerId" in doc ? doc.offerId : undefined,
@@ -400,6 +489,8 @@ export default function DocumentDetailPage() {
       validUntil: "validUntil" in doc ? doc.validUntil : undefined,
       positions: doc.positions ?? [],
       vatRate: Number(doc.vatRate ?? 0),
+      isSmallBusiness: "isSmallBusiness" in doc ? doc.isSmallBusiness ?? false : false,
+      smallBusinessNote: "smallBusinessNote" in doc ? doc.smallBusinessNote ?? null : null,
       status: doc.status,
       introText: doc.introText ?? "",
       footerText: doc.footerText ?? "",
@@ -411,6 +502,7 @@ export default function DocumentDetailPage() {
       sentCount: doc.sentCount ?? 0,
       sentVia: doc.sentVia ?? null,
       invoiceId: "invoiceId" in doc ? doc.invoiceId ?? null : null,
+      currency: "currency" in doc ? doc.currency ?? undefined : undefined,
     });
     setEditorOpen(true);
   };
@@ -440,6 +532,9 @@ export default function DocumentDetailPage() {
 
   const docStatus = doc.status;
   const overdue = phase === "overdue";
+  const locale = settings.locale ?? "de-DE";
+  const documentCurrency =
+    docType === "offer" ? (doc as Offer).currency ?? settings.currency ?? "EUR" : settings.currency ?? "EUR";
   const primaryAction =
     docType === "invoice" && capabilities?.canMarkPaid
       ? {
@@ -470,8 +565,8 @@ export default function DocumentDetailPage() {
           defaultMessage={defaultMessage}
           templateType={sendTemplateType}
           onFinalize={docType === "invoice" ? undefined : undefined}
-          onSent={async (nextData) => {
-            setDoc(nextData as Invoice | Offer);
+          onSent={async () => {
+            await handleSaved();
           }}
         />
       )}
@@ -496,28 +591,51 @@ export default function DocumentDetailPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {docType === "invoice" ? "Rechnung" : "Angebot"} #{doc.number}
+              {docType === "invoice" ? "Rechnung" : "Angebot"} #
+              {docType === "invoice" ? doc.number ?? "Entwurf" : doc.number ?? ""}
             </h1>
             <div className="mt-1 text-sm text-gray-600">
-              {client?.companyName ?? "Unbekannter Kunde"} · {formatDate(doc.date, "de-DE")}
+              {client?.companyName ?? "Unbekannter Kunde"} · {formatDate(doc.date, locale)}
               {docType === "invoice" && (doc as Invoice).dueDate && (
                 <>
-                  {" "}· Fällig: {formatDate((doc as Invoice).dueDate ?? "", "de-DE")}
+                  {" "}· Fällig: {formatDate((doc as Invoice).dueDate ?? "", locale)}
                 </>
               )}
               {docType === "offer" && (doc as Offer).validUntil && (
                 <>
-                  {" "}· Gültig bis: {formatDate((doc as Offer).validUntil ?? "", "de-DE")}
+                  {" "}· Gültig bis: {formatDate((doc as Offer).validUntil ?? "", locale)}
                 </>
               )}
             </div>
           </div>
           <AppBadge color={overdue ? "red" : statusTone(phase ?? String(docStatus))}>
-            {formatDocumentStatus(docType, docStatus, { isOverdue: overdue })}
+            {docType === "invoice"
+              ? formatInvoiceDisplayStatus(doc as Invoice)
+              : formatDocumentStatus(docType, docStatus, { isOverdue: overdue })}
           </AppBadge>
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {docType === "invoice" && capabilities?.canFinalize && (
+            <AppButton variant="secondary" onClick={() => void handleFinalizeInvoice()}>
+              Finalisieren
+            </AppButton>
+          )}
+          {docType === "invoice" && capabilities?.canMarkSent && (
+            <AppButton variant="secondary" onClick={() => void handleMarkSent()}>
+              Als gesendet markieren
+            </AppButton>
+          )}
+          {docType === "invoice" && capabilities?.canMarkPaid && (
+            <AppButton variant="secondary" onClick={() => void handleMarkPaid()}>
+              Als bezahlt markieren
+            </AppButton>
+          )}
+          {docType === "invoice" && capabilities?.canCancel && (
+            <AppButton variant="secondary" onClick={() => void handleCancelInvoice()}>
+              Stornieren
+            </AppButton>
+          )}
           <AppButton variant="ghost" onClick={() => setShowActionSheet(true)}>
             <MoreVertical size={16} /> Mehr
           </AppButton>
@@ -535,11 +653,11 @@ export default function DocumentDetailPage() {
                 <div>
                   <div className="font-medium text-gray-900">{pos.description}</div>
                   <div className="text-xs text-gray-500">
-                    {toNumberOrZero(pos.quantity)} {pos.unit} · {formatCurrency(toNumberOrZero(pos.price), "de-DE", settings.currency ?? "EUR")}
+                    {toNumberOrZero(pos.quantity)} {pos.unit} · {formatMoney(toNumberOrZero(pos.price), documentCurrency, locale)}
                   </div>
                 </div>
                 <div className="text-sm font-medium text-gray-900">
-                  {formatCurrency(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), "de-DE", settings.currency ?? "EUR")}
+                  {formatMoney(toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price), documentCurrency, locale)}
                 </div>
               </div>
             ))
@@ -549,18 +667,30 @@ export default function DocumentDetailPage() {
 
       <AppCard className="space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">Summen</h2>
-        <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>Netto</span>
-          <span>{formatCurrency(totals.net, "de-DE", settings.currency ?? "EUR")}</span>
-        </div>
-        <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>MwSt ({toNumberOrZero(doc.vatRate)}%)</span>
-          <span>{formatCurrency(totals.vat, "de-DE", settings.currency ?? "EUR")}</span>
-        </div>
-        <div className="flex items-center justify-between text-base font-semibold text-gray-900">
-          <span>Brutto</span>
-          <span>{formatCurrency(totals.gross, "de-DE", settings.currency ?? "EUR")}</span>
-        </div>
+        {isSmallBusiness ? (
+          <div className="flex items-center justify-between text-base font-semibold text-gray-900">
+            <span>Gesamtbetrag</span>
+            <span>{formatMoney(totals.gross, documentCurrency, locale)}</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>Netto</span>
+              <span>{formatMoney(totals.net, documentCurrency, locale)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>MwSt ({toNumberOrZero(doc.vatRate)}%)</span>
+              <span>{formatMoney(totals.vat, documentCurrency, locale)}</span>
+            </div>
+            <div className="flex items-center justify-between text-base font-semibold text-gray-900">
+              <span>Brutto</span>
+              <span>{formatMoney(totals.gross, documentCurrency, locale)}</span>
+            </div>
+          </>
+        )}
+        {isSmallBusiness && "smallBusinessNote" in doc && doc.smallBusinessNote && (
+          <p className="text-xs text-gray-500">{doc.smallBusinessNote}</p>
+        )}
       </AppCard>
 
       <AppCard className="space-y-3">
@@ -568,7 +698,10 @@ export default function DocumentDetailPage() {
         {docType === "invoice" ? (
           <div className="space-y-2 text-sm text-gray-600">
             <div>
-              Zahlungsziel: {(doc as Invoice).dueDate ? formatDate((doc as Invoice).dueDate ?? "", "de-DE") : "—"}
+              Zahlungsziel: {(doc as Invoice).paymentTermsDays ?? 0} Tage
+            </div>
+            <div>
+              Fällig am: {(doc as Invoice).dueDate ? formatDate((doc as Invoice).dueDate ?? "", "de-DE") : "—"}
             </div>
             <div>
               Bank: {settings.bankName || "—"}

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { formatDate } from "@/types";
-import { calculateDocumentTotal, formatCurrencyEur } from "@/utils/dashboard";
+import { calculateDocumentTotal } from "@/utils/dashboard";
+import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -21,8 +22,6 @@ import {
   formatOfferPhaseLabel,
 } from "@/features/documents/state/formatPhaseLabel";
 import { fetchSettings } from "@/app/settings/settingsService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
-import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
@@ -50,13 +49,6 @@ const toLocalISODate = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const todayISO = () => toLocalISODate(new Date());
-const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
-
-const newId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 
 const offerStatusTone = (phase: OfferPhase): DocumentRow["statusTone"] => {
   switch (phase) {
@@ -82,6 +74,8 @@ const invoiceStatusTone = (phase: InvoicePhase): DocumentRow["statusTone"] => {
       return "blue";
     case "issued":
       return "yellow";
+    case "canceled":
+      return "gray";
     default:
       return "gray";
   }
@@ -98,6 +92,7 @@ const getRowDocumentTimestamp = (row: DocumentRow) =>
 
 export default function DocumentsHubPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -108,9 +103,6 @@ export default function DocumentsHubPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
-  const [editorType, setEditorType] = useState<"invoice" | "offer">("invoice");
   const [fabOpen, setFabOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
@@ -118,14 +110,16 @@ export default function DocumentsHubPage() {
     setLoading(true);
     setError(null);
     try {
-      const [clientData, offerData, invoiceData] = await Promise.all([
+      const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
         clientService.list(),
         offerService.listOffers(),
         invoiceService.listInvoices(),
+        fetchSettings(),
       ]);
       setClients(clientData);
       setOffers(offerData);
       setInvoices(invoiceData);
+      setSettings(settingsData);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -139,15 +133,17 @@ export default function DocumentsHubPage() {
       setLoading(true);
       setError(null);
       try {
-        const [clientData, offerData, invoiceData] = await Promise.all([
+        const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
           clientService.list(),
           offerService.listOffers(),
           invoiceService.listInvoices(),
+          fetchSettings(),
         ]);
         if (!mounted) return;
         setClients(clientData);
         setOffers(offerData);
         setInvoices(invoiceData);
+        setSettings(settingsData);
       } catch (e) {
         if (mounted) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -192,7 +188,7 @@ export default function DocumentsHubPage() {
       return ["draft", "sent", "accepted", "rejected", "invoiced"];
     }
     if (mode === "invoice") {
-      return ["draft", "issued", "sent", "overdue", "paid"];
+      return ["draft", "issued", "sent", "overdue", "paid", "canceled"];
     }
     return [
       "draft",
@@ -203,12 +199,20 @@ export default function DocumentsHubPage() {
       "issued",
       "overdue",
       "paid",
+      "canceled",
     ];
   }, [mode]);
 
   const statusLabel = useMemo(() => {
     const offerPhases = new Set<OfferPhase>(["draft", "sent", "accepted", "rejected", "invoiced"]);
-    const invoicePhases = new Set<InvoicePhase>(["draft", "issued", "sent", "overdue", "paid"]);
+    const invoicePhases = new Set<InvoicePhase>([
+      "draft",
+      "issued",
+      "sent",
+      "overdue",
+      "paid",
+      "canceled",
+    ]);
     return (status: CombinedStatus) => {
       if (offerPhases.has(status as OfferPhase)) {
         return formatOfferPhaseLabel(status as OfferPhase);
@@ -221,6 +225,8 @@ export default function DocumentsHubPage() {
   }, []);
 
   const rows = useMemo(() => {
+    const locale = settings?.locale ?? "de-DE";
+    const invoiceCurrency = settings?.currency ?? "EUR";
     const today = new Date();
     const invoiceRows: DocumentRow[] =
       mode === "offer"
@@ -230,12 +236,22 @@ export default function DocumentsHubPage() {
             return {
               id: invoice.id,
               type: "invoice",
-              number: invoice.number,
-              clientName: clientNameById.get(invoice.clientId) ?? "Unbekannter Kunde",
+              number: invoice.number ?? "Entwurf",
+              clientName:
+                invoice.clientName?.trim() ||
+                invoice.clientCompanyName?.trim() ||
+                clientNameById.get(invoice.clientId) ||
+                "Unbekannter Kunde",
               date: invoice.date,
               createdAt: (invoice as { createdAt?: string }).createdAt,
-              amountLabel: formatCurrencyEur(
-                calculateDocumentTotal(invoice.positions ?? [], Number(invoice.vatRate ?? 0))
+              amountLabel: formatMoney(
+                calculateDocumentTotal(
+                  invoice.positions ?? [],
+                  Number(invoice.vatRate ?? 0),
+                  invoice.isSmallBusiness
+                ),
+                invoiceCurrency,
+                locale
               ),
               statusLabel: formatInvoicePhaseLabel(phase),
               statusTone: invoiceStatusTone(phase),
@@ -250,6 +266,7 @@ export default function DocumentsHubPage() {
         ? []
         : offers.map((offer) => {
             const phase = getOfferPhase(offer);
+            const currency = offer.currency ?? settings?.currency ?? "EUR";
             return {
               id: offer.id,
               type: "offer",
@@ -257,8 +274,10 @@ export default function DocumentsHubPage() {
               clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
               date: offer.date,
               createdAt: (offer as { createdAt?: string }).createdAt,
-              amountLabel: formatCurrencyEur(
-                calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0))
+              amountLabel: formatMoney(
+                calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0)),
+                currency,
+                locale
               ),
               statusLabel: formatOfferPhaseLabel(phase),
               statusTone: offerStatusTone(phase),
@@ -268,7 +287,7 @@ export default function DocumentsHubPage() {
           });
 
     return [...offerRows, ...invoiceRows];
-  }, [clientNameById, invoices, offers, mode]);
+  }, [clientNameById, invoices, offers, mode, settings]);
 
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -327,50 +346,14 @@ export default function DocumentsHubPage() {
     );
   };
 
-  const openNewEditor = async (type: "invoice" | "offer") => {
-    try {
-      const nextSettings = settings ?? (await fetchSettings());
-      setSettings(nextSettings);
-      const num = await getNextDocumentNumber(type, nextSettings);
-      const isInvoice = type === "invoice";
-      const seed: EditorSeed = {
-        id: newId(),
-        number: num,
-        date: todayISO(),
-        dueDate: isInvoice
-          ? invoiceService.buildDueDate(todayISO(), Number(nextSettings.defaultPaymentTerms ?? 14))
-          : undefined,
-        validUntil: !isInvoice ? addDaysISO(14) : undefined,
-        vatRate: Number(nextSettings.defaultVatRate ?? 0),
-        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
-        footerText: isInvoice
-          ? `Zahlbar innerhalb von ${Number(nextSettings.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
-          : "Ich freue mich auf Ihre Rückmeldung.",
-      };
-      setEditorType(type);
-      setEditorSeed(seed);
-      setEditorOpen(true);
-      setFabOpen(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+  const openNewEditor = (type: "invoice" | "offer") => {
+    const target = type === "offer" ? "/app/offers/new" : "/app/invoices/new";
+    setFabOpen(false);
+    navigate(target, { state: { backgroundLocation: location } });
   };
 
   return (
     <div className="space-y-6">
-      {editorOpen && editorSeed && settings && (
-        <DocumentEditor
-          type={editorType}
-          seed={editorSeed}
-          settings={settings}
-          clients={clients}
-          onClose={() => {
-            setEditorOpen(false);
-            setEditorSeed(null);
-          }}
-          onSaved={refreshDocuments}
-        />
-      )}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-gray-900">Dokumente</h1>
         <p className="text-sm text-gray-600">
@@ -481,7 +464,7 @@ export default function DocumentsHubPage() {
         </div>
       )}
 
-      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+      <div className="mobile-fab sm:hidden">
         <button
           type="button"
           onClick={() => setFabOpen(true)}

@@ -563,6 +563,8 @@ const normalizeDbError = (err) => {
       return { code, message: "Invoice content is locked.", httpStatus: 409 };
     case "INVOICE_LOCK_INVALID_STATUS":
       return { code, message: "Invoice lock status invalid.", httpStatus: 409 };
+    case "INVOICE_NUMBER_IMMUTABLE":
+      return { code, message: "Invoice number is immutable after finalization.", httpStatus: 409 };
     case "status_transition_not_allowed":
       return { code, message: "Status transition not allowed.", httpStatus: 409 };
     case "P0001":
@@ -574,6 +576,9 @@ const normalizeDbError = (err) => {
       }
       if (message.includes("INVOICE_LOCKED_CONTENT")) {
         return { code: "INVOICE_LOCKED_CONTENT", message: "Invoice content is locked.", httpStatus: 409 };
+      }
+      if (message.includes("INVOICE_NUMBER_IMMUTABLE")) {
+        return { code: "INVOICE_NUMBER_IMMUTABLE", message: "Invoice number is immutable after finalization.", httpStatus: 409 };
       }
       if (message.includes("status transition")) {
         return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
@@ -665,15 +670,25 @@ const buildPdfFilename = ({ type, doc, client }) => {
 
 const mapInvoiceRow = (row = {}) => ({
   id: row.id,
-  number: row.number,
+  number: row.invoice_number ?? row.number ?? null,
   clientId: row.client_id,
+  clientName: row.client_name ?? "",
+  clientCompanyName: row.client_company_name ?? "",
+  clientContactPerson: row.client_contact_person ?? "",
+  clientEmail: row.client_email ?? "",
+  clientPhone: row.client_phone ?? "",
+  clientVatId: row.client_vat_id ?? "",
+  clientAddress: row.client_address ?? "",
   projectId: row.project_id ?? undefined,
-  date: row.date,
+  date: row.invoice_date ?? row.date,
   dueDate: row.due_date ?? "",
+  paymentTermsDays: row.payment_terms_days ?? 14,
   positions: row.positions ?? [],
   introText: row.intro_text ?? "",
   footerText: row.footer_text ?? "",
   vatRate: Number(row.vat_rate ?? 0),
+  isSmallBusiness: Boolean(row.is_small_business ?? false),
+  smallBusinessNote: row.small_business_note ?? null,
 });
 
 const mapOfferRow = (row = {}) => ({
@@ -697,6 +712,17 @@ const mapSettingsRow = (row = {}) => ({
   bic: row.bic ?? "",
   bankName: row.bank_name ?? "",
   footerText: row.footer_text ?? "",
+});
+
+const mapInvoiceSnapshotClient = (row = {}) => ({
+  id: row.client_id ?? "",
+  companyName: row.client_company_name ?? row.client_name ?? "",
+  name: row.client_name ?? row.client_company_name ?? "",
+  contactPerson: row.client_contact_person ?? "",
+  email: row.client_email ?? "",
+  address: row.client_address ?? "",
+  vatId: row.client_vat_id ?? "",
+  phone: row.client_phone ?? "",
 });
 
 const mapClientRow = (row = {}) => ({
@@ -738,7 +764,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, number, client_id, project_id, date, due_date, positions, intro_text, footer_text, vat_rate"
+    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, project_id, date, invoice_date, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db
@@ -773,7 +799,21 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   const settings = mapSettingsRow(settingsRow ?? {});
 
   let client = mapClientRow({});
-  if (doc.clientId) {
+  if (resolvedType === "invoice") {
+    const snapshotClient = mapInvoiceSnapshotClient(docRow);
+    const hasSnapshot = [
+      snapshotClient.companyName,
+      snapshotClient.name,
+      snapshotClient.contactPerson,
+      snapshotClient.email,
+      snapshotClient.address,
+    ].some((value) => String(value ?? "").trim().length > 0);
+    if (hasSnapshot) {
+      client = snapshotClient;
+    }
+  }
+
+  if (!client.companyName && !client.name && doc.clientId) {
     const { data: clientRow } = await db
       .from("clients")
       .select("id, company_name, contact_person, email, address")
@@ -895,6 +935,244 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
     const code = err?.code || "pdf_link_failed";
     console.error("PDF link generation failed", err);
     return sendError(res, status, code, "PDF link generation failed.");
+  }
+});
+
+const computeInvoiceIsOverdue = (invoice) => {
+  if (!invoice) return false;
+  if (!["ISSUED", "SENT"].includes(invoice.status)) return false;
+  if (invoice.paid_at || invoice.canceled_at) return false;
+  if (!invoice.due_date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(invoice.due_date);
+  return due.getTime() < today.getTime();
+};
+
+const loadInvoiceForUser = async (supabase, invoiceId) => {
+  const { data: invoice, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .maybeSingle();
+
+  if (error) {
+    return { error };
+  }
+
+  return { invoice };
+};
+
+app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { error } = await supabase.rpc("finalize_invoice", {
+      invoice_id: invoiceId,
+    });
+
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized && (normalized.httpStatus === 401 || normalized.httpStatus === 403)) {
+        return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      }
+      const message = normalized?.message || error.message || "Invoice finalization failed.";
+      return res.status(400).json({
+        error: message,
+        code: normalized?.code || error.code || "finalize_failed",
+      });
+    }
+
+    const { data: invoice, error: fetchError } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", invoiceId)
+      .maybeSingle();
+    if (fetchError || !invoice) {
+      return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...invoice, is_overdue: computeInvoiceIsOverdue(invoice) } });
+  } catch (err) {
+    console.error("Finalize invoice failed", err);
+    if (err?.status === 401) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    if (err?.status === 403) {
+      return sendError(res, 403, "forbidden", "Forbidden");
+    }
+    return sendError(res, err?.status || 500, "finalize_failed", "Invoice finalization failed.");
+  }
+});
+
+app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+    }
+    if (!invoice) {
+      return sendError(res, 404, "not_found", "Invoice not found.");
+    }
+    if (invoice.status !== "ISSUED") {
+      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        status: "SENT",
+        sent_at: invoice.sent_at ?? nowIso,
+        last_sent_at: nowIso,
+        sent_count: (invoice.sent_count ?? 0) + 1,
+        sent_via: "MANUAL",
+        updated_at: nowIso,
+      })
+      .eq("id", invoiceId)
+      .select("*")
+      .single();
+
+    if (updateError || !updated) {
+      const normalized = normalizeDbError(updateError);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "update_failed", "Invoice update failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
+  } catch (err) {
+    const normalized = normalizeDbError(err);
+    if (normalized) {
+      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+    }
+    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+  }
+});
+
+app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+    }
+    if (!invoice) {
+      return sendError(res, 404, "not_found", "Invoice not found.");
+    }
+    if (!["ISSUED", "SENT"].includes(invoice.status)) {
+      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        status: "PAID",
+        paid_at: nowIso,
+        payment_date: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", invoiceId)
+      .select("*")
+      .single();
+
+    if (updateError || !updated) {
+      const normalized = normalizeDbError(updateError);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "update_failed", "Invoice update failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
+  } catch (err) {
+    const normalized = normalizeDbError(err);
+    if (normalized) {
+      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+    }
+    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+  }
+});
+
+app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    if (!invoiceId) {
+      return sendError(res, 400, "bad_request", "Missing invoice id.");
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return sendError(res, 401, "unauthorized", "Unauthorized");
+    }
+    const supabase = createUserSupabaseClient(token);
+    const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
+    if (error) {
+      const normalized = normalizeDbError(error);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+    }
+    if (!invoice) {
+      return sendError(res, 404, "not_found", "Invoice not found.");
+    }
+    if (!["ISSUED", "SENT"].includes(invoice.status)) {
+      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        status: "CANCELED",
+        canceled_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", invoiceId)
+      .select("*")
+      .single();
+
+    if (updateError || !updated) {
+      const normalized = normalizeDbError(updateError);
+      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+      return sendError(res, 500, "update_failed", "Invoice update failed.");
+    }
+
+    return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
+  } catch (err) {
+    const normalized = normalizeDbError(err);
+    if (normalized) {
+      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
+    }
+    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
   }
 });
 

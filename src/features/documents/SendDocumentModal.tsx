@@ -256,7 +256,8 @@ export function SendDocumentModal({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Dokument senden</h3>
             <p className="text-sm text-gray-500">
-              {documentType === "invoice" ? "Rechnung" : "Angebot"} {localDocument.number}
+              {documentType === "invoice" ? "Rechnung" : "Angebot"}{" "}
+              {documentType === "invoice" ? localDocument.number ?? "Entwurf" : localDocument.number}
             </p>
           </div>
           <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">

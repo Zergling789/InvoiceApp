@@ -11,6 +11,7 @@
     --app-space-4: clamp(1.2rem, 1rem + 1vw, 2rem);
     --app-radius-lg: 16px;
     --app-text-base: clamp(0.95rem, 0.9rem + 0.4vw, 1rem);
+    --mobile-nav-h: 72px;
   }
 
   html {
@@ -493,24 +494,6 @@
     background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   }
 
-  .settings-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 6px;
-    border-radius: 999px;
-    background: rgba(148, 163, 184, 0.2);
-  }
-
-  .settings-tab {
-    border-radius: 999px;
-    box-shadow: none;
-  }
-
-  .settings-tab:hover {
-    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
-  }
-
   @media (max-width: 720px) {
     .landing__cta {
       flex-direction: column;
@@ -531,7 +514,7 @@
   }
 
   .app-shell {
-    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom));
   }
 
   @media (min-width: 768px) {
@@ -559,6 +542,17 @@
   .safe-area-container {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+  }
+
+  .mobile-nav {
+    height: var(--mobile-nav-h);
+  }
+
+  .mobile-fab {
+    position: fixed;
+    right: 1rem;
+    bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 1rem);
+    z-index: 45;
   }
 
   @media (max-width: 639px) {

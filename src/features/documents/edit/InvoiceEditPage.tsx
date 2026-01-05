@@ -11,24 +11,30 @@ import * as invoiceService from "@/app/invoices/invoiceService";
 
 const buildEditorSeed = (doc: Invoice): EditorSeed => ({
   id: doc.id,
-  number: String(doc.number ?? ""),
+  number: doc.number ?? null,
   date: doc.date,
+  paymentTermsDays: doc.paymentTermsDays ?? 14,
   dueDate: doc.dueDate ?? undefined,
   vatRate: Number(doc.vatRate ?? 0),
+  isSmallBusiness: doc.isSmallBusiness ?? false,
+  smallBusinessNote: doc.smallBusinessNote ?? null,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
 });
 
 const buildEditorInitial = (doc: Invoice) => ({
   id: doc.id,
-  number: String(doc.number ?? ""),
+  number: doc.number ?? null,
   date: doc.date,
+  paymentTermsDays: doc.paymentTermsDays ?? 14,
   clientId: doc.clientId ?? "",
   projectId: doc.projectId ?? undefined,
   offerId: doc.offerId ?? undefined,
   dueDate: doc.dueDate ?? undefined,
   positions: doc.positions ?? [],
   vatRate: Number(doc.vatRate ?? 0),
+  isSmallBusiness: doc.isSmallBusiness ?? false,
+  smallBusinessNote: doc.smallBusinessNote ?? null,
   status: doc.status,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",

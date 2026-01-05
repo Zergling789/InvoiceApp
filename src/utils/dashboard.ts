@@ -1,4 +1,5 @@
-import { formatCurrency, Invoice, InvoiceStatus, Offer, OfferStatus, Position } from "@/types";
+import { Invoice, InvoiceStatus, Offer, OfferStatus, Position } from "@/types";
+import { formatMoney } from "@/utils/money";
 
 const DAY_MS = 86400000;
 
@@ -7,14 +8,18 @@ export type OfferWithFollowUp = Offer & {
   lastInteractionAt?: string | null;
 };
 
-export const formatCurrencyEur = (amount: number) => formatCurrency(amount, "de-DE", "EUR");
+export const formatCurrencyEur = (amount: number) => formatMoney(amount, "EUR", "de-DE");
 
 export const calculatePositionsTotal = (positions: Position[]) =>
   positions.reduce((total, position) => total + position.quantity * position.price, 0);
 
-export const calculateDocumentTotal = (positions: Position[], vatRate: number) => {
+export const calculateDocumentTotal = (
+  positions: Position[],
+  vatRate: number,
+  isSmallBusiness = false
+) => {
   const net = calculatePositionsTotal(positions);
-  return net * (1 + (vatRate || 0) / 100);
+  return isSmallBusiness ? net : net * (1 + (vatRate || 0) / 100);
 };
 
 export const getDaysSince = (dateStr?: string | null, today = new Date()) => {
@@ -26,14 +31,18 @@ export const getDaysSince = (dateStr?: string | null, today = new Date()) => {
 };
 
 export const isInvoicePaid = (invoice: Invoice) => invoice.status === InvoiceStatus.PAID;
+export const isInvoiceCanceled = (invoice: Invoice) => invoice.status === InvoiceStatus.CANCELED;
 
 export const isInvoiceOverdue = (invoice: Invoice, today = new Date()) => {
-  if (isInvoicePaid(invoice)) return false;
+  if (typeof invoice.isOverdue === "boolean") return invoice.isOverdue;
+  if (isInvoicePaid(invoice) || isInvoiceCanceled(invoice)) return false;
+  if (![InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(invoice.status)) return false;
+  if (invoice.paidAt || invoice.canceledAt) return false;
   if (!invoice.dueDate) return false;
   return new Date(invoice.dueDate).getTime() < today.getTime();
 };
 
-export const isInvoiceOpen = (invoice: Invoice) => !isInvoicePaid(invoice);
+export const isInvoiceOpen = (invoice: Invoice) => !isInvoicePaid(invoice) && !isInvoiceCanceled(invoice);
 
 export const isOfferOpen = (offer: Offer) =>
   offer.status !== OfferStatus.ACCEPTED &&

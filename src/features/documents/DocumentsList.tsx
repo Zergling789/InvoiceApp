@@ -5,45 +5,61 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { AppButton as Button } from "@/ui/AppButton";
 import { AppBadge as Badge } from "@/ui/AppBadge";
+import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 
 import type { Client, UserSettings, Position, Invoice, Offer } from "@/types";
-import { InvoiceStatus, OfferStatus, formatCurrency, formatDate } from "@/types";
+import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
+import { formatMoney } from "@/utils/money";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 import * as clientService from "@/app/clients/clientService";
 import * as settingsService from "@/app/settings/settingsService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { DocumentEditor } from "./DocumentEditor";
-import { formatDocumentStatus, formatInvoiceStatus, formatOfferStatus } from "@/features/documents/utils/formatStatus";
+import {
+  formatDocumentStatus,
+  getInvoiceDisplayStatus,
+  formatInvoiceDisplayStatus,
+  formatInvoiceStatus,
+  formatOfferStatus,
+} from "@/features/documents/utils/formatStatus";
+import { getErrorMessage, logError } from "@/utils/errors";
 
 type EditorSeed = {
   id: string;
-  number: string;
+  number: string | null;
   date: string;
   dueDate?: string;
   validUntil?: string;
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
   introText: string;
   footerText: string;
+  currency?: string;
 };
 
 type DocListItem = {
   id: string;
   number: string;
   clientId: string;
+  clientName?: string;
   projectId?: string;
   date: string;
   dueDate?: string;
   validUntil?: string;
   positions: Position[];
   vatRate: number;
+  isSmallBusiness?: boolean;
+  smallBusinessNote?: string | null;
+  currency?: string;
   status: InvoiceStatus | OfferStatus;
   offerId?: string;
   paymentDate?: string;
@@ -66,8 +82,6 @@ const toLocalISODate = (d: Date) => {
 };
 
 const todayISO = () => toLocalISODate(new Date());
-const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
-
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -94,15 +108,20 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [editorInitial, setEditorInitial] = useState<any>(null);
 
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const showEmptyState = !loading && items.length === 0 && !error;
 
   const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
     const label = formatInvoiceStatus(status, overdue);
-    if (overdue || status === InvoiceStatus.OVERDUE) {
+    if (overdue) {
       return { label, tone: "red" as const };
     }
 
     if (status === InvoiceStatus.PAID) {
       return { label, tone: "green" as const };
+    }
+
+    if (status === InvoiceStatus.CANCELED) {
+      return { label, tone: "gray" as const };
     }
 
     return { label, tone: "yellow" as const };
@@ -133,6 +152,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   }, [clients]);
 
   const getClientName = (id: string) => clientNameById.get(id) || "Unknown";
+  const getItemClientName = (item: DocListItem) =>
+    isInvoice ? item.clientName?.trim() || getClientName(item.clientId) : getClientName(item.clientId);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -152,14 +173,18 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         setItems(
           invs.map((inv) => ({
             id: inv.id,
-            number: inv.number,
+            number: inv.number ?? "Entwurf",
             clientId: inv.clientId,
+            clientName: inv.clientName ?? inv.clientCompanyName ?? "",
             projectId: inv.projectId,
             date: inv.date,
             dueDate: inv.dueDate,
             validUntil: undefined,
             positions: (inv.positions ?? []) as Position[],
             vatRate: Number(inv.vatRate ?? 0),
+            isSmallBusiness: inv.isSmallBusiness ?? false,
+            smallBusinessNote: inv.smallBusinessNote ?? null,
+            currency: s.currency ?? "EUR",
             status: inv.status,
             offerId: inv.offerId,
             paymentDate: inv.paymentDate,
@@ -182,6 +207,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             validUntil: o.validUntil,
             positions: (o.positions ?? []) as Position[],
             vatRate: Number(o.vatRate ?? 0),
+            currency: o.currency ?? s.currency ?? "EUR",
             status: o.status,
             offerId: undefined,
             paymentDate: undefined,
@@ -196,8 +222,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         );
       }
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -209,43 +235,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     void refresh();
   }, [refresh, type]);
 
-  const openNewEditor = async () => {
-    try {
-      const s =
-        settings ??
-        (await settingsService.fetchSettings()) ??
-        ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
-
-      setSettings(s);
-
-      // reset view flags
-      setEditorReadOnly(false);
-      setEditorStartInPrint(false);
-      setEditorInitial(null);
-
-      const num = await getNextDocumentNumber(type, s);
-
-      const seed: EditorSeed = {
-        id: newId(),
-        number: num,
-        date: todayISO(),
-        dueDate: isInvoice ? invoiceService.buildDueDate(todayISO(), Number(s.defaultPaymentTerms ?? 14)) : undefined,
-        validUntil: !isInvoice ? addDaysISO(14) : undefined,
-        vatRate: Number(s.defaultVatRate ?? 0),
-        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
-        footerText: isInvoice
-          ? `Zahlbar innerhalb von ${Number(s.defaultPaymentTerms ?? 14)} Tagen ohne Abzug.`
-          : "Ich freue mich auf Ihre Rückmeldung.",
-      };
-
-      setEditorSeed(seed);
-      setEditorOpen(true);
-    } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      toast.error(msg);
-    }
+  const openCreateRoute = () => {
+    navigate("/app/invoices/new", { state: { backgroundLocation: location } });
   };
 
   // VIEW: immer frisch laden
@@ -266,19 +257,24 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
       setEditorSeed({
         id: doc.id,
-        number: String((doc as any).number ?? ""),
+        number: (doc as any).number ?? null,
         date: (doc as any).date,
+        paymentTermsDays: isInvoice ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
         dueDate: isInvoice ? (doc as Invoice).dueDate : undefined,
         validUntil: !isInvoice ? (doc as Offer).validUntil : undefined,
         vatRate: Number((doc as any).vatRate ?? 0),
+        isSmallBusiness: isInvoice ? (doc as Invoice).isSmallBusiness ?? false : undefined,
+        smallBusinessNote: isInvoice ? (doc as Invoice).smallBusinessNote ?? null : undefined,
         introText: (doc as any).introText ?? "",
         footerText: (doc as any).footerText ?? "",
+        currency: (doc as any).currency ?? undefined,
       });
 
       setEditorInitial({
         id: doc.id,
-        number: String((doc as any).number ?? ""),
+        number: (doc as any).number ?? null,
         date: (doc as any).date,
+        paymentTermsDays: isInvoice ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
         clientId: (doc as any).clientId ?? "",
         projectId: (doc as any).projectId ?? undefined,
         offerId: (doc as any).offerId ?? undefined,
@@ -286,6 +282,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         validUntil: (doc as any).validUntil ?? undefined,
         positions: (doc as any).positions ?? [],
         vatRate: Number((doc as any).vatRate ?? 0),
+        isSmallBusiness: isInvoice ? (doc as Invoice).isSmallBusiness ?? false : undefined,
+        smallBusinessNote: isInvoice ? (doc as Invoice).smallBusinessNote ?? null : undefined,
         status: (doc as any).status,
         introText: (doc as any).introText ?? "",
         footerText: (doc as any).footerText ?? "",
@@ -297,12 +295,13 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         sentCount: (doc as any).sentCount ?? 0,
         sentVia: (doc as any).sentVia ?? null,
         invoiceId: (doc as any).invoiceId ?? null,
+        currency: (doc as any).currency ?? undefined,
       });
 
       setEditorOpen(true);
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -326,8 +325,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       else await offerService.deleteOffer(id);
       await refresh();
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -342,7 +341,12 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       const s =
         settings ??
         (await settingsService.fetchSettings()) ??
-        ({ defaultVatRate: 0, defaultPaymentTerms: 14 } as unknown as UserSettings);
+        ({
+          defaultVatRate: 0,
+          defaultPaymentTerms: 14,
+          isSmallBusiness: false,
+          smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
+        } as unknown as UserSettings);
 
       setSettings(s);
 
@@ -357,19 +361,39 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         return;
       }
 
-      const invoiceNumber = await getNextDocumentNumber("invoice", s);
+      const defaultTerms = Number(s.defaultPaymentTerms ?? 14);
       const invoiceId = newId();
+      const snapshotClient = clients.find((c) => c.id === offer.clientId);
+      const snapshot = snapshotClient
+        ? {
+            clientName:
+              snapshotClient.companyName?.trim() || snapshotClient.contactPerson || "",
+            clientCompanyName: snapshotClient.companyName ?? "",
+            clientContactPerson: snapshotClient.contactPerson ?? "",
+            clientEmail: snapshotClient.email ?? "",
+            clientAddress: snapshotClient.address ?? "",
+          }
+        : {
+            clientName: "",
+            clientCompanyName: "",
+            clientContactPerson: "",
+            clientEmail: "",
+            clientAddress: "",
+          };
 
       await invoiceService.saveInvoice({
         id: invoiceId,
-        number: String(invoiceNumber),
+        number: null,
         offerId: offer.id,
         clientId: offer.clientId,
+        ...snapshot,
         projectId: offer.projectId,
         date: todayISO(),
-        dueDate: invoiceService.buildDueDate(todayISO(), Number(s.defaultPaymentTerms ?? 14)),
+        paymentTermsDays: defaultTerms,
         positions: offer.positions ?? [],
         vatRate: Number(offer.vatRate ?? s.defaultVatRate ?? 0),
+        isSmallBusiness: s.isSmallBusiness ?? false,
+        smallBusinessNote: s.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
         status: InvoiceStatus.DRAFT,
         paymentDate: undefined,
         introText: offer.introText ?? "",
@@ -385,8 +409,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       toast.success("Rechnung erstellt!");
       await refresh();
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -397,29 +421,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     if (!ok) return;
 
     try {
-      const inv = await invoiceService.getInvoice(invId);
-      if (!inv) {
-        toast.error("Rechnung nicht gefunden.");
-        return;
-      }
-
-      if (!inv.dueDate) {
-        toast.error("Fehler: Rechnung hat kein Fälligkeitsdatum (dueDate).");
-        return;
-      }
-
-      const paidAt = new Date().toISOString();
-
-      await invoiceService.saveInvoice({
-        ...inv,
-        status: InvoiceStatus.PAID,
-        paymentDate: paidAt,
-      });
-
+      await invoiceService.markInvoicePaid(invId);
       await refresh();
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : String(e);
+      logError(e);
+      const msg = getErrorMessage(e);
       setError(msg);
       toast.error(msg);
     }
@@ -430,14 +436,49 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{isInvoice ? "Rechnungen" : "Angebote"}</h1>
 
-        <Button onClick={openNewEditor} disabled={loading} className="w-full sm:w-auto justify-center">
-          <Plus size={16} />
-          Erstellen
-        </Button>
+        {isInvoice ? (
+          <Button onClick={openCreateRoute} disabled={loading} className="w-full sm:w-auto justify-center">
+            <Plus size={16} />
+            Erstellen
+          </Button>
+        ) : (
+          <Link to="/app/offers/new" state={{ backgroundLocation: location }} className="w-full sm:w-auto">
+            <Button disabled={loading} className="w-full justify-center">
+              <Plus size={16} />
+              Erstellen
+            </Button>
+          </Link>
+        )}
       </div>
 
-      {error && (
-        <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3 text-sm">{error}</div>
+      {error && <Alert tone="error" message={error} />}
+
+      {showEmptyState && (
+        <div className="rounded-lg border border-dashed border-gray-200 bg-white p-8 text-center">
+          <p className="text-lg font-semibold text-gray-900">
+            {isInvoice ? "Noch keine Rechnungen" : "Noch keine Angebote"}
+          </p>
+          <p className="mt-2 text-sm text-gray-500">
+            {isInvoice
+              ? "Erstellen Sie Ihre erste Rechnung, um den Überblick zu behalten."
+              : "Erstellen Sie Ihr erstes Angebot, um loszulegen."}
+          </p>
+          <div className="mt-4 flex justify-center">
+            {isInvoice ? (
+              <Button onClick={openCreateRoute}>
+                <Plus size={16} />
+                Rechnung erstellen
+              </Button>
+            ) : (
+              <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
+                <Button>
+                  <Plus size={16} />
+                  Angebot erstellen
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
       )}
 
       {editorOpen && editorSeed && settings && (
@@ -462,12 +503,13 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       <div className="md:hidden space-y-4">
         {items.map((item) => {
           const net = calcNet(item.positions ?? []);
-          const vat = calcVat(net, item.vatRate);
-          const total = calcGross(net, vat);
-          const overdue =
-            isInvoice &&
-            item.status !== InvoiceStatus.PAID &&
-            isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+          const isSmallBusiness = isInvoice ? (item as Invoice).isSmallBusiness : false;
+          const vat = isSmallBusiness ? 0 : calcVat(net, item.vatRate);
+          const total = isSmallBusiness ? net : calcGross(net, vat);
+          const locale = settings?.locale ?? "de-DE";
+          const invoiceCurrency = settings?.currency ?? "EUR";
+          const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
+          const overdue = isInvoice && isInvoiceOverdue(item as Invoice, new Date());
 
           if (isInvoice) {
             const statusMeta = getInvoiceStatusMeta(item.status as InvoiceStatus, overdue);
@@ -479,10 +521,16 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 documentLabel="Rechnung"
                 number={item.number}
                 date={item.date ? formatDate(item.date, settings?.locale) : "—"}
-                amount={formatCurrency(total, settings?.locale, settings?.currency)}
-                clientName={getClientName(item.clientId)}
+                amount={formatMoney(total, invoiceCurrency, locale)}
+                clientName={getItemClientName(item)}
                 statusLabel={statusMeta.label}
                 statusTone={statusMeta.tone}
+                metadata={
+                  <div className="text-xs text-gray-500 dark:text-slate-400">
+                    Fällig am{" "}
+                    {item.dueDate ? formatDate(item.dueDate, settings?.locale) : "—"}
+                  </div>
+                }
                 primaryAction={
                   <button
                     type="button"
@@ -496,7 +544,9 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                   </button>
                 }
                 secondaryAction={
-                  item.status !== InvoiceStatus.PAID && !item.isLocked ? (
+                  [InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(
+                    item.status as InvoiceStatus
+                  ) ? (
                     <Button variant="secondary" onClick={() => void handleMarkPaid(item.id)}>
                       <Check size={16} /> Als bezahlt
                     </Button>
@@ -526,8 +576,8 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               documentLabel="Angebot"
               number={item.number}
               date={item.date ? formatDate(item.date, settings?.locale) : "—"}
-              amount={formatCurrency(total, settings?.locale, settings?.currency)}
-              clientName={getClientName(item.clientId)}
+              amount={formatMoney(total, offerCurrency, locale)}
+              clientName={getItemClientName(item)}
               statusLabel={offerMeta.label}
               statusTone={offerMeta.tone}
               metadata={
@@ -582,7 +632,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           );
         })}
 
-        {items.length === 0 && !loading && (
+        {!showEmptyState && items.length === 0 && !loading && (
           <div className="app-card text-center text-gray-500">Keine Dokumente gefunden.</div>
         )}
 
@@ -605,28 +655,34 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           <tbody className="divide-y">
             {items.map((item) => {
               const net = calcNet(item.positions ?? []);
-              const vat = calcVat(net, item.vatRate);
-              const total = calcGross(net, vat);
+              const isSmallBusiness = isInvoice ? (item as Invoice).isSmallBusiness : false;
+              const vat = isSmallBusiness ? 0 : calcVat(net, item.vatRate);
+              const total = isSmallBusiness ? net : calcGross(net, vat);
+              const locale = settings?.locale ?? "de-DE";
+              const invoiceCurrency = settings?.currency ?? "EUR";
+              const offerCurrency = item.currency ?? settings?.currency ?? "EUR";
 
-              const overdue =
-                isInvoice &&
-                item.status !== InvoiceStatus.PAID &&
-                isInvoiceOverdue({ status: item.status as InvoiceStatus, dueDate: item.dueDate }, new Date());
+              const overdue = isInvoice && isInvoiceOverdue(item as Invoice, new Date());
+              const displayStatus = isInvoice ? getInvoiceDisplayStatus(item as Invoice) : item.status;
 
               return (
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="p-4 font-medium">{item.number}</td>
-                  <td className="p-4">{getClientName(item.clientId)}</td>
+                  <td className="p-4">{getItemClientName(item)}</td>
                   <td className="p-4 text-sm text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</td>
-                  <td className="p-4 font-mono">{formatCurrency(total, settings?.locale, settings?.currency)}</td>
+                  <td className="p-4 font-mono">
+                    {formatMoney(total, isInvoice ? invoiceCurrency : offerCurrency, locale)}
+                  </td>
 
                   <td className="p-4">
-                    {overdue && <Badge color="red">Overdue</Badge>}
+                    {overdue && <Badge color="red">{formatInvoiceDisplayStatus(item as Invoice)}</Badge>}
                     {!overdue && (
                       <div className="space-y-1">
                         <Badge
                           color={
-                            item.status === InvoiceStatus.PAID ||
+                            displayStatus === "OVERDUE"
+                              ? "red"
+                              : item.status === InvoiceStatus.PAID ||
                             item.status === OfferStatus.ACCEPTED ||
                             item.status === OfferStatus.INVOICED
                               ? "green"
@@ -674,7 +730,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                         </button>
                       )}
 
-                      {isInvoice && item.status !== InvoiceStatus.PAID && !item.isLocked && (
+                      {isInvoice &&
+                        [InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(
+                          item.status as InvoiceStatus
+                        ) && (
                         <button
                           onClick={() => void handleMarkPaid(item.id)}
                           title="Als bezahlt markieren"

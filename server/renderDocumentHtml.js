@@ -31,13 +31,18 @@ const sumPosition = (pos) => Number(pos?.quantity ?? 0) * Number(pos?.price ?? 0
 
 export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} }) {
   const isInvoice = type === "invoice";
+  const isSmallBusiness = isInvoice && Boolean(doc.isSmallBusiness);
   const vatRate = Number(doc.vatRate ?? 0);
   const net = Array.isArray(doc.positions) ? doc.positions.reduce((sum, p) => sum + sumPosition(p), 0) : 0;
-  const vat = net * (vatRate / 100);
-  const total = net + vat;
+  const vat = isSmallBusiness ? 0 : net * (vatRate / 100);
+  const total = isSmallBusiness ? net : net + vat;
+  const smallBusinessNote =
+    doc.smallBusinessNote ??
+    "Kein Steuerausweis aufgrund der Anwendung der Kleinunternehmerregelung (§ 19 UStG).";
 
   const companyName = settings.companyName ?? "";
   const addressLines = String(settings.address ?? "").split("\n").filter(Boolean);
+  const clientDisplayName = client.companyName ?? client.name ?? "";
   const clientAddressLines = String(client.address ?? "").split("\n").filter(Boolean);
 
   const introHtml = doc.introText ? sanitizeMultiline(doc.introText) : "";
@@ -163,7 +168,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
       <div class="section page-break">
         <div class="recipient-header">${escapeHtml(companyName)} — ${escapeHtml(addressLines[0] ?? "")}</div>
         <div class="recipient">
-          ${escapeHtml(client.companyName ?? "")}<br />
+          ${escapeHtml(clientDisplayName)}<br />
           ${client.contactPerson ? `${escapeHtml(client.contactPerson)}<br />` : ""}
           ${clientAddressLines.map(escapeHtml).join("<br />")}
         </div>
@@ -202,19 +207,31 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
         </table>
 
         <div class="totals page-break">
-          <div class="totals-row">
-            <span>Netto:</span>
-            <span>${formatCurrency(net, { locale: settings.locale, currency: settings.currency })}</span>
-          </div>
-          <div class="totals-row" style="color: var(--muted);">
-            <span>MwSt (${vatRate}%):</span>
-            <span>${formatCurrency(vat, { locale: settings.locale, currency: settings.currency })}</span>
-          </div>
-          <div class="totals-row total">
-            <span>Gesamt:</span>
-            <span>${formatCurrency(total, { locale: settings.locale, currency: settings.currency })}</span>
-          </div>
+          ${
+            isSmallBusiness
+              ? `<div class="totals-row total">
+                  <span>Gesamtbetrag:</span>
+                  <span>${formatCurrency(total, { locale: settings.locale, currency: settings.currency })}</span>
+                </div>`
+              : `<div class="totals-row">
+                  <span>Netto:</span>
+                  <span>${formatCurrency(net, { locale: settings.locale, currency: settings.currency })}</span>
+                </div>
+                <div class="totals-row" style="color: var(--muted);">
+                  <span>MwSt (${vatRate}%):</span>
+                  <span>${formatCurrency(vat, { locale: settings.locale, currency: settings.currency })}</span>
+                </div>
+                <div class="totals-row total">
+                  <span>Gesamt:</span>
+                  <span>${formatCurrency(total, { locale: settings.locale, currency: settings.currency })}</span>
+                </div>`
+          }
         </div>
+        ${
+          isSmallBusiness && smallBusinessNote
+            ? `<div class="muted" style="margin-top: 6px;">${sanitizeMultiline(smallBusinessNote)}</div>`
+            : ""
+        }
       </div>
 
       <div class="footer page-break">

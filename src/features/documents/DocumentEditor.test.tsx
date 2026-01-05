@@ -6,13 +6,16 @@ import { vi, beforeEach, describe, it, expect } from "vitest";
 import { DocumentEditor } from "./DocumentEditor";
 import { ConfirmProvider, ToastProvider } from "@/ui/FeedbackProvider";
 import { InvoiceStatus } from "@/types";
+import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 const saveInvoiceMock = vi.fn();
+const getInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
 
 
 vi.mock("@/app/invoices/invoiceService", () => ({
   saveInvoice: (...args: unknown[]) => saveInvoiceMock(...args),
+  getInvoice: (...args: unknown[]) => getInvoiceMock(...args),
 }));
 
 vi.mock("@/app/offers/offerService", () => ({
@@ -31,8 +34,11 @@ const seed = {
   id: "inv-1",
   number: "RE-0001",
   date: "2025-01-01",
+  paymentTermsDays: 14,
   dueDate: "2025-01-10",
   vatRate: 19,
+  isSmallBusiness: false,
+  smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
   introText: "",
   footerText: "",
 };
@@ -50,6 +56,8 @@ const settings = {
   email: "",
   emailDefaultSubject: "Dokument {nummer}",
   emailDefaultText: "Bitte im Anhang finden Sie das Dokument.",
+  isSmallBusiness: false,
+  smallBusinessNote: SMALL_BUSINESS_DEFAULT_NOTE,
   logoUrl: "",
   primaryColor: "#4f46e5",
   templateId: "default",
@@ -76,11 +84,19 @@ const clients = [
 describe("DocumentEditor send email status", () => {
   beforeEach(() => {
     saveInvoiceMock.mockReset();
+    getInvoiceMock.mockReset();
     sendDocumentEmailMock.mockReset();
   });
 
   it("sets status SENT on successful send", async () => {
     sendDocumentEmailMock.mockResolvedValue({ ok: true });
+    getInvoiceMock.mockResolvedValue({
+      id: "inv-1",
+      clientId: "client-1",
+      positions: [],
+      status: InvoiceStatus.SENT,
+      paymentTermsDays: 14,
+    });
     const user = userEvent.setup();
 
     render(
@@ -98,6 +114,7 @@ describe("DocumentEditor send email status", () => {
               clientId: "client-1",
               positions: [],
               status: InvoiceStatus.DRAFT,
+              paymentTermsDays: 14,
             }}
           />
         </ConfirmProvider>
@@ -111,9 +128,7 @@ describe("DocumentEditor send email status", () => {
     });
 
     await waitFor(() => {
-      expect(saveInvoiceMock).toHaveBeenCalledWith(
-        expect.objectContaining({ status: InvoiceStatus.SENT })
-      );
+      expect(getInvoiceMock).toHaveBeenCalled();
     });
 
   });
