@@ -25,10 +25,11 @@ const newId = () =>
 
 type InvoiceFormProps = {
   onClose: () => void;
+  onSaved?: () => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
-export function InvoiceForm({ onClose, onDirtyChange }: InvoiceFormProps) {
+export function InvoiceForm({ onClose, onSaved, onDirtyChange }: InvoiceFormProps) {
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -102,7 +103,9 @@ export function InvoiceForm({ onClose, onDirtyChange }: InvoiceFormProps) {
       settings={settings}
       clients={clients}
       onClose={onClose}
-      onSaved={async () => {}}
+      onSaved={async () => {
+        await onSaved?.();
+      }}
       layout="embedded"
       showHeader={false}
       onDirtyChange={onDirtyChange}

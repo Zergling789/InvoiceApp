@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 
 import ModalSheet from "@/components/ui/ModalSheet";
@@ -8,12 +8,16 @@ export default function InvoiceCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDirty, setIsDirty] = useState(false);
+  const skipConfirmRef = useRef(false);
 
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
 
-  const handleClose = () => {
-    if (isDirty && !window.confirm("Änderungen verwerfen?")) return;
+  const handleClose = ({ skipConfirm = false }: { skipConfirm?: boolean } = {}) => {
+    const shouldSkipConfirm = skipConfirm || skipConfirmRef.current;
+    if (!shouldSkipConfirm && isDirty && !window.confirm("Änderungen verwerfen?")) return;
+
+    skipConfirmRef.current = false;
 
     if (backgroundLocation) {
       navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
@@ -34,7 +38,14 @@ export default function InvoiceCreatePage() {
 
   return (
     <ModalSheet title="Neue Rechnung" isOpen onClose={handleClose}>
-      <InvoiceForm onClose={handleClose} onDirtyChange={setIsDirty} />
+      <InvoiceForm
+        onClose={handleClose}
+        onDirtyChange={setIsDirty}
+        onSaved={() => {
+          skipConfirmRef.current = true;
+          setIsDirty(false);
+        }}
+      />
     </ModalSheet>
   );
 }

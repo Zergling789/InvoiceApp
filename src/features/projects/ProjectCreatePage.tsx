@@ -37,8 +37,8 @@ export default function ProjectCreatePage() {
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
 
-  const handleClose = () => {
-    if (isDirty && !window.confirm("Änderungen verwerfen?")) return;
+  const handleClose = ({ skipConfirm = false }: { skipConfirm?: boolean } = {}) => {
+    if (!skipConfirm && isDirty && !window.confirm("Änderungen verwerfen?")) return;
 
     if (backgroundLocation) {
       navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
@@ -81,7 +81,8 @@ export default function ProjectCreatePage() {
     setSaving(true);
     try {
       await projectService.saveProject(project);
-      handleClose();
+      setIsDirty(false);
+      handleClose({ skipConfirm: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(msg);
