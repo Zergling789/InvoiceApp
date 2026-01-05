@@ -534,12 +534,12 @@ const sendUnexpectedError = (res, err, req) => {
 const isValidEmail = (value = "") => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 
 const emailJsonParser = express.json({ limit: "9mb" });
-const emailJsonErrorHandler = (err, _req, res, next) => {
+const emailJsonErrorHandler = (err, req, res, next) => {
   if (err?.type === "entity.too.large") {
-    return sendError(res, 413, "payload_too_large", "Payload too large.");
+    return sendError(res, 413, "payload_too_large", "Payload too large.", req);
   }
   if (err?.type === "entity.parse.failed") {
-    return sendError(res, 400, "invalid_json", "Invalid JSON payload.");
+    return sendError(res, 400, "invalid_json", "Invalid JSON payload.", req);
   }
   return next(err);
 };
@@ -929,7 +929,10 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   return { doc, settings, client };
 };
 
-const createPdfBufferFromPayload = async (type, payload) => {
+const createPdfBufferFromPayload = async (type, payload, options = {}) => {
+  const requestId = options.requestId ?? null;
+  const source = options.source ?? "unknown";
+  console.info("[pdf_generate_attempt]", { requestId, source, type });
   const html = renderDocumentHtml({
     type,
     doc: payload?.doc ?? {},
@@ -953,6 +956,23 @@ const createPdfBufferFromPayload = async (type, payload) => {
       printBackground: true,
       margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
     });
+  } catch (error) {
+    const message = typeof error?.message === "string" ? error.message : "";
+    const err = new Error("PDF generation failed.");
+    err.cause = error;
+    err.code = message.includes("Target page, context or browser has been closed")
+      ? "PDF_ENGINE_RESET"
+      : "PDF_GENERATION_FAILED";
+    err.status = err.code === "PDF_ENGINE_RESET" ? 503 : 500;
+    console.error("[pdf_generate_failed]", {
+      requestId,
+      source,
+      type,
+      code: err.code,
+      message,
+      stack: error?.stack,
+    });
+    throw err;
   } finally {
     if (page) {
       await page.close().catch((error) => {
@@ -967,8 +987,8 @@ const createPdfBufferFromPayload = async (type, payload) => {
   }
 };
 
-const createPdfAttachment = async ({ type, payload }) => {
-  const buffer = await createPdfBufferFromPayload(type, payload);
+const createPdfAttachment = async ({ type, payload, requestId, source }) => {
+  const buffer = await createPdfBufferFromPayload(type, payload, { requestId, source });
   const filename = buildPdfFilename({ type, doc: payload.doc, client: payload.client });
   return { buffer, filename };
 };
@@ -1000,7 +1020,7 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
     const docId = req.body?.docId ?? req.body?.documentId ?? null;
     const type = normalizeDocType(req.body?.type ?? req.body?.documentType);
     if (!docId || !type) {
-      return sendError(res, 400, "bad_request", "Missing required fields: docId, type");
+      return sendError(res, 400, "VALIDATION_ERROR", "Missing required fields: docId, type", req);
     }
 
     const payload = await loadDocumentPayloadFromDb({
@@ -1011,7 +1031,12 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
 
     enforceLegacyPayloadMatch(req.body, payload);
 
-    const { buffer, filename } = await createPdfAttachment({ type, payload });
+    const { buffer, filename } = await createPdfAttachment({
+      type,
+      payload,
+      requestId: req.requestId,
+      source: "api_pdf",
+    });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=\"${filename}\"`);
@@ -1020,7 +1045,7 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
     console.error("PDF generation failed", err);
-    return sendError(res, status, code, "PDF generation failed.");
+    return sendError(res, status, code, "PDF generation failed.", req);
   }
 });
 
@@ -1032,7 +1057,7 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
     const docId = req.body?.docId ?? req.body?.documentId ?? null;
     const type = normalizeDocType(req.body?.type ?? req.body?.documentType);
     if (!docId || !type) {
-      return sendError(res, 400, "bad_request", "Missing required fields: docId, type");
+      return sendError(res, 400, "VALIDATION_ERROR", "Missing required fields: docId, type", req);
     }
 
     const token = generateToken();
@@ -1045,7 +1070,7 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_link_failed";
     console.error("PDF link generation failed", err);
-    return sendError(res, status, code, "PDF link generation failed.");
+    return sendError(res, status, code, "PDF link generation failed.", req);
   }
 });
 
@@ -1296,12 +1321,12 @@ app.get("/api/pdf/download", async (req, res) => {
   try {
     const token = typeof req.query.token === "string" ? req.query.token : "";
     if (!token) {
-      return sendError(res, 400, "bad_request", "Missing token.");
+      return sendError(res, 400, "VALIDATION_ERROR", "Missing token.", req);
     }
 
     const tokenPayload = await consumePdfDownloadToken(token);
     if (!tokenPayload?.userId || !tokenPayload?.docId || !tokenPayload?.type) {
-      return sendError(res, 401, "invalid_token", "Invalid or expired token.");
+      return sendError(res, 401, "invalid_token", "Invalid or expired token.", req);
     }
 
     const payload = await loadDocumentPayloadFromDb({
@@ -1313,6 +1338,8 @@ app.get("/api/pdf/download", async (req, res) => {
     const { buffer, filename } = await createPdfAttachment({
       type: tokenPayload.type,
       payload,
+      requestId: req.requestId,
+      source: "api_pdf_download",
     });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -1322,7 +1349,7 @@ app.get("/api/pdf/download", async (req, res) => {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
     console.error("PDF download failed", err);
-    return sendError(res, status, code, "PDF generation failed.");
+    return sendError(res, status, code, "PDF generation failed.", req);
   }
 });
 
@@ -1733,8 +1760,8 @@ app.post(
   async (req, res) => {
     try {
       if (!req.user?.id) {
-        return sendError(res, 401, "unauthorized", "Unauthorized");
-      }
+      return sendError(res, 401, "unauthorized", "Unauthorized", req);
+    }
       const userId = req.user.id;
 
       const {
@@ -1756,31 +1783,32 @@ app.post(
           res,
           400,
           "bad_request",
-          "Missing required fields: docId, type, to, subject, senderIdentityId"
+          "Missing required fields: docId, type, to, subject, senderIdentityId",
+          req
         );
       }
 
       const toList = parseEmailList(to);
       if (!toList.length || toList.some((entry) => !isValidEmail(entry))) {
-        return sendError(res, 400, "invalid_email", "Invalid recipient email.");
+        return sendError(res, 400, "invalid_email", "Invalid recipient email.", req);
       }
       const ccList = parseEmailList(cc);
       if (ccList.some((entry) => !isValidEmail(entry))) {
-        return sendError(res, 400, "invalid_cc", "Invalid CC email.");
+        return sendError(res, 400, "invalid_cc", "Invalid CC email.", req);
       }
       const bccList = parseEmailList(bcc);
       if (bccList.some((entry) => !isValidEmail(entry))) {
-        return sendError(res, 400, "invalid_bcc", "Invalid BCC email.");
+        return sendError(res, 400, "invalid_bcc", "Invalid BCC email.", req);
       }
 
       const subjectText = String(subject ?? "");
       if (subjectText.length > EMAIL_SUBJECT_MAX) {
-        return sendError(res, 400, "subject_too_long", "Subject too long.");
+        return sendError(res, 400, "subject_too_long", "Subject too long.", req);
       }
 
       const messageText = String(message ?? "");
       if (messageText.length > EMAIL_MESSAGE_MAX) {
-        return sendError(res, 400, "message_too_long", "Message too long.");
+        return sendError(res, 400, "message_too_long", "Message too long.", req);
       }
 
       const payload = await loadDocumentPayloadFromDb({
@@ -1795,7 +1823,7 @@ app.post(
       const resolvedFrom = DEFAULT_FROM_EMAIL;
 
       if (!resolvedFrom) {
-        return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.");
+        return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.", req);
       }
 
       const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
@@ -1810,7 +1838,12 @@ app.post(
       const fromName = displayName || SENDER_DOMAIN_NAME;
       const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${resolvedFrom}>`;
 
-      const { buffer, filename } = await createPdfAttachment({ type, payload });
+      const { buffer, filename } = await createPdfAttachment({
+        type,
+        payload,
+        requestId: req.requestId,
+        source: "api_email",
+      });
 
       const info = await transporter.sendMail({
         from,
@@ -1845,7 +1878,7 @@ app.post(
 
       const userToken = getBearerToken(req);
       if (!userToken) {
-        return sendError(res, 401, "NOT_AUTHENTICATED", "Missing auth token.");
+        return sendError(res, 401, "NOT_AUTHENTICATED", "Missing auth token.", req);
       }
       const supabaseUser = createUserSupabaseClient(userToken);
       const rpcName = type === "invoice" ? "mark_invoice_sent" : "mark_offer_sent";
@@ -1875,26 +1908,27 @@ app.post(
       console.error("Email send failed", err);
       const dbError = normalizeDbError(err);
       if (dbError) {
-        return sendError(res, dbError.httpStatus, dbError.code, dbError.message);
+        return sendError(res, dbError.httpStatus, dbError.code, dbError.message, req);
       }
       if (err?.code === "SUPABASE_NOT_CONFIGURED") {
-        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.");
+        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase not configured.", req);
       }
       if (err?.code === "SUPABASE_ANON_KEY_MISSING") {
-        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase anon key missing.");
+        return sendError(res, 500, "SUPABASE_NOT_CONFIGURED", "Supabase anon key missing.", req);
       }
       if (err?.code === "SMTP_NOT_CONFIGURED") {
         return sendError(
           res,
           501,
           "EMAIL_NOT_CONFIGURED",
-          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen."
+          "E-Mail Versand ist nicht konfiguriert. Bitte SMTP_HOST/SMTP_USER/SMTP_PASS setzen.",
+          req
         );
       }
       const message = typeof err?.message === "string" && err.message.trim().length > 0
         ? err.message
         : "Email send failed.";
-      return sendError(res, 500, "EMAIL_SEND_FAILED", message);
+      return sendError(res, err?.status || 500, err?.code || "EMAIL_SEND_FAILED", message, req);
     }
   }
 );

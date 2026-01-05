@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, Mail, X } from "lucide-react";
+import { FileDown, Loader2, Mail, X } from "lucide-react";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { InvoiceStatus } from "@/types";
@@ -188,6 +188,7 @@ export function SendDocumentModal({
   };
 
   const handleSend = async (docOverride?: Offer | Invoice) => {
+    if (sending) return;
     if (emailErrors.length > 0) return;
     setSending(true);
     try {
@@ -235,11 +236,12 @@ export function SendDocumentModal({
       toast.success("E-Mail wurde erfolgreich versendet.");
       onClose();
     } catch (error) {
-      const errAny = error as { code?: string; message?: string } | null;
+      const errAny = error as { code?: string; message?: string; requestId?: string } | null;
       toast.error(
         formatErrorToast({
           code: errAny?.code,
           message: errAny?.message,
+          requestId: errAny?.requestId,
           fallback: "E-Mail konnte nicht gesendet werden.",
         })
       );
@@ -249,6 +251,7 @@ export function SendDocumentModal({
   };
 
   const handleFinalizeAndSend = async () => {
+    if (sending) return;
     if (!onFinalize) return;
     const next = await onFinalize();
     if (next) {
@@ -412,7 +415,8 @@ export function SendDocumentModal({
             onClick={() => void handleSend()}
             disabled={sending || emailErrors.length > 0}
           >
-            <Mail size={16} /> {sending ? "Sende..." : "Senden"}
+            {sending ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}{" "}
+            {sending ? "Sende..." : "Senden"}
           </AppButton>
         </div>
       </div>

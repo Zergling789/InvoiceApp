@@ -40,6 +40,10 @@ export const mapErrorCodeToToast = (code?: string | null) => {
     case "INVALID_INPUT":
     case "CHECK_VIOLATION":
       return "Ungültige Eingabe.";
+    case "PDF_ENGINE_RESET":
+      return "PDF-Engine wurde neu gestartet. Bitte erneut senden.";
+    case "PDF_GENERATION_FAILED":
+      return "PDF konnte nicht erstellt werden.";
     default:
       return undefined;
   }
