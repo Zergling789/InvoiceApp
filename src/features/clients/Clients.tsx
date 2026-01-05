@@ -82,7 +82,7 @@ export default function Clients() {
       )}
 
       {editing && editingInitial && (
-        <div className="space-y-4 bottom-action-spacer">
+        <div className="space-y-4">
           <CustomerForm
             value={editing}
             initialValue={editingInitial}
