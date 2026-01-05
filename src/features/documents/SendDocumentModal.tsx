@@ -8,7 +8,7 @@ import { useToast } from "@/ui/FeedbackProvider";
 import { fetchDocumentPdf } from "@/app/pdf/documentPdfService";
 import { sendDocumentEmail } from "@/app/email/emailService";
 import { getSendWarnings } from "@/domain/rules/sendWarnings";
-import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import { formatErrorToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 
 type SendDocumentModalProps = {
@@ -208,7 +208,12 @@ export function SendDocumentModal({
       });
 
       if (!result.ok) {
-        toast.error(mapErrorCodeToToast(result.code));
+        toast.error(
+          formatErrorToast({
+            code: result.code,
+            fallback: "E-Mail konnte nicht gesendet werden.",
+          })
+        );
         return;
       }
 
@@ -231,8 +236,13 @@ export function SendDocumentModal({
       onClose();
     } catch (error) {
       const errAny = error as { code?: string; message?: string } | null;
-      const messageText = mapErrorCodeToToast(errAny?.code) || errAny?.message;
-      toast.error(messageText ?? "E-Mail konnte nicht gesendet werden.");
+      toast.error(
+        formatErrorToast({
+          code: errAny?.code,
+          message: errAny?.message,
+          fallback: "E-Mail konnte nicht gesendet werden.",
+        })
+      );
     } finally {
       setSending(false);
     }

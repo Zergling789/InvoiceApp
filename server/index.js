@@ -11,6 +11,14 @@ const PORT = process.env.PORT || 4000;
 const app = express();
 app.disable("x-powered-by");
 
+const IS_PROD = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader("x-request-id", req.requestId);
+  next();
+});
+
 const jsonParser = express.json({ limit: "10mb" });
 app.use((req, res, next) => {
   // nur Requests mit Body parsen (GET/HEAD brauchen das nicht)
@@ -463,18 +471,55 @@ const checkEmailRateLimit = async (scope, id) => {
   return checkEmailRateLimitInMemory(scope, id, EMAIL_RATE_LIMIT, EMAIL_RATE_WINDOW_MS);
 };
 
-const sendError = (res, status, code, message) =>
-  res.status(status).json({ ok: false, error: { code, message } });
+const sendError = (res, status, code, message, req, options = {}) => {
+  const requestId = req?.requestId ?? res.req?.requestId;
+  const error = {
+    code,
+    message,
+    requestId,
+    ...(options.extra ?? {}),
+  };
 
-const sendRateLimit = (res, retryAfterSeconds) =>
-  res.status(429).json({
-    ok: false,
-    error: {
-      code: "RATE_LIMIT",
-      message: "Too many requests.",
-      retryAfterSeconds,
-    },
+  if (!IS_PROD) {
+    if (options.details) error.details = options.details;
+    if (options.hint) error.hint = options.hint;
+  }
+
+  return res.status(status).json({ ok: false, error });
+};
+
+const sendRateLimit = (req, res, retryAfterSeconds) =>
+  sendError(res, 429, "RATE_LIMIT", "Zu viele Anfragen.", req, {
+    extra: { retryAfterSeconds },
   });
+
+const sendSupabaseError = (res, err, req, fallback) => {
+  const normalized = normalizeDbError(err);
+  if (normalized) {
+    return sendError(res, normalized.httpStatus, normalized.code, normalized.message, req, {
+      details: err?.details,
+      hint: err?.hint,
+    });
+  }
+
+  return sendError(
+    res,
+    fallback?.status ?? 500,
+    fallback?.code ?? err?.code ?? "DB_ERROR",
+    fallback?.message ?? "Datenbankfehler.",
+    req,
+    {
+      details: err?.details,
+      hint: err?.hint,
+    }
+  );
+};
+
+const sendUnexpectedError = (res, err, req) => {
+  const requestId = req?.requestId ?? res.req?.requestId;
+  console.error(`[error] requestId=${requestId}`, err);
+  return sendError(res, 500, "UNEXPECTED_ERROR", "Unerwarteter Serverfehler.", req);
+};
 
 const isValidEmail = (value = "") => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 
@@ -493,7 +538,7 @@ const emailRateLimitGuard = async (req, res, next) => {
   if (req.ip) {
     const result = await checkEmailRateLimit("ip", req.ip);
     if (!result.allowed) {
-      return sendRateLimit(res, result.retryAfterSeconds);
+      return sendRateLimit(req, res, result.retryAfterSeconds);
     }
   }
   return next();
@@ -521,7 +566,7 @@ const emailAuthGuard = async (req, res, next) => {
   if (req.user?.id) {
     const result = await checkEmailRateLimit("user", req.user.id);
     if (!result.allowed) {
-      return sendRateLimit(res, result.retryAfterSeconds);
+      return sendRateLimit(req, res, result.retryAfterSeconds);
     }
   }
 
@@ -550,42 +595,90 @@ const requireAuth = async (req, res, next) => {
 const normalizeDbError = (err) => {
   const rawMessage = typeof err?.message === "string" ? err.message : "";
   const message = rawMessage.trim();
-  const code = err?.code || message;
+  const rawCode = typeof err?.code === "string" ? err.code : "";
+  const code = rawCode.trim();
+  const upperCode = code.toUpperCase();
+  const upperMessage = message.toUpperCase();
 
-  if (!code) return null;
+  if (!code && !message) return null;
 
-  switch (code) {
-    case "NOT_AUTHENTICATED":
-      return { code, message: "Not authenticated.", httpStatus: 401 };
-    case "FORBIDDEN":
-      return { code, message: "Forbidden.", httpStatus: 403 };
-    case "INVOICE_LOCKED_CONTENT":
-      return { code, message: "Invoice content is locked.", httpStatus: 409 };
-    case "INVOICE_LOCK_INVALID_STATUS":
-      return { code, message: "Invoice lock status invalid.", httpStatus: 409 };
-    case "INVOICE_NUMBER_IMMUTABLE":
-      return { code, message: "Invoice number is immutable after finalization.", httpStatus: 409 };
-    case "status_transition_not_allowed":
-      return { code, message: "Status transition not allowed.", httpStatus: 409 };
-    case "P0001":
-      if (message.includes("NOT_AUTHENTICATED")) {
-        return { code: "NOT_AUTHENTICATED", message: "Not authenticated.", httpStatus: 401 };
-      }
-      if (message.includes("FORBIDDEN")) {
-        return { code: "FORBIDDEN", message: "Forbidden.", httpStatus: 403 };
-      }
-      if (message.includes("INVOICE_LOCKED_CONTENT")) {
-        return { code: "INVOICE_LOCKED_CONTENT", message: "Invoice content is locked.", httpStatus: 409 };
-      }
-      if (message.includes("INVOICE_NUMBER_IMMUTABLE")) {
-        return { code: "INVOICE_NUMBER_IMMUTABLE", message: "Invoice number is immutable after finalization.", httpStatus: 409 };
-      }
-      if (message.includes("status transition")) {
-        return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
-      }
-      return { code: "db_error", message: message || "Database error.", httpStatus: 409 };
+  const mapKnownCode = (mappedCode) => {
+    switch (mappedCode) {
+      case "NOT_AUTHENTICATED":
+        return { code: mappedCode, message: "Bitte erneut anmelden.", httpStatus: 401 };
+      case "FORBIDDEN":
+        return { code: mappedCode, message: "Keine Berechtigung für diese Aktion.", httpStatus: 403 };
+      case "INVOICE_LOCKED_CONTENT":
+        return {
+          code: mappedCode,
+          message: "Diese Rechnung ist finalisiert und kann nicht geändert werden.",
+          httpStatus: 409,
+        };
+      case "INVOICE_LOCK_INVALID_STATUS":
+        return {
+          code: mappedCode,
+          message: "Der Rechnungsstatus erlaubt diese Aktion nicht.",
+          httpStatus: 409,
+        };
+      case "INVOICE_NUMBER_IMMUTABLE":
+        return {
+          code: mappedCode,
+          message: "Die Rechnungsnummer kann nach der Finalisierung nicht geändert werden.",
+          httpStatus: 409,
+        };
+      case "STATUS_TRANSITION_NOT_ALLOWED":
+        return { code: mappedCode, message: "Statuswechsel ist nicht erlaubt.", httpStatus: 400 };
+      case "CLIENT_REQUIRED":
+        return { code: mappedCode, message: "Bitte Kunde auswählen.", httpStatus: 400 };
+      case "CLIENT_SNAPSHOT_MISSING":
+        return { code: mappedCode, message: "Kundendaten fehlen für die Finalisierung.", httpStatus: 400 };
+      case "POSITIONS_REQUIRED":
+        return { code: mappedCode, message: "Bitte mindestens eine Position hinzufügen.", httpStatus: 400 };
+      case "UNIQUE_VIOLATION":
+        return { code: mappedCode, message: "Ein Eintrag mit diesen Daten existiert bereits.", httpStatus: 409 };
+      case "FOREIGN_KEY_VIOLATION":
+        return { code: mappedCode, message: "Verknüpfte Daten fehlen oder sind ungültig.", httpStatus: 400 };
+      case "INVALID_INPUT":
+        return { code: mappedCode, message: "Ungültige Eingabe.", httpStatus: 400 };
+      case "CHECK_VIOLATION":
+        return { code: mappedCode, message: "Ungültige Eingabe.", httpStatus: 400 };
+      default:
+        return null;
+    }
+  };
+
+  const directCode = mapKnownCode(upperCode);
+  if (directCode) return directCode;
+
+  switch (upperCode) {
+    case "23505":
+      return mapKnownCode("UNIQUE_VIOLATION");
+    case "23503":
+      return mapKnownCode("FOREIGN_KEY_VIOLATION");
+    case "22P02":
+      return mapKnownCode("INVALID_INPUT");
     case "23514":
-      return { code: "status_transition_not_allowed", message: "Status transition not allowed.", httpStatus: 409 };
+      if (upperMessage.includes("STATUS_TRANSITION_NOT_ALLOWED") || upperMessage.includes("STATUS TRANSITION")) {
+        return mapKnownCode("STATUS_TRANSITION_NOT_ALLOWED");
+      }
+      return mapKnownCode("CHECK_VIOLATION");
+    case "P0001":
+      if (upperMessage.includes("NOT_AUTHENTICATED")) return mapKnownCode("NOT_AUTHENTICATED");
+      if (upperMessage.includes("FORBIDDEN")) return mapKnownCode("FORBIDDEN");
+      if (upperMessage.includes("INVOICE_LOCKED_CONTENT")) return mapKnownCode("INVOICE_LOCKED_CONTENT");
+      if (upperMessage.includes("INVOICE_LOCK_INVALID_STATUS")) return mapKnownCode("INVOICE_LOCK_INVALID_STATUS");
+      if (upperMessage.includes("INVOICE_NUMBER_IMMUTABLE")) return mapKnownCode("INVOICE_NUMBER_IMMUTABLE");
+      if (upperMessage.includes("STATUS_TRANSITION_NOT_ALLOWED") || upperMessage.includes("STATUS TRANSITION")) {
+        return mapKnownCode("STATUS_TRANSITION_NOT_ALLOWED");
+      }
+      if (upperMessage.includes("CLIENT_REQUIRED")) return mapKnownCode("CLIENT_REQUIRED");
+      if (upperMessage.includes("CLIENT_SNAPSHOT_MISSING")) return mapKnownCode("CLIENT_SNAPSHOT_MISSING");
+      if (upperMessage.includes("POSITIONS_REQUIRED")) return mapKnownCode("POSITIONS_REQUIRED");
+      return {
+        code: "DB_ERROR",
+        message: message || "Datenbankfehler.",
+        httpStatus: 500,
+      };
     default:
       return null;
   }
@@ -967,12 +1060,12 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { error } = await supabase.rpc("finalize_invoice", {
@@ -980,14 +1073,10 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
     });
 
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized && (normalized.httpStatus === 401 || normalized.httpStatus === 403)) {
-        return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      }
-      const message = normalized?.message || error.message || "Invoice finalization failed.";
-      return res.status(400).json({
-        error: message,
-        code: normalized?.code || error.code || "finalize_failed",
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "FINALIZE_FAILED",
+        message: "Rechnung konnte nicht finalisiert werden.",
       });
     }
 
@@ -997,19 +1086,19 @@ app.post("/api/invoices/:id/finalize", requireAuth, async (req, res) => {
       .eq("id", invoiceId)
       .maybeSingle();
     if (fetchError || !invoice) {
-      return sendError(res, 500, "finalize_failed", "Invoice finalization failed.");
+      if (fetchError) {
+        return sendSupabaseError(res, fetchError, req, {
+          status: 500,
+          code: "FINALIZE_FAILED",
+          message: "Rechnung konnte nicht finalisiert werden.",
+        });
+      }
+      return sendError(res, 500, "FINALIZE_FAILED", "Invoice finalization failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...invoice, is_overdue: computeInvoiceIsOverdue(invoice) } });
   } catch (err) {
-    console.error("Finalize invoice failed", err);
-    if (err?.status === 401) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
-    }
-    if (err?.status === 403) {
-      return sendError(res, 403, "forbidden", "Forbidden");
-    }
-    return sendError(res, err?.status || 500, "finalize_failed", "Invoice finalization failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1017,25 +1106,27 @@ app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "LOAD_FAILED",
+        message: "Rechnung konnte nicht geladen werden.",
+      });
     }
     if (!invoice) {
-      return sendError(res, 404, "not_found", "Invoice not found.");
+      return sendError(res, 404, "NOT_FOUND", "Invoice not found.", req);
     }
     if (invoice.status !== "ISSUED") {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "STATUS_TRANSITION_NOT_ALLOWED", "Status transition not allowed.", req);
     }
 
     const nowIso = new Date().toISOString();
@@ -1054,18 +1145,19 @@ app.post("/api/invoices/:id/mark-sent", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
-      const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      if (updateError) {
+        return sendSupabaseError(res, updateError, req, {
+          status: 500,
+          code: "UPDATE_FAILED",
+          message: "Rechnung konnte nicht aktualisiert werden.",
+        });
+      }
+      return sendError(res, 500, "UPDATE_FAILED", "Invoice update failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
-    const normalized = normalizeDbError(err);
-    if (normalized) {
-      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-    }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1073,25 +1165,27 @@ app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "LOAD_FAILED",
+        message: "Rechnung konnte nicht geladen werden.",
+      });
     }
     if (!invoice) {
-      return sendError(res, 404, "not_found", "Invoice not found.");
+      return sendError(res, 404, "NOT_FOUND", "Invoice not found.", req);
     }
     if (!["ISSUED", "SENT"].includes(invoice.status)) {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "STATUS_TRANSITION_NOT_ALLOWED", "Status transition not allowed.", req);
     }
 
     const nowIso = new Date().toISOString();
@@ -1108,18 +1202,19 @@ app.post("/api/invoices/:id/mark-paid", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
-      const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      if (updateError) {
+        return sendSupabaseError(res, updateError, req, {
+          status: 500,
+          code: "UPDATE_FAILED",
+          message: "Rechnung konnte nicht aktualisiert werden.",
+        });
+      }
+      return sendError(res, 500, "UPDATE_FAILED", "Invoice update failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
-    const normalized = normalizeDbError(err);
-    if (normalized) {
-      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-    }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 
@@ -1127,25 +1222,27 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
   try {
     const invoiceId = req.params.id;
     if (!invoiceId) {
-      return sendError(res, 400, "bad_request", "Missing invoice id.");
+      return sendError(res, 400, "BAD_REQUEST", "Missing invoice id.", req);
     }
 
     const token = getBearerToken(req);
     if (!token) {
-      return sendError(res, 401, "unauthorized", "Unauthorized");
+      return sendError(res, 401, "NOT_AUTHENTICATED", "Unauthorized", req);
     }
     const supabase = createUserSupabaseClient(token);
     const { invoice, error } = await loadInvoiceForUser(supabase, invoiceId);
     if (error) {
-      const normalized = normalizeDbError(error);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "load_failed", "Invoice fetch failed.");
+      return sendSupabaseError(res, error, req, {
+        status: 500,
+        code: "LOAD_FAILED",
+        message: "Rechnung konnte nicht geladen werden.",
+      });
     }
     if (!invoice) {
-      return sendError(res, 404, "not_found", "Invoice not found.");
+      return sendError(res, 404, "NOT_FOUND", "Invoice not found.", req);
     }
     if (!["ISSUED", "SENT"].includes(invoice.status)) {
-      return sendError(res, 409, "status_transition_not_allowed", "Status transition not allowed.");
+      return sendError(res, 400, "STATUS_TRANSITION_NOT_ALLOWED", "Status transition not allowed.", req);
     }
 
     const nowIso = new Date().toISOString();
@@ -1161,18 +1258,19 @@ app.post("/api/invoices/:id/cancel", requireAuth, async (req, res) => {
       .single();
 
     if (updateError || !updated) {
-      const normalized = normalizeDbError(updateError);
-      if (normalized) return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-      return sendError(res, 500, "update_failed", "Invoice update failed.");
+      if (updateError) {
+        return sendSupabaseError(res, updateError, req, {
+          status: 500,
+          code: "UPDATE_FAILED",
+          message: "Rechnung konnte nicht aktualisiert werden.",
+        });
+      }
+      return sendError(res, 500, "UPDATE_FAILED", "Invoice update failed.", req);
     }
 
     return res.json({ ok: true, invoice: { ...updated, is_overdue: computeInvoiceIsOverdue(updated) } });
   } catch (err) {
-    const normalized = normalizeDbError(err);
-    if (normalized) {
-      return sendError(res, normalized.httpStatus, normalized.code, normalized.message);
-    }
-    return sendError(res, err?.status || 500, "update_failed", "Invoice update failed.");
+    return sendUnexpectedError(res, err, req);
   }
 });
 

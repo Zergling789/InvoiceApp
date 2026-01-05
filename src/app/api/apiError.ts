@@ -3,26 +3,28 @@ type ApiErrorShape = {
   error?: {
     code?: string;
     message?: string;
+    requestId?: string;
     retryAfterSeconds?: number;
   };
 };
 
-export async function readApiError(res: Response): Promise<{ code?: string; message?: string }> {
-  const contentType = res.headers.get("content-type") ?? "unknown";
+export async function readApiError(
+  res: Response
+): Promise<{ code?: string; message?: string; requestId?: string }> {
+  const requestIdHeader = res.headers.get("x-request-id") ?? undefined;
   const raw = await res.text().catch(() => "");
-  const preview = raw.trim().slice(0, 200);
-  const baseMessage = `Request failed. Status: ${res.status}. Content-Type: ${contentType}.`;
-
-  if (!raw) return { message: baseMessage };
-
+  if (!raw) {
+    return { message: "Unerwartete Serverantwort.", requestId: requestIdHeader };
+  }
   try {
     const data = JSON.parse(raw) as ApiErrorShape;
-    const message = data?.error?.message ?? preview;
+    const message = data?.error?.message ?? "Unerwarteter Serverfehler.";
     return {
       code: data?.error?.code,
-      message: message ? `${baseMessage} ${message}` : baseMessage,
+      message,
+      requestId: data?.error?.requestId ?? requestIdHeader,
     };
   } catch {
-    return { message: preview ? `${baseMessage} Body starts with: ${preview}` : baseMessage };
+    return { message: "Unerwartete Serverantwort.", requestId: requestIdHeader };
   }
 }
