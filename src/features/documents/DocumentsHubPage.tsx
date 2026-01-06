@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Plus } from "lucide-react";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { formatDate } from "@/types";
@@ -104,6 +105,7 @@ export default function DocumentsHubPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const lastRefreshTokenRef = useRef<number | null>(null);
 
@@ -185,6 +187,17 @@ export default function DocumentsHubPage() {
   useEffect(() => {
     setSelectedStatuses([]);
   }, [mode]);
+
+  useEffect(() => {
+    if (!newMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNewMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [newMenuOpen]);
 
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -358,11 +371,13 @@ export default function DocumentsHubPage() {
   const openNewEditor = (type: "invoice" | "offer") => {
     const target = type === "offer" ? "/app/offers/new" : "/app/invoices/new";
     setFabOpen(false);
+    setNewMenuOpen(false);
     navigate(target, { state: { backgroundLocation: location } });
   };
 
   const openNewCustomer = () => {
     setFabOpen(false);
+    setNewMenuOpen(false);
     navigate("/app/customers/new", { state: { backgroundLocation: location } });
   };
 
@@ -400,12 +415,59 @@ export default function DocumentsHubPage() {
       </div>
 
       <div className="space-y-3">
-        <input
-          className="w-full border rounded-lg px-3 py-2 text-sm"
-          placeholder="Suche nach Nummer oder Kunde"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <input
+            className="w-full border rounded-lg px-3 py-2 text-sm sm:flex-1"
+            placeholder="Suche nach Nummer oder Kunde"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <div className="relative sm:ml-2">
+            <AppButton
+              variant="primary"
+              className="w-full justify-center sm:w-auto"
+              onClick={() => setNewMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={newMenuOpen}
+            >
+              <Plus size={16} className="mr-2" />
+              + Neu
+            </AppButton>
+            {newMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onPointerDown={() => setNewMenuOpen(false)}
+                  aria-label="Menü schließen"
+                />
+                <div className="absolute right-0 mt-2 z-50 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                    onClick={() => openNewEditor("invoice")}
+                  >
+                    Rechnung erstellen
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                    onClick={() => openNewEditor("offer")}
+                  >
+                    Angebot erstellen
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                    onClick={openNewCustomer}
+                  >
+                    Kunde erstellen
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           {statusOptions.map((status) => (
