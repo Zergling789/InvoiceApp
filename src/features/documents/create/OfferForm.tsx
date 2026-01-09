@@ -86,7 +86,7 @@ export function OfferForm({ onClose, onDirtyChange }: OfferFormProps) {
         <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
           {error ?? "Angebot konnte nicht geladen werden."}
         </div>
-        <AppButton variant="secondary" onClick={onClose}>
+        <AppButton variant="secondary" onClick={() => onClose()}>
           Zurück
         </AppButton>
       </div>
