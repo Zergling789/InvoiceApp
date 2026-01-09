@@ -2,6 +2,7 @@ import { Link, NavLink } from "react-router-dom";
 import { LogOut, Menu, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "@/components/ThemeToggle";
 import { supabase } from "@/supabaseClient";
 import { useToast } from "@/ui/FeedbackProvider";
 
@@ -19,7 +20,9 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
     [
       "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[44px]",
       "focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60",
-      isActive ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100",
+      isActive
+        ? "bg-indigo-600 text-white"
+        : "text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800",
     ].join(" ");
 
   const handleSignOut = async () => {
@@ -34,12 +37,13 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b safe-top">
-      <div className="app-container flex items-center justify-between">
-        <Link to="/app" className="font-bold text-gray-900 no-underline">
+    <header className="sticky top-0 z-30 bg-white border-b safe-top dark:bg-slate-950 dark:border-slate-800">
+      <div className="app-container flex items-center justify-between gap-3">
+        <Link to="/app" className="font-bold text-gray-900 no-underline dark:text-slate-100">
           {brand}
         </Link>
         <nav className="hidden md:flex items-center gap-2">
+          <ThemeToggle />
           <NavLink to={settingsHref} className={linkClass}>
             <Settings size={16} /> Einstellungen
           </NavLink>
@@ -54,7 +58,7 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
         </nav>
         <button
           type="button"
-          className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 h-11 w-11"
+          className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 h-11 w-11 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           onClick={() => setMenuOpen(true)}
           aria-label="Menü öffnen"
         >
@@ -63,18 +67,19 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
       </div>
       {menuOpen && (
         <div className="md:hidden fixed inset-0 z-40 bg-gray-900/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl p-4 space-y-2">
+          <div className="bg-white rounded-xl shadow-xl p-4 space-y-2 dark:bg-slate-900">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-gray-700">Menü</div>
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200">Menü</div>
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 h-10 w-10"
+                className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 h-10 w-10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 onClick={() => setMenuOpen(false)}
                 aria-label="Menü schließen"
               >
                 <X size={18} />
               </button>
             </div>
+            <ThemeToggle />
             <NavLink
               to={settingsHref}
               className={linkClass}

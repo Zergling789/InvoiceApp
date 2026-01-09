@@ -13,12 +13,12 @@ export function MobileNav({ items, hidden = false }: MobileNavProps) {
     [
       "flex flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium",
       "min-h-[44px] min-w-[44px] rounded-md",
-      isActive ? "text-indigo-600" : "text-gray-500",
+      isActive ? "text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-slate-400",
     ].join(" ");
 
   return (
     <nav
-      className="mobile-nav md:hidden fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom"
+      className="mobile-nav md:hidden fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom dark:border-slate-800 dark:bg-slate-900/95"
       aria-label="Mobile Navigation"
     >
       <div className="grid grid-cols-5 gap-1 px-2 py-2">
