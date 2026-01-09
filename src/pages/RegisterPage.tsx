@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import ThemeToggle from "@/components/ThemeToggle";
 import { supabase } from "@/supabaseClient";
 
 const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
@@ -99,22 +100,25 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="absolute -bottom-20 right-10 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-indigo-500/15 blur-3xl dark:bg-indigo-500/25" />
+        <div className="absolute -bottom-20 right-10 h-72 w-72 rounded-full bg-sky-500/15 blur-3xl dark:bg-sky-500/25" />
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-6 py-12 lg:px-10">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center px-6 py-10 lg:flex-row lg:items-center lg:px-10">
+        <div className="flex w-full justify-end lg:absolute lg:right-10 lg:top-10">
+          <ThemeToggle />
+        </div>
         <div className="grid w-full gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div className="mx-auto w-full max-w-md">
-            <div className="rounded-3xl border border-white/10 bg-white/95 p-8 text-slate-900 shadow-xl backdrop-blur">
+            <div className="rounded-3xl border border-slate-200 bg-white/95 p-8 text-slate-900 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 dark:text-indigo-300">
                   FreelanceFlow
                 </p>
                 <h1 className="text-3xl font-semibold">Registrieren</h1>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                   Erstelle dein Konto und bring Ordnung in deine Rechnungen.
                 </p>
               </div>
@@ -122,7 +126,7 @@ export default function RegisterPage() {
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700" htmlFor="firstName">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="firstName">
                       Vorname
                     </label>
                     <input
@@ -131,12 +135,12 @@ export default function RegisterPage() {
                       name="firstName"
                       value={firstName}
                       onChange={(event) => setFirstName(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700" htmlFor="lastName">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="lastName">
                       Nachname
                     </label>
                     <input
@@ -145,7 +149,7 @@ export default function RegisterPage() {
                       name="lastName"
                       value={lastName}
                       onChange={(event) => setLastName(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                       required
                     />
                   </div>
@@ -153,7 +157,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <label
-                    className="block text-sm font-medium text-slate-700"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                     htmlFor="companyName"
                   >
                     Firma
@@ -164,13 +168,13 @@ export default function RegisterPage() {
                     name="companyName"
                     value={companyName}
                     onChange={(event) => setCompanyName(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-700" htmlFor="email">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="email">
                     E-Mail
                   </label>
                   <input
@@ -182,14 +186,14 @@ export default function RegisterPage() {
                     autoCorrect="off"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label
-                    className="block text-sm font-medium text-slate-700"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                     htmlFor="password"
                   >
                     Passwort
@@ -203,13 +207,13 @@ export default function RegisterPage() {
                       autoCapitalize="none"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                       aria-pressed={showPassword}
                     >
                       {showPassword ? "Verbergen" : "Passwort anzeigen"}
@@ -219,7 +223,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <label
-                    className="block text-sm font-medium text-slate-700"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                     htmlFor="passwordConfirm"
                   >
                     Passwort wiederholen
@@ -233,13 +237,13 @@ export default function RegisterPage() {
                       autoCapitalize="none"
                       value={passwordConfirm}
                       onChange={(event) => setPasswordConfirm(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowPasswordConfirm((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                       aria-pressed={showPasswordConfirm}
                     >
                       {showPasswordConfirm ? "Verbergen" : "Passwort anzeigen"}
@@ -249,7 +253,7 @@ export default function RegisterPage() {
 
                 {error && (
                   <div
-                    className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+                    className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
                     role="alert"
                     aria-live="polite"
                   >
@@ -257,7 +261,7 @@ export default function RegisterPage() {
                   </div>
                 )}
                 {info && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
                     {info}
                   </div>
                 )}
@@ -274,14 +278,14 @@ export default function RegisterPage() {
                 </button>
               </form>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span>
                   Schon registriert?{" "}
-                  <Link to="/login" className="font-semibold text-indigo-600">
+                  <Link to="/login" className="font-semibold text-indigo-600 dark:text-indigo-300">
                     Zum Login
                   </Link>
                 </span>
-                <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800">
+                <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white">
                   Zur Startseite
                 </Link>
               </div>
@@ -289,24 +293,24 @@ export default function RegisterPage() {
           </div>
 
           <div className="relative hidden lg:block">
-            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-indigo-900/60 to-slate-900/80 p-10 text-white shadow-2xl">
+            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white via-indigo-50 to-slate-100 p-10 text-slate-900 shadow-2xl dark:border-white/10 dark:from-slate-900/80 dark:via-indigo-900/60 dark:to-slate-900/80 dark:text-white">
               <h2 className="text-3xl font-semibold">Einmal richtig. Dann abgeschlossen.</h2>
-              <p className="mt-4 text-sm text-slate-200">
+              <p className="mt-4 text-sm text-slate-600 dark:text-slate-200">
                 Richte dein Konto ein und bring sofort Struktur in deinen Rechnungsprozess.
               </p>
-              <ul className="mt-8 space-y-3 text-sm text-slate-100">
+              <ul className="mt-8 space-y-3 text-sm text-slate-700 dark:text-slate-100">
                 {[
                   "Klare Status statt Chaos",
                   "Weniger Rueckfragen vom Kunden",
                   "PDFs, die nicht ueberraschen",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-indigo-300" />
+                    <span className="mt-1 h-2 w-2 rounded-full bg-indigo-400 dark:bg-indigo-300" />
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
-              <p className="mt-10 text-xs text-slate-300">
+              <p className="mt-10 text-xs text-slate-500 dark:text-slate-300">
                 Datenschutz &amp; Datenhoheit sind uns wichtig.
               </p>
             </div>

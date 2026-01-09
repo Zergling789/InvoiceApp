@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import ThemeToggle from "@/components/ThemeToggle";
 import { supabase } from "@/supabaseClient";
 
 export default function LoginPage() {
@@ -44,29 +45,32 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="absolute -bottom-20 right-10 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-indigo-500/15 blur-3xl dark:bg-indigo-500/25" />
+        <div className="absolute -bottom-20 right-10 h-72 w-72 rounded-full bg-sky-500/15 blur-3xl dark:bg-sky-500/25" />
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-6 py-12 lg:px-10">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center px-6 py-10 lg:flex-row lg:items-center lg:px-10">
+        <div className="flex w-full justify-end lg:absolute lg:right-10 lg:top-10">
+          <ThemeToggle />
+        </div>
         <div className="grid w-full gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div className="mx-auto w-full max-w-md">
-            <div className="rounded-3xl border border-white/10 bg-white/95 p-8 text-slate-900 shadow-xl backdrop-blur">
+            <div className="rounded-3xl border border-slate-200 bg-white/95 p-8 text-slate-900 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 dark:text-indigo-300">
                   FreelanceFlow
                 </p>
                 <h1 className="text-3xl font-semibold">Anmelden</h1>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                   Schreib Rechnungen ohne jedes Mal zu zweifeln.
                 </p>
               </div>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-700" htmlFor="email">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="email">
                     E-Mail
                   </label>
                   <input
@@ -78,14 +82,14 @@ export default function LoginPage() {
                     autoCorrect="off"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label
-                    className="block text-sm font-medium text-slate-700"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                     htmlFor="password"
                   >
                     Passwort
@@ -99,13 +103,13 @@ export default function LoginPage() {
                       autoCapitalize="none"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                       aria-pressed={showPassword}
                     >
                       {showPassword ? "Verbergen" : "Passwort anzeigen"}
@@ -113,24 +117,24 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-sm text-slate-600">
+                <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(event) => setRememberMe(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
                     />
                     Angemeldet bleiben
                   </label>
-                  <Link to="/forgot-password" className="font-semibold text-indigo-600">
+                  <Link to="/forgot-password" className="font-semibold text-indigo-600 dark:text-indigo-300">
                     Passwort vergessen?
                   </Link>
                 </div>
 
                 {error && (
                   <div
-                    className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+                    className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
                     role="alert"
                     aria-live="polite"
                   >
@@ -138,7 +142,7 @@ export default function LoginPage() {
                   </div>
                 )}
                 {info && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
                     {info}
                   </div>
                 )}
@@ -155,14 +159,14 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span>
                   Noch kein Konto?{" "}
-                  <Link to="/register" className="font-semibold text-indigo-600">
+                  <Link to="/register" className="font-semibold text-indigo-600 dark:text-indigo-300">
                     Jetzt registrieren
                   </Link>
                 </span>
-                <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800">
+                <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white">
                   Zur Startseite
                 </Link>
               </div>
@@ -170,25 +174,25 @@ export default function LoginPage() {
           </div>
 
           <div className="relative hidden lg:block">
-            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-indigo-900/60 to-slate-900/80 p-10 text-white shadow-2xl">
+            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white via-indigo-50 to-slate-100 p-10 text-slate-900 shadow-2xl dark:border-white/10 dark:from-slate-900/80 dark:via-indigo-900/60 dark:to-slate-900/80 dark:text-white">
               <h2 className="text-3xl font-semibold">Einmal richtig. Dann abgeschlossen.</h2>
-              <p className="mt-4 text-sm text-slate-200">
-                Dein Login bringt dich zurück zu einem klaren Prozess, der dich sicher bis zur
-                fertigen Rechnung führt.
+              <p className="mt-4 text-sm text-slate-600 dark:text-slate-200">
+                Dein Login bringt dich zurück zu einem klaren Prozess, der dich sicher bis zur
+                fertigen Rechnung führt.
               </p>
-              <ul className="mt-8 space-y-3 text-sm text-slate-100">
+              <ul className="mt-8 space-y-3 text-sm text-slate-700 dark:text-slate-100">
                 {[
                   "Klare Status statt Chaos",
-                  "Weniger Rückfragen vom Kunden",
-                  "PDFs, die nicht überraschen",
+                  "Weniger Rückfragen vom Kunden",
+                  "PDFs, die nicht überraschen",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-indigo-300" />
+                    <span className="mt-1 h-2 w-2 rounded-full bg-indigo-400 dark:bg-indigo-300" />
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
-              <p className="mt-10 text-xs text-slate-300">
+              <p className="mt-10 text-xs text-slate-500 dark:text-slate-300">
                 Datenschutz &amp; Datenhoheit sind uns wichtig.
               </p>
             </div>

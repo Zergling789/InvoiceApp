@@ -23,7 +23,7 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-sm text-gray-500">
+      <div className="min-h-screen bg-gray-50 text-gray-500 flex items-center justify-center text-sm dark:bg-slate-950 dark:text-slate-400">
         Lade…
       </div>
     );

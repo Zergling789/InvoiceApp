@@ -10,26 +10,54 @@
       rel="stylesheet"
     />
 
-  <style>
-  body {
-    font-family: 'Inter', sans-serif;
-    background-color: #f3f4f6;
-  }
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme = stored === "light" || stored === "dark" ? stored : prefersDark ? "dark" : "light";
+          document.documentElement.classList.toggle("dark", theme === "dark");
+        } catch (e) {
+          document.documentElement.classList.remove("dark");
+        }
+      })();
+    </script>
 
-  @media print {
-    @page { margin: 0; }
+    <style>
+      :root {
+        --app-bg: #f3f4f6;
+      }
 
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
+      .dark {
+        --app-bg: #0f172a;
+      }
 
-    body { background-color: white; }
-    .no-print { display: none !important; }
-    .print-only { display: block !important; }
-  }
-</style>
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: var(--app-bg);
+      }
 
+      @media print {
+        @page {
+          margin: 0;
+        }
+
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        body {
+          background-color: white;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+      }
+    </style>
   </head>
 
   <body>
