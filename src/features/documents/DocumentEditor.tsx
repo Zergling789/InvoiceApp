@@ -444,6 +444,8 @@ export function DocumentEditor({
       }
 
       await onSaved();
+      setFormData(data);
+      setInitialFormData(data);
 
       if (closeAfterSave) onClose();
       return true;
