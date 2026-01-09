@@ -302,7 +302,7 @@ export default function Dashboard() {
           emptyState={
             <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-gray-200 p-6 text-sm text-gray-600">
               <span>✅ Alles sauber – keine offenen Follow-ups.</span>
-              <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
+              <Link to="/app/offers?new=offer">
                 <AppButton>Neues Angebot erstellen</AppButton>
               </Link>
             </div>
@@ -329,10 +329,10 @@ export default function Dashboard() {
       <section className="space-y-3">
         <SectionHeader title="Schnellaktionen" subtitle="Starte neue Umsätze in Sekunden." />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
+          <Link to="/app/offers?new=offer">
             <AppButton className="w-full justify-center">Angebot erstellen</AppButton>
           </Link>
-          <Link to="/app/documents?mode=invoices">
+          <Link to="/app/invoices?new=invoice">
             <AppButton variant="secondary" className="w-full justify-center">
               Rechnung erstellen
             </AppButton>

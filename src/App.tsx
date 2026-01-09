@@ -7,8 +7,6 @@ import Projects from "@/features/projects/Projects";
 import DocumentsPage from "@/features/documents/DocumentsPage";
 import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
 import DocumentDetailPage from "@/features/documents/DocumentDetailPage";
-import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
-import InvoiceCreatePage from "@/features/documents/create/InvoiceCreatePage";
 import OfferEditPage from "@/features/documents/edit/OfferEditPage";
 import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
 import CustomerCreatePage from "@/features/clients/CustomerCreatePage";
@@ -64,9 +62,9 @@ export default function App() {
           <Route path="clients" element={<Clients />} />
           <Route path="projects" element={<Projects />} />
           <Route path="offers" element={<DocumentsPage type="offer" />} />
-          <Route path="offers/new" element={<OfferCreatePage />} />
+          <Route path="offers/new" element={<Navigate to="/app/offers?new=offer" replace />} />
           <Route path="invoices" element={<DocumentsPage type="invoice" />} />
-          <Route path="invoices/new" element={<InvoiceCreatePage />} />
+          <Route path="invoices/new" element={<Navigate to="/app/invoices?new=invoice" replace />} />
           <Route path="customers/new" element={<CustomerCreatePage />} />
           <Route path="projects/new" element={<ProjectCreatePage />} />
           <Route path="documents/offer/:id/edit" element={<OfferEditPage />} />
@@ -84,8 +82,8 @@ export default function App() {
 
       {backgroundLocation && (
         <Routes>
-          <Route path="/app/offers/new" element={<OfferCreatePage />} />
-          <Route path="/app/invoices/new" element={<InvoiceCreatePage />} />
+          <Route path="/app/offers/new" element={<Navigate to="/app/offers?new=offer" replace />} />
+          <Route path="/app/invoices/new" element={<Navigate to="/app/invoices?new=invoice" replace />} />
           <Route path="/app/customers/new" element={<CustomerCreatePage />} />
           <Route path="/app/projects/new" element={<ProjectCreatePage />} />
         </Routes>

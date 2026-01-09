@@ -18,6 +18,7 @@ import * as clientService from "@/app/clients/clientService";
 import * as settingsService from "@/app/settings/settingsService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
+import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
@@ -36,6 +37,7 @@ type EditorSeed = {
   id: string;
   number: string | null;
   date: string;
+  paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
   vatRate: number;
@@ -82,6 +84,7 @@ const toLocalISODate = (d: Date) => {
 };
 
 const todayISO = () => toLocalISODate(new Date());
+const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -235,9 +238,71 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     void refresh();
   }, [refresh, type]);
 
+  const clearCreateParams = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has("new") && !params.has("create")) return;
+    params.delete("new");
+    params.delete("create");
+    const search = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: search ? `?${search}` : "",
+      },
+      { replace: true }
+    );
+  }, [location.pathname, location.search, navigate]);
+
   const openCreateRoute = () => {
-    navigate("/app/invoices/new", { state: { backgroundLocation: location } });
+    const params = new URLSearchParams(location.search);
+    params.set("new", isInvoice ? "invoice" : "offer");
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${params.toString()}`,
+      },
+      { replace: false }
+    );
   };
+
+  const openCreateEditor = useCallback(async () => {
+    if (!settings) return;
+    setEditorReadOnly(false);
+    setEditorStartInPrint(false);
+    setEditorInitial(null);
+    if (isInvoice) {
+      const defaultTerms = Number(settings.defaultPaymentTerms ?? 14);
+      const seed: EditorSeed = {
+        id: newId(),
+        number: null,
+        date: todayISO(),
+        paymentTermsDays: defaultTerms,
+        dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
+        vatRate: Number(settings.defaultVatRate ?? 0),
+        isSmallBusiness: settings.isSmallBusiness ?? false,
+        smallBusinessNote: settings.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
+        introText: "",
+        footerText: `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`,
+      };
+      setEditorSeed(seed);
+      setEditorOpen(true);
+      return;
+    }
+
+    const number = await getNextDocumentNumber("offer", settings);
+    const offerSeed: EditorSeed = {
+      id: newId(),
+      number,
+      date: todayISO(),
+      validUntil: addDaysISO(14),
+      vatRate: Number(settings.defaultVatRate ?? 0),
+      introText: "Gerne unterbreite ich Ihnen folgendes Angebot:",
+      footerText: "Ich freue mich auf Ihre Rückmeldung.",
+      currency: settings.currency ?? "EUR",
+    };
+    setEditorSeed(offerSeed);
+    setEditorOpen(true);
+  }, [isInvoice, settings]);
 
   // VIEW: immer frisch laden
   const openView = async (id: string) => {
@@ -316,6 +381,21 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     void openView(openId);
     navigate(location.pathname, { replace: true, state: null });
   }, [isInvoice, location.pathname, location.state, navigate, openView]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const intent = params.get("new") ?? params.get("create");
+    const normalized =
+      intent === "invoice" || intent === "invoices"
+        ? "invoice"
+        : intent === "offer" || intent === "offers"
+        ? "offer"
+        : null;
+    if (!normalized || normalized !== type) return;
+    if (editorOpen) return;
+    if (!settings) return;
+    void openCreateEditor();
+  }, [editorOpen, location.search, openCreateEditor, settings, type]);
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({ title: "Dokument loeschen", message: "Wirklich loeschen?" });
@@ -436,19 +516,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{isInvoice ? "Rechnungen" : "Angebote"}</h1>
 
-        {isInvoice ? (
-          <Button onClick={openCreateRoute} disabled={loading} className="w-full sm:w-auto justify-center">
-            <Plus size={16} />
-            Erstellen
-          </Button>
-        ) : (
-          <Link to="/app/offers/new" state={{ backgroundLocation: location }} className="w-full sm:w-auto">
-            <Button disabled={loading} className="w-full justify-center">
-              <Plus size={16} />
-              Erstellen
-            </Button>
-          </Link>
-        )}
+        <Button onClick={openCreateRoute} disabled={loading} className="w-full sm:w-auto justify-center">
+          <Plus size={16} />
+          Erstellen
+        </Button>
       </div>
 
       {error && <Alert tone="error" message={error} />}
@@ -464,19 +535,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               : "Erstellen Sie Ihr erstes Angebot, um loszulegen."}
           </p>
           <div className="mt-4 flex justify-center">
-            {isInvoice ? (
-              <Button onClick={openCreateRoute}>
-                <Plus size={16} />
-                Rechnung erstellen
-              </Button>
-            ) : (
-              <Link to="/app/offers/new" state={{ backgroundLocation: location }}>
-                <Button>
-                  <Plus size={16} />
-                  Angebot erstellen
-                </Button>
-              </Link>
-            )}
+            <Button onClick={openCreateRoute}>
+              <Plus size={16} />
+              {isInvoice ? "Rechnung erstellen" : "Angebot erstellen"}
+            </Button>
           </div>
         </div>
       )}
@@ -492,6 +554,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             setEditorReadOnly(false);
             setEditorStartInPrint(false);
             setEditorInitial(null);
+            clearCreateParams();
           }}
           onSaved={refresh}
           readOnly={editorReadOnly}
