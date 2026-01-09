@@ -444,8 +444,9 @@ export function DocumentEditor({
       }
 
       await onSaved();
-      setFormData(data);
-      setInitialFormData(data);
+      const savedState = buildFormData(seed, data, isInvoice, settings.currency);
+      setFormData(savedState);
+      setInitialFormData(savedState);
 
       if (closeAfterSave) onClose();
       return true;
