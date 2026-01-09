@@ -3,12 +3,18 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { supabase } from "@/supabaseClient";
 
-export default function LoginPage() {
+const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
+
+export default function RegisterPage() {
   const navigate = useNavigate();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -22,25 +28,74 @@ export default function LoginPage() {
     })();
   }, [navigate]);
 
+  const validateForm = () => {
+    if (!EMAIL_REGEX.test(email)) {
+      return "Bitte gib eine gueltige E-Mail-Adresse ein.";
+    }
+    if (password.length < 8) {
+      return "Das Passwort muss mindestens 8 Zeichen haben.";
+    }
+    if (password !== passwordConfirm) {
+      return "Die Passwoerter stimmen nicht ueberein.";
+    }
+    return null;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
     setInfo(null);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       setLoading(false);
       return;
     }
 
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          company_name: companyName,
+        },
+      },
+    });
+
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
+    }
+
+    const userId = data.user?.id;
+    if (userId) {
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: userId,
+        first_name: firstName,
+        last_name: lastName,
+        company_name: companyName,
+      });
+
+      if (profileError) {
+        setError(profileError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (data.session) {
+      setLoading(false);
+      navigate("/app", { replace: true });
+      return;
+    }
+
+    setInfo("Bitte bestaetige deine E-Mail-Adresse, um fortzufahren.");
     setLoading(false);
-    navigate("/app", { replace: true });
   };
 
   return (
@@ -58,13 +113,62 @@ export default function LoginPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
                   FreelanceFlow
                 </p>
-                <h1 className="text-3xl font-semibold">Anmelden</h1>
+                <h1 className="text-3xl font-semibold">Registrieren</h1>
                 <p className="text-sm text-slate-600">
-                  Schreib Rechnungen ohne jedes Mal zu zweifeln.
+                  Erstelle dein Konto und bring Ordnung in deine Rechnungen.
                 </p>
               </div>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700" htmlFor="firstName">
+                      Vorname
+                    </label>
+                    <input
+                      id="firstName"
+                      type="text"
+                      name="firstName"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700" htmlFor="lastName">
+                      Nachname
+                    </label>
+                    <input
+                      id="lastName"
+                      type="text"
+                      name="lastName"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    className="block text-sm font-medium text-slate-700"
+                    htmlFor="companyName"
+                  >
+                    Firma
+                  </label>
+                  <input
+                    id="companyName"
+                    type="text"
+                    name="companyName"
+                    value={companyName}
+                    onChange={(event) => setCompanyName(event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                    required
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-slate-700" htmlFor="email">
                     E-Mail
@@ -95,7 +199,7 @@ export default function LoginPage() {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       name="password"
-                      autoComplete="current-password"
+                      autoComplete="new-password"
                       autoCapitalize="none"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
@@ -113,19 +217,34 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-sm text-slate-600">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(event) => setRememberMe(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    Angemeldet bleiben
+                <div className="space-y-2">
+                  <label
+                    className="block text-sm font-medium text-slate-700"
+                    htmlFor="passwordConfirm"
+                  >
+                    Passwort wiederholen
                   </label>
-                  <Link to="/forgot-password" className="font-semibold text-indigo-600">
-                    Passwort vergessen?
-                  </Link>
+                  <div className="relative">
+                    <input
+                      id="passwordConfirm"
+                      type={showPasswordConfirm ? "text" : "password"}
+                      name="passwordConfirm"
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      value={passwordConfirm}
+                      onChange={(event) => setPasswordConfirm(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordConfirm((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      aria-pressed={showPasswordConfirm}
+                    >
+                      {showPasswordConfirm ? "Verbergen" : "Passwort anzeigen"}
+                    </button>
+                  </div>
                 </div>
 
                 {error && (
@@ -151,15 +270,15 @@ export default function LoginPage() {
                   {loading && (
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   )}
-                  {loading ? "Bitte warten..." : "Anmelden"}
+                  {loading ? "Bitte warten..." : "Konto erstellen"}
                 </button>
               </form>
 
               <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                 <span>
-                  Noch kein Konto?{" "}
-                  <Link to="/register" className="font-semibold text-indigo-600">
-                    Jetzt registrieren
+                  Schon registriert?{" "}
+                  <Link to="/login" className="font-semibold text-indigo-600">
+                    Zum Login
                   </Link>
                 </span>
                 <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800">
@@ -173,14 +292,13 @@ export default function LoginPage() {
             <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-indigo-900/60 to-slate-900/80 p-10 text-white shadow-2xl">
               <h2 className="text-3xl font-semibold">Einmal richtig. Dann abgeschlossen.</h2>
               <p className="mt-4 text-sm text-slate-200">
-                Dein Login bringt dich zurück zu einem klaren Prozess, der dich sicher bis zur
-                fertigen Rechnung führt.
+                Richte dein Konto ein und bring sofort Struktur in deinen Rechnungsprozess.
               </p>
               <ul className="mt-8 space-y-3 text-sm text-slate-100">
                 {[
                   "Klare Status statt Chaos",
-                  "Weniger Rückfragen vom Kunden",
-                  "PDFs, die nicht überraschen",
+                  "Weniger Rueckfragen vom Kunden",
+                  "PDFs, die nicht ueberraschen",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <span className="mt-1 h-2 w-2 rounded-full bg-indigo-300" />
