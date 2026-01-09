@@ -24,7 +24,7 @@ const newId = () =>
     : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 
 type OfferFormProps = {
-  onClose: () => void;
+  onClose: (force?: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 

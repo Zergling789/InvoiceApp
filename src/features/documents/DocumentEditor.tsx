@@ -192,7 +192,7 @@ export function DocumentEditor({
   seed: EditorSeed;
   settings: UserSettings;
   clients: Client[];
-  onClose: () => void;
+  onClose: (force?: boolean) => void;
   onSaved: () => Promise<void>;
   initial?: Partial<FormData>;
   readOnly?: boolean;
@@ -449,7 +449,7 @@ export function DocumentEditor({
       setInitialFormData(savedState);
       onDirtyChange?.(false);
 
-      if (closeAfterSave) onClose();
+      if (closeAfterSave) onClose(true);
       return true;
     } catch (error) {
       let code = (error as Error & { code?: string }).code;
