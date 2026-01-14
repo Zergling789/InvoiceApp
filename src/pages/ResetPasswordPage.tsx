@@ -1,27 +1,18 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import ThemeToggle from "@/components/ThemeToggle";
 import { supabase } from "@/supabaseClient";
 
-export default function LoginPage() {
+export default function ResetPasswordPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        navigate("/app", { replace: true });
-      }
-    })();
-  }, [navigate]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -29,19 +20,31 @@ export default function LoginPage() {
     setError(null);
     setInfo(null);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
+    if (password.length < 8) {
+      setError("Das Passwort muss mindestens 8 Zeichen haben.");
       setLoading(false);
       return;
     }
 
+    if (password !== passwordConfirm) {
+      setError("Die Passwoerter stimmen nicht ueberein.");
+      setLoading(false);
+      return;
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+
+    if (updateError) {
+      setError(updateError.message);
+      setLoading(false);
+      return;
+    }
+
+    setInfo("Passwort aktualisiert. Du wirst gleich weitergeleitet.");
     setLoading(false);
-    navigate("/app", { replace: true });
+    setTimeout(() => {
+      navigate("/login", { replace: true });
+    }, 1200);
   };
 
   return (
@@ -62,44 +65,26 @@ export default function LoginPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 dark:text-indigo-300">
                   FreelanceFlow
                 </p>
-                <h1 className="text-3xl font-semibold">Anmelden</h1>
+                <h1 className="text-3xl font-semibold">Neues Passwort setzen</h1>
                 <p className="text-sm text-slate-600 dark:text-slate-300">
-                  Schreib Rechnungen ohne jedes Mal zu zweifeln.
+                  Waehle ein neues Passwort, das du dir gut merken kannst.
                 </p>
               </div>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="email">
-                    E-Mail
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
                   <label
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                     htmlFor="password"
                   >
-                    Passwort
+                    Neues Passwort
                   </label>
                   <div className="relative">
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       name="password"
-                      autoComplete="current-password"
+                      autoComplete="new-password"
                       autoCapitalize="none"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
@@ -117,19 +102,34 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(event) => setRememberMe(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
-                    />
-                    Angemeldet bleiben
+                <div className="space-y-2">
+                  <label
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                    htmlFor="passwordConfirm"
+                  >
+                    Passwort wiederholen
                   </label>
-                  <Link to="/forgot-password" className="font-semibold text-indigo-600 dark:text-indigo-300">
-                    Passwort vergessen?
-                  </Link>
+                  <div className="relative">
+                    <input
+                      id="passwordConfirm"
+                      type={showPasswordConfirm ? "text" : "password"}
+                      name="passwordConfirm"
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      value={passwordConfirm}
+                      onChange={(event) => setPasswordConfirm(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-500/40"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordConfirm((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                      aria-pressed={showPasswordConfirm}
+                    >
+                      {showPasswordConfirm ? "Verbergen" : "Passwort anzeigen"}
+                    </button>
+                  </div>
                 </div>
 
                 {error && (
@@ -155,17 +155,14 @@ export default function LoginPage() {
                   {loading && (
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   )}
-                  {loading ? "Bitte warten..." : "Anmelden"}
+                  {loading ? "Bitte warten..." : "Passwort aktualisieren"}
                 </button>
               </form>
 
               <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span>
-                  Noch kein Konto?{" "}
-                  <Link to="/register" className="font-semibold text-indigo-600 dark:text-indigo-300">
-                    Jetzt registrieren
-                  </Link>
-                </span>
+                <Link to="/login" className="font-semibold text-indigo-600 dark:text-indigo-300">
+                  Zurueck zum Login
+                </Link>
                 <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white">
                   Zur Startseite
                 </Link>
@@ -177,14 +174,13 @@ export default function LoginPage() {
             <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white via-indigo-50 to-slate-100 p-10 text-slate-900 shadow-2xl dark:border-white/10 dark:from-slate-900/80 dark:via-indigo-900/60 dark:to-slate-900/80 dark:text-white">
               <h2 className="text-3xl font-semibold">Einmal richtig. Dann abgeschlossen.</h2>
               <p className="mt-4 text-sm text-slate-600 dark:text-slate-200">
-                Dein Login bringt dich zurück zu einem klaren Prozess, der dich sicher bis zur
-                fertigen Rechnung führt.
+                Setze dein Passwort neu und starte wieder mit klarem Kopf.
               </p>
               <ul className="mt-8 space-y-3 text-sm text-slate-700 dark:text-slate-100">
                 {[
                   "Klare Status statt Chaos",
-                  "Weniger Rückfragen vom Kunden",
-                  "PDFs, die nicht überraschen",
+                  "Weniger Rueckfragen vom Kunden",
+                  "PDFs, die nicht ueberraschen",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <span className="mt-1 h-2 w-2 rounded-full bg-indigo-400 dark:bg-indigo-300" />

@@ -770,7 +770,7 @@ export default function DocumentDetailPage() {
       />
 
       {primaryAction && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom dark:border-slate-800 dark:bg-slate-900/95">
           <div className="app-container">
             <div className="flex flex-wrap gap-2 py-3">
               <AppButton onClick={primaryAction.onClick} className="flex-1 justify-center">

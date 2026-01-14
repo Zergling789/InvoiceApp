@@ -24,8 +24,7 @@ const newId = () =>
     : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 
 type OfferFormProps = {
-  onClose: () => void;
-  onSaved?: () => void | Promise<void>;
+  onClose: (force?: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
@@ -87,7 +86,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
         <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
           {error ?? "Angebot konnte nicht geladen werden."}
         </div>
-        <AppButton variant="secondary" onClick={onClose}>
+        <AppButton variant="secondary" onClick={() => onClose()}>
           Zurück
         </AppButton>
       </div>

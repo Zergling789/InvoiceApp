@@ -5,6 +5,7 @@
 @layer base {
   :root {
     color-scheme: light;
+    --app-bg: #f3f4f6;
     --app-space-1: clamp(0.35rem, 0.3rem + 0.2vw, 0.5rem);
     --app-space-2: clamp(0.6rem, 0.55rem + 0.3vw, 0.85rem);
     --app-space-3: clamp(0.9rem, 0.8rem + 0.6vw, 1.4rem);
@@ -14,6 +15,11 @@
     --mobile-nav-h: 72px;
   }
 
+  .dark {
+    color-scheme: dark;
+    --app-bg: #0f172a;
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
   }
@@ -21,7 +27,7 @@
   body {
     margin: 0;
     font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-color: #f3f4f6;
+    background-color: var(--app-bg);
     font-size: var(--app-text-base);
     min-height: 100vh;
     min-height: 100dvh;
@@ -90,11 +96,10 @@
   }
 
   .app-card {
-    background: #ffffff;
     border-radius: var(--app-radius-lg);
     padding: var(--app-space-3);
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    @apply bg-white text-slate-900 border border-slate-200 shadow-sm;
+    @apply dark:bg-slate-900 dark:text-slate-100 dark:border-slate-800;
   }
 
   .landing {
@@ -553,6 +558,47 @@
     right: 1rem;
     bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 1rem);
     z-index: 45;
+  }
+
+  .dark .bg-white {
+    @apply bg-slate-900;
+  }
+
+  .dark .bg-white\/95 {
+    @apply bg-slate-900/95;
+  }
+
+  .dark .bg-white\/80 {
+    @apply bg-slate-900/80;
+  }
+
+  .dark .bg-gray-50,
+  .dark .bg-gray-100,
+  .dark .bg-slate-50 {
+    @apply bg-slate-900;
+  }
+
+  .dark .border-gray-200,
+  .dark .border-gray-100 {
+    @apply border-slate-800;
+  }
+
+  .dark .text-gray-900 {
+    @apply text-slate-100;
+  }
+
+  .dark .text-gray-800,
+  .dark .text-gray-700 {
+    @apply text-slate-200;
+  }
+
+  .dark .text-gray-600,
+  .dark .text-gray-500 {
+    @apply text-slate-400;
+  }
+
+  .dark .text-gray-400 {
+    @apply text-slate-500;
   }
 
   @media (max-width: 639px) {
