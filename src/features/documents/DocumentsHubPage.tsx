@@ -369,7 +369,7 @@ export default function DocumentsHubPage() {
   };
 
   const openNewEditor = (type: "invoice" | "offer") => {
-    const target = type === "offer" ? "/app/offers?new=offer" : "/app/invoices?new=invoice";
+    const target = type === "offer" ? "/app/offers/new" : "/app/invoices/new";
     setFabOpen(false);
     setNewMenuOpen(false);
     navigate(target, { state: { backgroundLocation: location } });

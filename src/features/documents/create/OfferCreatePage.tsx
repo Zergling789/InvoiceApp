@@ -15,7 +15,20 @@ export default function OfferCreatePage() {
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
 
   const handleClose = (force?: boolean) => {
-    if (!force && isDirty && !window.confirm("Änderungen verwerfen?")) return;
+    const shouldSkipConfirm = force || skipConfirmRef.current;
+    if (!shouldSkipConfirm && isDirty && !window.confirm("Änderungen verwerfen?")) return;
+
+    skipConfirmRef.current = false;
+    const refreshDocuments = refreshTokenRef.current;
+    refreshTokenRef.current = null;
+
+    const buildState = (targetState?: unknown) => {
+      if (!refreshDocuments) return targetState;
+      return {
+        ...(targetState && typeof targetState === "object" ? (targetState as Record<string, unknown>) : {}),
+        refreshDocuments,
+      };
+    };
 
     if (backgroundLocation) {
       navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, {
@@ -39,7 +52,15 @@ export default function OfferCreatePage() {
 
   return (
     <ModalSheet title="Neues Angebot" isOpen onClose={() => handleClose(false)}>
-      <OfferForm onClose={handleClose} onDirtyChange={setIsDirty} />
+      <OfferForm
+        onClose={handleClose}
+        onDirtyChange={setIsDirty}
+        onSaved={() => {
+          skipConfirmRef.current = true;
+          refreshTokenRef.current = Date.now();
+          setIsDirty(false);
+        }}
+      />
     </ModalSheet>
   );
 }
