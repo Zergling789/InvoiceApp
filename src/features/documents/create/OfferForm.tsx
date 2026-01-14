@@ -25,6 +25,7 @@ const newId = () =>
 
 type OfferFormProps = {
   onClose: (force?: boolean) => void;
+  onSaved?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
