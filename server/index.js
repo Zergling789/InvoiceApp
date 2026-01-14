@@ -16,7 +16,7 @@ app.use((req, res, next) => {
   // nur Requests mit Body parsen (GET/HEAD brauchen das nicht)
   if (req.method === "GET" || req.method === "HEAD") return next();
   // /api/email hat seinen eigenen Parser weiter unten
-  if (req.path === "/api/email") return next();
+  if (req.path === "/api/email" || req.path.startsWith("/api/email/")) return next();
   return jsonParser(req, res, next);
 });
 
@@ -33,7 +33,16 @@ const RAW_APP_BASE_URL =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${PORT}`);
 const APP_BASE_URL = String(RAW_APP_BASE_URL).trim().replace(/\/+$/, "");
 
-const DEFAULT_FROM_EMAIL = process.env.SMTP_FROM || process.env.SMTP_USER;
+const extractEmailAddress = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const match = raw.match(/<([^>]+)>/);
+  if (match?.[1]) return match[1].trim();
+  return raw;
+};
+
+const FROM_HEADER = process.env.SMTP_FROM || process.env.SMTP_USER;
+const FROM_ADDRESS = extractEmailAddress(FROM_HEADER);
 const SENDER_DOMAIN_NAME = process.env.SENDER_DOMAIN_NAME || "Lightning Bold";
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
@@ -144,11 +153,10 @@ const getChromiumLaunchOptions = async () => {
   }
   const chromium = chromiumModule.default ?? chromiumModule;
   return {
-  args: chromium.args,
-  executablePath: await chromium.executablePath(),
-
-};
-
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  };
 };
 
 const getBrowser = async () => {
@@ -184,7 +192,7 @@ const logServerConfigOnce = () => {
     hasSupabaseServiceRole: Boolean(SUPABASE_SERVICE_ROLE),
     hasSmtpHost: Boolean(process.env.SMTP_HOST),
     hasSmtpUser: Boolean(process.env.SMTP_USER),
-    hasSmtpFrom: Boolean(DEFAULT_FROM_EMAIL),
+    hasSmtpFrom: Boolean(FROM_HEADER),
     hasRedis: Boolean(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL),
   });
 };
@@ -192,14 +200,14 @@ const logServerConfigOnce = () => {
 const validateSmtpEnv = () => {
   const missing = [];
   if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
-  if (!DEFAULT_FROM_EMAIL) missing.push("SMTP_FROM");
+  if (!FROM_HEADER) missing.push("SMTP_FROM");
   if (process.env.SMTP_USER && !process.env.SMTP_PASS) missing.push("SMTP_PASS");
   return { ok: missing.length === 0, missing };
 };
 
 const ensureMailer = async () => {
   const transporter = await getMailer();
-  if (!transporter || !DEFAULT_FROM_EMAIL) {
+  if (!transporter || !FROM_HEADER) {
     const err = new Error("SMTP not configured");
     err.status = 501;
     err.code = "SMTP_NOT_CONFIGURED";
@@ -625,7 +633,7 @@ const sendVerificationEmail = async ({ to, token, displayName }) => {
   ].join("\n");
 
   await transporter.sendMail({
-    from: DEFAULT_FROM_EMAIL,
+    from: FROM_HEADER,
     to,
     subject,
     text,
@@ -839,21 +847,34 @@ const createPdfBufferFromPayload = async (type, payload) => {
   }
 
   const browser = await getBrowser();
-const context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
-const page = await context.newPage();
+  const context = await browser.newContext({ viewport: { width: 1200, height: 2000 } });
+  let page;
 
-await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
+  try {
+    page = await context.newPage();
+    await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
 
-const pdfBuffer = await page.pdf({
-  format: "A4",
-  printBackground: true,
-  margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
-});
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "12mm", bottom: "16mm", left: "12mm", right: "12mm" },
+    });
 
-await page.close();
-await context.close();
-return pdfBuffer;
-
+    return pdfBuffer;
+  } finally {
+    if (page) {
+      try {
+        await page.close();
+      } catch (err) {
+        // ignore close errors
+      }
+    }
+    try {
+      await context.close();
+    } catch (err) {
+      // ignore close errors
+    }
+  }
 };
 
 const createPdfAttachment = async ({ type, payload }) => {
@@ -1577,10 +1598,13 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
     const identity = await ensureVerifiedIdentity({ userId, senderIdentityId });
 
     const transporter = await ensureMailer();
+    if (!FROM_ADDRESS) {
+      return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.");
+    }
 
     const replyTo = buildReplyTo(identity.email, identity.display_name);
     const fromName = identity.display_name || SENDER_DOMAIN_NAME;
-    const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${DEFAULT_FROM_EMAIL}>`;
+    const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${FROM_ADDRESS}>`;
 
     await transporter.sendMail({
       from,
@@ -1588,7 +1612,7 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
       subject: "Testmail Lightning Bold",
       text: "Test erfolgreich.",
       replyTo,
-      sender: `${SENDER_DOMAIN_NAME} <${DEFAULT_FROM_EMAIL}>`,
+      sender: `${SENDER_DOMAIN_NAME} <${FROM_ADDRESS}>`,
     });
 
     await audit({
@@ -1676,9 +1700,10 @@ app.post(
       enforceLegacyPayloadMatch(req.body, payload);
 
       const transporter = await ensureMailer();
-      const resolvedFrom = DEFAULT_FROM_EMAIL;
+      const resolvedFrom = FROM_HEADER;
+      const resolvedFromAddress = FROM_ADDRESS;
 
-      if (!resolvedFrom) {
+      if (!resolvedFrom || !resolvedFromAddress) {
         return sendError(res, 501, "EMAIL_NOT_CONFIGURED", "E-Mail Versand ist nicht konfiguriert.");
       }
 
@@ -1692,7 +1717,7 @@ app.post(
       const displayName = identity.display_name || settings?.company_name || "";
       const replyTo = buildReplyTo(identity.email, displayName);
       const fromName = displayName || SENDER_DOMAIN_NAME;
-      const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${resolvedFrom}>`;
+      const from = `${fromName} via ${SENDER_DOMAIN_NAME} <${resolvedFromAddress}>`;
 
       const { buffer, filename } = await createPdfAttachment({ type, payload });
 
@@ -1704,7 +1729,7 @@ app.post(
         subject: subjectText,
         text: messageText ?? "",
         replyTo,
-        sender: `${SENDER_DOMAIN_NAME} <${resolvedFrom}>`,
+        sender: `${SENDER_DOMAIN_NAME} <${resolvedFromAddress}>`,
         attachments: [
           {
             filename,
