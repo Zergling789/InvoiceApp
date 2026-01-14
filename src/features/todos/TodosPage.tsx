@@ -19,8 +19,6 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { formatErrorToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
-import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import {
   getDocumentCapabilities,
   getInvoicePhase,
@@ -63,21 +61,6 @@ const daysUntil = (dateStr?: string | null, today = new Date()) => {
   return Math.max(0, Math.ceil((date.getTime() - today.getTime()) / DAY_MS));
 };
 
-const toLocalISODate = (d: Date) => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const todayISO = () => toLocalISODate(new Date());
-const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
-
-const newId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
-
 export default function TodosPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,9 +75,6 @@ export default function TodosPage() {
   const [sendIntent, setSendIntent] = useState<"reminder" | "dunning" | "followup" | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Invoice | Offer | null>(null);
   const [selectedType, setSelectedType] = useState<"invoice" | "offer" | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
-  const [editorType, setEditorType] = useState<"invoice" | "offer">("invoice");
   const [fabOpen, setFabOpen] = useState(false);
 
   useEffect(() => {
@@ -367,7 +347,9 @@ export default function TodosPage() {
       const invoice = data.invoices.find((entry) => entry.id === card.id);
       if (!invoice) return;
       if (card.secondaryAction.intent === "edit") {
-        navigate(`/app/documents/invoice/${invoice.id}/edit`);
+        navigate(`/app/invoices/${invoice.id}`, {
+          state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` },
+        });
         return;
       }
       if (card.secondaryAction.intent === "reminder" || card.secondaryAction.intent === "dunning") {
@@ -383,7 +365,9 @@ export default function TodosPage() {
       const offer = data.offers.find((entry) => entry.id === card.id);
       if (!offer) return;
       if (card.secondaryAction.intent === "edit") {
-        navigate(`/app/documents/offer/${offer.id}/edit`);
+        navigate(`/app/offers/${offer.id}`, {
+          state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` },
+        });
         return;
       }
       if (card.secondaryAction.intent === "followup") {
@@ -398,40 +382,11 @@ export default function TodosPage() {
     toast.info(`${card.secondaryAction.label} kommt als Nächstes.`);
   };
 
-  const openNewEditor = async (type: "invoice" | "offer") => {
-    if (type === "offer") {
-      setFabOpen(false);
-      navigate("/app/offers?new=offer", { state: { backgroundLocation: location } });
-      return;
-    }
-    try {
-      const nextSettings = settings ?? (await fetchSettings());
-      setSettings(nextSettings);
-      const isInvoice = type === "invoice";
-      const defaultTerms = Number(nextSettings.defaultPaymentTerms ?? 14);
-      const num = isInvoice ? null : await getNextDocumentNumber(type, nextSettings);
-      const seed: EditorSeed = {
-        id: newId(),
-        number: num,
-        date: todayISO(),
-        dueDate: isInvoice
-          ? invoiceService.buildDueDate(todayISO(), defaultTerms)
-          : undefined,
-        paymentTermsDays: isInvoice ? defaultTerms : undefined,
-        validUntil: !isInvoice ? addDaysISO(14) : undefined,
-        vatRate: Number(nextSettings.defaultVatRate ?? 0),
-        introText: isInvoice ? "" : "Gerne unterbreite ich Ihnen folgendes Angebot:",
-        footerText: isInvoice
-          ? `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`
-          : "Ich freue mich auf Ihre Rückmeldung.",
-      };
-      setEditorType(type);
-      setEditorSeed(seed);
-      setEditorOpen(true);
-      setFabOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
+  const openNewEditor = (type: "invoice" | "offer") => {
+    setFabOpen(false);
+    navigate(`/app/${type === "invoice" ? "invoices" : "offers"}/new`, {
+      state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` },
+    });
   };
 
   const openNewCustomer = () => {
@@ -467,22 +422,6 @@ export default function TodosPage() {
                 offers: prev.offers.map((entry) => (entry.id === offer.id ? offer : entry)),
               }));
             }
-          }}
-        />
-      )}
-      {editorOpen && editorSeed && settings && (
-        <DocumentEditor
-          type={editorType}
-          seed={editorSeed}
-          settings={settings}
-          clients={data.clients}
-          onClose={() => {
-            setEditorOpen(false);
-            setEditorSeed(null);
-          }}
-          onSaved={async () => {
-            const nextData = await loadDashboardData();
-            setData(nextData);
           }}
         />
       )}
@@ -531,10 +470,16 @@ export default function TodosPage() {
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/app/offers?new=offer">
+            <Link
+              to="/app/offers/new"
+              state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
+            >
               <AppButton>Neues Angebot</AppButton>
             </Link>
-            <Link to="/app/invoices?new=invoice">
+            <Link
+              to="/app/invoices/new"
+              state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
+            >
               <AppButton variant="secondary">Neue Rechnung</AppButton>
             </Link>
           </div>
@@ -563,7 +508,10 @@ export default function TodosPage() {
                   <span>{card.ageLabel}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link to={`/app/documents/${card.type}/${card.id}`}>
+                  <Link
+                    to={`/app/${card.type === "invoice" ? "invoices" : "offers"}/${card.id}`}
+                    state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
+                  >
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryAction && (
@@ -600,7 +548,10 @@ export default function TodosPage() {
                   <span>{card.ageLabel}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link to={`/app/documents/${card.type}/${card.id}`}>
+                  <Link
+                    to={`/app/${card.type === "invoice" ? "invoices" : "offers"}/${card.id}`}
+                    state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
+                  >
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryAction && (
@@ -637,7 +588,10 @@ export default function TodosPage() {
                   <span>{card.ageLabel}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link to={`/app/documents/${card.type}/${card.id}`}>
+                  <Link
+                    to={`/app/${card.type === "invoice" ? "invoices" : "offers"}/${card.id}`}
+                    state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
+                  >
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryAction && (
@@ -676,7 +630,10 @@ export default function TodosPage() {
                   <span>{card.ageLabel}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link to={`/app/documents/${card.type}/${card.id}`}>
+                  <Link
+                    to={`/app/${card.type === "invoice" ? "invoices" : "offers"}/${card.id}`}
+                    state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
+                  >
                     <AppButton>Öffnen</AppButton>
                   </Link>
                   {card.secondaryAction && (

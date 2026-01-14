@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
@@ -41,13 +41,6 @@ type DocumentRow = {
   dueDate?: string;
   validUntil?: string;
   isOverdue?: boolean;
-};
-
-const toLocalISODate = (d: Date) => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 };
 
 
@@ -372,7 +365,9 @@ export default function DocumentsHubPage() {
     const target = type === "offer" ? "/app/offers/new" : "/app/invoices/new";
     setFabOpen(false);
     setNewMenuOpen(false);
-    navigate(target, { state: { backgroundLocation: location } });
+    navigate(target, {
+      state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` },
+    });
   };
 
   const openNewCustomer = () => {
@@ -515,7 +510,19 @@ export default function DocumentsHubPage() {
       ) : (
         <div className="space-y-3">
           {filteredRows.map((row) => (
-            <Link key={`${row.type}-${row.id}`} to={`/app/documents/${row.type}/${row.id}`}>
+            <button
+              key={`${row.type}-${row.id}`}
+              type="button"
+              className="text-left w-full"
+              onClick={() =>
+                navigate(`/app/${row.type === "invoice" ? "invoices" : "offers"}/${row.id}`, {
+                  state: {
+                    backgroundLocation: location,
+                    returnTo: `${location.pathname}${location.search}`,
+                  },
+                })
+              }
+            >
               <AppCard
                 className={[
                   "flex flex-col gap-3 hover:border-indigo-200 hover:bg-indigo-50/30 transition",
@@ -545,7 +552,7 @@ export default function DocumentsHubPage() {
                   <span>{row.amountLabel}</span>
                 </div>
               </AppCard>
-            </Link>
+            </button>
           ))}
         </div>
       )}

@@ -1,5 +1,5 @@
 // src/features/documents/DocumentsList.tsx
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, ReceiptEuro, Check, Eye } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -18,12 +18,10 @@ import * as clientService from "@/app/clients/clientService";
 import * as settingsService from "@/app/settings/settingsService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 
 import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
-import { DocumentEditor } from "./DocumentEditor";
 import {
   formatDocumentStatus,
   getInvoiceDisplayStatus,
@@ -33,21 +31,6 @@ import {
 } from "@/features/documents/utils/formatStatus";
 import { getErrorMessage, logError } from "@/utils/errors";
 import { formatErrorToast } from "@/utils/errorMapping";
-
-type EditorSeed = {
-  id: string;
-  number: string | null;
-  date: string;
-  paymentTermsDays?: number;
-  dueDate?: string;
-  validUntil?: string;
-  vatRate: number;
-  isSmallBusiness?: boolean;
-  smallBusinessNote?: string | null;
-  introText: string;
-  footerText: string;
-  currency?: string;
-};
 
 type DocListItem = {
   id: string;
@@ -85,7 +68,6 @@ const toLocalISODate = (d: Date) => {
 };
 
 const todayISO = () => toLocalISODate(new Date());
-const addDaysISO = (days: number) => toLocalISODate(new Date(Date.now() + days * 86400000));
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -103,15 +85,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
-
-  const [editorReadOnly, setEditorReadOnly] = useState(false);
-  const [editorStartInPrint, setEditorStartInPrint] = useState(false);
-  const [editorInitial, setEditorInitial] = useState<any>(null);
-
-  const [openingId, setOpeningId] = useState<string | null>(null);
+  const lastRefreshTokenRef = useRef<number | null>(null);
   const showEmptyState = !loading && items.length === 0 && !error;
 
   const getInvoiceStatusMeta = (status: InvoiceStatus, overdue: boolean) => {
@@ -239,164 +213,28 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     void refresh();
   }, [refresh, type]);
 
-  const clearCreateParams = useCallback(() => {
-    const params = new URLSearchParams(location.search);
-    if (!params.has("new") && !params.has("create")) return;
-    params.delete("new");
-    params.delete("create");
-    const search = params.toString();
-    navigate(
-      {
-        pathname: location.pathname,
-        search: search ? `?${search}` : "",
-      },
-      { replace: true }
-    );
-  }, [location.pathname, location.search, navigate]);
-
-  const openCreateRoute = () => {
-    const params = new URLSearchParams(location.search);
-    params.set("new", isInvoice ? "invoice" : "offer");
-    navigate(
-      {
-        pathname: location.pathname,
-        search: `?${params.toString()}`,
-      },
-      { replace: false }
-    );
-  };
-
-  const openCreateEditor = useCallback(async () => {
-    if (!settings) return;
-    setEditorReadOnly(false);
-    setEditorStartInPrint(false);
-    setEditorInitial(null);
-    if (isInvoice) {
-      const defaultTerms = Number(settings.defaultPaymentTerms ?? 14);
-      const seed: EditorSeed = {
-        id: newId(),
-        number: null,
-        date: todayISO(),
-        paymentTermsDays: defaultTerms,
-        dueDate: invoiceService.buildDueDate(todayISO(), defaultTerms),
-        vatRate: Number(settings.defaultVatRate ?? 0),
-        isSmallBusiness: settings.isSmallBusiness ?? false,
-        smallBusinessNote: settings.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
-        introText: "",
-        footerText: `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`,
-      };
-      setEditorSeed(seed);
-      setEditorOpen(true);
-      return;
-    }
-
-    const number = await getNextDocumentNumber("offer", settings);
-    const offerSeed: EditorSeed = {
-      id: newId(),
-      number,
-      date: todayISO(),
-      validUntil: addDaysISO(14),
-      vatRate: Number(settings.defaultVatRate ?? 0),
-      introText: "Gerne unterbreite ich Ihnen folgendes Angebot:",
-      footerText: "Ich freue mich auf Ihre Rückmeldung.",
-      currency: settings.currency ?? "EUR",
-    };
-    setEditorSeed(offerSeed);
-    setEditorOpen(true);
-  }, [isInvoice, settings]);
-
-  // VIEW: immer frisch laden
-  const openView = async (id: string) => {
-    if (openingId) return;
-
-    setOpeningId(id);
-    try {
-      const doc = isInvoice ? await invoiceService.getInvoice(id) : await offerService.getOffer(id);
-
-      if (!doc) {
-        toast.error("Dokument nicht gefunden (oder keine Berechtigung).");
-        return;
-      }
-
-      setEditorReadOnly(true);
-      setEditorStartInPrint(true);
-
-      setEditorSeed({
-        id: doc.id,
-        number: (doc as any).number ?? null,
-        date: (doc as any).date,
-        paymentTermsDays: isInvoice ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
-        dueDate: isInvoice ? (doc as Invoice).dueDate : undefined,
-        validUntil: !isInvoice ? (doc as Offer).validUntil : undefined,
-        vatRate: Number((doc as any).vatRate ?? 0),
-        isSmallBusiness: isInvoice ? (doc as Invoice).isSmallBusiness ?? false : undefined,
-        smallBusinessNote: isInvoice ? (doc as Invoice).smallBusinessNote ?? null : undefined,
-        introText: (doc as any).introText ?? "",
-        footerText: (doc as any).footerText ?? "",
-        currency: (doc as any).currency ?? undefined,
-      });
-
-      setEditorInitial({
-        id: doc.id,
-        number: (doc as any).number ?? null,
-        date: (doc as any).date,
-        paymentTermsDays: isInvoice ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
-        clientId: (doc as any).clientId ?? "",
-        projectId: (doc as any).projectId ?? undefined,
-        offerId: (doc as any).offerId ?? undefined,
-        dueDate: (doc as any).dueDate ?? undefined,
-        validUntil: (doc as any).validUntil ?? undefined,
-        positions: (doc as any).positions ?? [],
-        vatRate: Number((doc as any).vatRate ?? 0),
-        isSmallBusiness: isInvoice ? (doc as Invoice).isSmallBusiness ?? false : undefined,
-        smallBusinessNote: isInvoice ? (doc as Invoice).smallBusinessNote ?? null : undefined,
-        status: (doc as any).status,
-        introText: (doc as any).introText ?? "",
-        footerText: (doc as any).footerText ?? "",
-        paymentDate: (doc as any).paymentDate ?? undefined,
-        isLocked: (doc as any).isLocked ?? false,
-        finalizedAt: (doc as any).finalizedAt ?? null,
-        sentAt: (doc as any).sentAt ?? null,
-        lastSentAt: (doc as any).lastSentAt ?? null,
-        sentCount: (doc as any).sentCount ?? 0,
-        sentVia: (doc as any).sentVia ?? null,
-        invoiceId: (doc as any).invoiceId ?? null,
-        currency: (doc as any).currency ?? undefined,
-      });
-
-      setEditorOpen(true);
-    } catch (e) {
-      logError(e);
-      const msg = getErrorMessage(e);
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setOpeningId(null);
-    }
-  };
-
   useEffect(() => {
-    if (!isInvoice) return;
-    const openId = (location.state as { openId?: string } | null)?.openId;
-    if (!openId || typeof openId !== "string") return;
-    void openView(openId);
-    navigate(location.pathname, { replace: true, state: null });
-  }, [isInvoice, location.pathname, location.state, navigate, openView]);
+    const refreshToken = (location.state as { refreshDocuments?: number } | null)?.refreshDocuments;
+    if (!refreshToken || refreshToken === lastRefreshTokenRef.current) return;
+    lastRefreshTokenRef.current = refreshToken;
+    void refresh();
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: {} });
+  }, [location.hash, location.pathname, location.search, location.state, navigate, refresh]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const intent = params.get("new") ?? params.get("create");
-    const normalized =
-      intent === "invoice" || intent === "invoices"
-        ? "invoice"
-        : intent === "offer" || intent === "offers"
-        ? "offer"
-        : null;
-    if (!normalized || normalized !== type) return;
-    if (editorOpen) return;
-    if (!settings) return;
-    void openCreateEditor();
-  }, [editorOpen, location.search, openCreateEditor, settings, type]);
+  const openCreateRoute = useCallback(() => {
+    navigate(`/app/${isInvoice ? "invoices" : "offers"}/new`, {
+      state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` },
+    });
+  }, [isInvoice, location, navigate]);
+
+  const openDocument = useCallback(
+    (id: string) => {
+      navigate(`/app/${isInvoice ? "invoices" : "offers"}/${id}`, {
+        state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` },
+      });
+    },
+    [isInvoice, location, navigate]
+  );
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({ title: "Dokument loeschen", message: "Wirklich loeschen?" });
@@ -550,26 +388,6 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         </div>
       )}
 
-      {editorOpen && editorSeed && settings && (
-        <DocumentEditor
-          type={type}
-          seed={editorSeed}
-          settings={settings}
-          clients={clients}
-          onClose={() => {
-            setEditorOpen(false);
-            setEditorReadOnly(false);
-            setEditorStartInPrint(false);
-            setEditorInitial(null);
-            clearCreateParams();
-          }}
-          onSaved={refresh}
-          readOnly={editorReadOnly}
-          startInPrint={editorStartInPrint}
-          initial={editorInitial ?? undefined}
-        />
-      )}
-
       <div className="md:hidden space-y-4">
         {items.map((item) => {
           const net = calcNet(item.positions ?? []);
@@ -595,6 +413,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 clientName={getItemClientName(item)}
                 statusLabel={statusMeta.label}
                 statusTone={statusMeta.tone}
+                onClick={() => openDocument(item.id)}
                 metadata={
                   <div className="text-xs text-gray-500 dark:text-slate-400">
                     Fällig am{" "}
@@ -604,11 +423,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                 primaryAction={
                   <button
                     type="button"
-                    onClick={() => void openView(item.id)}
+                    onClick={() => openDocument(item.id)}
                     title="Rechnung ansehen"
                     aria-label="Rechnung ansehen"
                     className="h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                    disabled={openingId === item.id}
                   >
                     <Eye size={18} />
                   </button>
@@ -650,11 +468,19 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               clientName={getItemClientName(item)}
               statusLabel={offerMeta.label}
               statusTone={offerMeta.tone}
+              onClick={() => openDocument(item.id)}
               metadata={
                 <div className="space-y-1 text-xs text-gray-500 dark:text-slate-400">
                   {item.invoiceId && (
                     <div>
-                      <Link to={`/app/documents/invoice/${item.invoiceId}`} className="underline">
+                      <Link
+                        to={`/app/invoices/${item.invoiceId}`}
+                        state={{
+                          backgroundLocation: location,
+                          returnTo: `${location.pathname}${location.search}`,
+                        }}
+                        className="underline"
+                      >
                         Rechnung erstellt
                       </Link>{" "}
                       <span className="text-gray-400">- {item.invoiceId}</span>
@@ -678,11 +504,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               secondaryAction={
                 <button
                   type="button"
-                  onClick={() => void openView(item.id)}
+                  onClick={() => openDocument(item.id)}
                   title="Angebot ansehen"
                   aria-label="Angebot ansehen"
                   className="h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                  disabled={openingId === item.id}
                 >
                   <Eye size={18} />
                 </button>
@@ -736,7 +561,11 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
               const displayStatus = isInvoice ? getInvoiceDisplayStatus(item as Invoice) : item.status;
 
               return (
-                <tr key={item.id} className="hover:bg-gray-50">
+                <tr
+                  key={item.id}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => openDocument(item.id)}
+                >
                   <td className="p-4 font-medium">{item.number}</td>
                   <td className="p-4">{getItemClientName(item)}</td>
                   <td className="p-4 text-sm text-gray-500">{item.date ? formatDate(item.date, settings?.locale) : "—"}</td>
@@ -770,7 +599,15 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
 
                         {!isInvoice && item.invoiceId && (
                           <div className="text-xs text-gray-600">
-                            <Link to={`/app/documents/invoice/${item.invoiceId}`} className="underline">
+                            <Link
+                              to={`/app/invoices/${item.invoiceId}`}
+                              state={{
+                                backgroundLocation: location,
+                                returnTo: `${location.pathname}${location.search}`,
+                              }}
+                              className="underline"
+                              onClick={(event) => event.stopPropagation()}
+                            >
                               Invoice created
                             </Link>{" "}
                             <span className="text-gray-400">- {item.invoiceId}</span>
@@ -791,7 +628,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                     <div className="flex gap-2 justify-end">
                       {!isInvoice && (
                         <button
-                          onClick={() => void handleConvertToInvoice(item.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleConvertToInvoice(item.id);
+                          }}
                           title="In Rechnung wandeln"
                           aria-label="In Rechnung wandeln"
                           className="h-11 w-11 inline-flex items-center justify-center text-indigo-600 hover:bg-indigo-50 rounded"
@@ -805,7 +645,10 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                           item.status as InvoiceStatus
                         ) && (
                         <button
-                          onClick={() => void handleMarkPaid(item.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleMarkPaid(item.id);
+                          }}
                           title="Als bezahlt markieren"
                           aria-label="Als bezahlt markieren"
                           className="h-11 w-11 inline-flex items-center justify-center text-green-600 hover:bg-green-50 rounded"
@@ -815,17 +658,22 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                       )}
 
                       <button
-                        onClick={() => void openView(item.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openDocument(item.id);
+                        }}
                         title={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
                         aria-label={isInvoice ? "Rechnung ansehen" : "Angebot ansehen"}
                         className="h-11 w-11 inline-flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded"
-                        disabled={openingId === item.id}
                       >
                         <Eye size={18} />
                       </button>
 
                       <button
-                        onClick={() => void handleDelete(item.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDelete(item.id);
+                        }}
                         className="h-11 w-11 inline-flex items-center justify-center text-gray-400 hover:text-red-500 rounded"
                         title="Löschen"
                         aria-label="Löschen"

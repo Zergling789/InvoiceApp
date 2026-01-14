@@ -1,6 +1,6 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
@@ -215,6 +215,7 @@ export function DocumentEditor({
   const toast = useToast();
   const { confirm } = useConfirm();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showPrint, setShowPrint] = useState(startInPrint);
   const [showSendModal, setShowSendModal] = useState(false);
   const [pdfError, setPdfError] = useState<{ status?: number; message: string } | null>(null);
@@ -679,7 +680,11 @@ export function DocumentEditor({
 
     await onSaved();
     onClose();
-    navigate("/app/documents?mode=invoices", { state: { openId: invoiceId } });
+    const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
+    const returnTo = `${location.pathname}${location.search}`;
+    navigate(`/app/invoices/${invoiceId}`, {
+      state: backgroundLocation ? { backgroundLocation, returnTo } : undefined,
+    });
   };
 
   const sendModal = (

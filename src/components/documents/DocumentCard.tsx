@@ -17,6 +17,7 @@ type DocumentCardProps = {
   primaryAction: React.ReactNode;
   secondaryAction?: React.ReactNode;
   menuActions?: React.ReactNode;
+  onClick?: () => void;
 };
 
 const badgeStyles: Record<BadgeTone, string> = {
@@ -41,6 +42,7 @@ export function DocumentCard({
   primaryAction,
   secondaryAction,
   menuActions,
+  onClick,
 }: DocumentCardProps) {
   const variantStyles =
     variant === "quote"
@@ -48,7 +50,26 @@ export function DocumentCard({
       : "border-gray-200 dark:border-slate-700 dark:bg-slate-900";
 
   return (
-    <article className={`app-card space-y-4 ${variantStyles}`}>
+    <article
+      className={[
+        "app-card space-y-4",
+        variantStyles,
+        onClick ? "cursor-pointer hover:border-indigo-200 hover:bg-indigo-50/30" : "",
+      ].join(" ")}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
@@ -79,11 +100,13 @@ export function DocumentCard({
 
       <div className="flex items-center justify-between border-t border-gray-100 pt-3 dark:border-slate-700">
         <div className="flex flex-wrap items-center gap-2">
-          {primaryAction}
-          {secondaryAction}
+          <div onClick={(event) => event.stopPropagation()}>{primaryAction}</div>
+          {secondaryAction && (
+            <div onClick={(event) => event.stopPropagation()}>{secondaryAction}</div>
+          )}
         </div>
         {menuActions && (
-          <details className="relative">
+          <details className="relative" onClick={(event) => event.stopPropagation()}>
             <summary
               className="list-none [&::-webkit-details-marker]:hidden h-11 w-11 inline-flex items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               aria-label="Weitere Aktionen"
