@@ -347,18 +347,28 @@ export default function DocumentsHubPage() {
   };
 
   const openNewEditor = (type: "invoice" | "offer") => {
-    const target = type === "offer" ? "/app/offers/new" : "/app/invoices/new";
+    const target = type === "offer" ? "/app/offers?new=offer" : "/app/invoices?new=invoice";
     setFabOpen(false);
     navigate(target, { state: { backgroundLocation: location } });
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold text-gray-900">Dokumente</h1>
-        <p className="text-sm text-gray-600">
-          Angebote und Rechnungen in einem Überblick – filtere nach Typ, Status oder Suche.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold text-gray-900">Dokumente</h1>
+          <p className="text-sm text-gray-600">
+            Angebote und Rechnungen in einem Überblick – filtere nach Typ, Status oder Suche.
+          </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2">
+          <AppButton variant="secondary" onClick={() => void openNewEditor("offer")}>
+            Angebot erstellen
+          </AppButton>
+          <AppButton onClick={() => void openNewEditor("invoice")}>
+            Rechnung erstellen
+          </AppButton>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
