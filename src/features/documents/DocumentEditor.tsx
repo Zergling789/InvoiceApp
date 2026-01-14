@@ -8,12 +8,13 @@ import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
 import { formatMoney } from "@/utils/money";
 
 import { AppButton } from "@/ui/AppButton";
+import BottomActionBar, { type MenuAction } from "@/components/BottomActionBar";
 import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { supabase } from "@/supabaseClient";
-import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import { formatErrorToast } from "@/utils/errorMapping";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -256,6 +257,8 @@ export function DocumentEditor({
 
   const locked = Boolean(formData.isLocked);
   const disabled = readOnly || locked || saving;
+  const showPrimaryAction = !readOnly;
+  const showActionBar = true;
   const invoiceMetaDisabled = disabled || (isInvoice && formData.status !== InvoiceStatus.DRAFT);
   const currencyOptions = ["EUR", "USD", "CHF", "GBP"];
   const documentCurrency = isInvoice
@@ -456,10 +459,12 @@ export function DocumentEditor({
       if (!code && error instanceof Error) {
         code = error.message;
       }
-      const message =
-        mapErrorCodeToToast(code) ||
-        getErrorMessage(error, "Dokument konnte nicht gespeichert werden.");
-      toast.error(message);
+      toast.error(
+        formatErrorToast({
+          code,
+          message: getErrorMessage(error, "Dokument konnte nicht gespeichert werden."),
+        })
+      );
       return false;
     } finally {
       setSaving(false);
@@ -587,9 +592,14 @@ export function DocumentEditor({
         setFormData({ ...formData, ...updated });
       }
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht finalisiert werden.",
+        })
       );
       return null;
     }
@@ -652,8 +662,11 @@ export function DocumentEditor({
 
     if (error) {
       toast.error(
-        mapErrorCodeToToast(error.code ?? error.message) ||
-          "Angebot konnte nicht umgewandelt werden."
+        formatErrorToast({
+          code: error.code,
+          message: error.message,
+          fallback: "Angebot konnte nicht umgewandelt werden.",
+        })
       );
       return;
     }
@@ -1295,7 +1308,9 @@ export function DocumentEditor({
               </div>
             )}
 
-            <div className={`flex-1 overflow-y-auto p-6 space-y-6 ${actionMode === "save-only" ? "bottom-action-spacer" : ""}`}>
+        <div
+          className={`flex-1 overflow-y-auto p-6 space-y-6 ${showActionBar ? "bottom-action-spacer" : ""}`}
+        >
               {showTabs && (
                 <div className="flex items-center gap-2 border-b pb-2">
                   <button
@@ -1799,115 +1814,91 @@ export function DocumentEditor({
               )}
             </div>
 
-        {actionMode === "save-only" ? (
-          !readOnly && (
-            <div className={isPageLayout ? "bottom-action-bar safe-area-container" : "p-6 border-t bg-gray-50"}>
-              <AppButton
-                disabled={saving || !formData.clientId}
-                onClick={() => void handleSave({ closeAfterSave: true })}
-                className="w-full justify-center"
-              >
-                {saving ? "Speichere..." : primaryActionLabel}
-              </AppButton>
-            </div>
-          )
-        ) : (
-          <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
-            <AppButton variant="ghost" onClick={onClose} aria-label="Schließen">
-              <X size={16} aria-hidden="true" />
-            </AppButton>
-
-            <div className="flex gap-2 flex-wrap justify-end">
-              <AppButton
-                variant="secondary"
-                disabled={saving}
-                onClick={async () => {
+        {showActionBar && (
+          <BottomActionBar
+            primaryLabel={showPrimaryAction ? primaryActionLabel : "Schließen"}
+            onPrimary={() =>
+              showPrimaryAction ? void handleSave({ closeAfterSave: true }) : onClose()
+            }
+            primaryDisabled={showPrimaryAction ? saving || !formData.clientId || locked : false}
+            loading={showPrimaryAction ? saving : false}
+            secondaryLabel="Schließen"
+            onSecondary={showPrimaryAction ? onClose : undefined}
+            menuActions={((): MenuAction[] => {
+              const actions: MenuAction[] = [];
+              actions.push({
+                label: "Vorschau & Drucken",
+                onClick: async () => {
                   if (readOnly || locked) {
                     setShowPrint(true);
                     return;
                   }
                   const ok = await handleSave({ closeAfterSave: false });
                   if (ok) setShowPrint(true);
-                }}
-              >
-                Vorschau & Drucken
-              </AppButton>
+                },
+                disabled: saving,
+              });
 
-              {!readOnly && (
-                <AppButton
-                  disabled={saving || !formData.clientId}
-                  onClick={() => void handleSave({ closeAfterSave: true })}
-                >
-                  {saving ? "Speichere..." : "Speichern"}
-                </AppButton>
-              )}
+              if (showStatusActions && !readOnly && !locked && !isInvoice) {
+                if (formData.status === OfferStatus.DRAFT) {
+                  actions.push({
+                    label: "Finalisieren",
+                    onClick: () => void handleMarkOfferSentManual(),
+                    disabled: saving,
+                  });
+                  actions.push({
+                    label: "Finalisieren & Senden",
+                    onClick: () => setShowSendModal(true),
+                    disabled: saving,
+                  });
+                } else {
+                  actions.push({
+                    label: "Resend",
+                    onClick: () => setShowSendModal(true),
+                    disabled: saving,
+                  });
+                }
+                actions.push({
+                  label: "Mark as accepted",
+                  onClick: () => void handleMarkOfferAccepted(),
+                  disabled: saving || formData.status === OfferStatus.ACCEPTED,
+                });
+                actions.push({
+                  label: "Mark as declined",
+                  onClick: () => void handleMarkOfferDeclined(),
+                  disabled: saving || formData.status === OfferStatus.REJECTED,
+                });
+                actions.push({
+                  label: "Create invoice",
+                  onClick: () => void handleCreateInvoiceFromOffer(),
+                  disabled: saving || !canConvertToInvoice(formData as any) || Boolean(formData.invoiceId),
+                });
+              }
 
-              {showStatusActions && !readOnly && !isInvoice && formData.status === OfferStatus.DRAFT && (
-                <AppButton onClick={() => setShowSendModal(true)}>
-                  <Mail size={16} /> Send offer
-                </AppButton>
-              )}
+              if (showStatusActions && !readOnly && !locked && isInvoice) {
+                if (formData.status === InvoiceStatus.DRAFT) {
+                  actions.push({
+                    label: "Finalisieren",
+                    onClick: () => void handleFinalizeInvoice(),
+                    disabled: saving,
+                  });
+                  actions.push({
+                    label: "Finalisieren & Senden",
+                    onClick: () => setShowSendModal(true),
+                    disabled: saving,
+                  });
+                } else {
+                  actions.push({
+                    label: "Per E-Mail senden",
+                    onClick: () => setShowSendModal(true),
+                    disabled: saving,
+                  });
+                }
+              }
 
-              {showStatusActions && !readOnly && !isInvoice && formData.status !== OfferStatus.DRAFT && (
-                <AppButton variant="secondary" onClick={() => setShowSendModal(true)}>
-                  <Mail size={16} /> Resend
-                </AppButton>
-              )}
-
-              {showStatusActions && !readOnly && !isInvoice && (
-                <AppButton variant="secondary" onClick={() => void handleMarkOfferSentManual()}>
-                  Mark as sent
-                </AppButton>
-              )}
-
-              {showStatusActions && !readOnly && !isInvoice && (
-                <AppButton
-                  variant="secondary"
-                  onClick={() => void handleMarkOfferAccepted()}
-                  disabled={formData.status === OfferStatus.ACCEPTED}
-                >
-                  Mark as accepted
-                </AppButton>
-              )}
-
-              {showStatusActions && !readOnly && !isInvoice && (
-                <AppButton
-                  variant="secondary"
-                  onClick={() => void handleMarkOfferDeclined()}
-                  disabled={formData.status === OfferStatus.REJECTED}
-                >
-                  Mark as declined
-                </AppButton>
-              )}
-
-              {showStatusActions && !readOnly && !isInvoice && (
-                <AppButton
-                  variant="secondary"
-                  onClick={() => void handleCreateInvoiceFromOffer()}
-                  disabled={!canConvertToInvoice(formData as any) || Boolean(formData.invoiceId)}
-                >
-                  Create invoice
-                </AppButton>
-              )}
-
-              {showStatusActions && isInvoice && !readOnly && formData.status === InvoiceStatus.DRAFT && (
-                <>
-                  <AppButton variant="secondary" onClick={() => void handleFinalizeInvoice()}>
-                    Finalisieren
-                  </AppButton>
-                  <AppButton onClick={() => setShowSendModal(true)}>
-                    Finalisieren & Senden
-                  </AppButton>
-                </>
-              )}
-
-              {showStatusActions && isInvoice && formData.status !== InvoiceStatus.DRAFT && (
-                <AppButton onClick={() => setShowSendModal(true)}>
-                  <Mail size={16} /> Per E-Mail senden
-                </AppButton>
-              )}
-            </div>
-          </div>
+              return actions;
+            })()}
+          />
         )}
           </>
         )}

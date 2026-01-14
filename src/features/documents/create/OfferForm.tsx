@@ -28,7 +28,7 @@ type OfferFormProps = {
   onDirtyChange?: (dirty: boolean) => void;
 };
 
-export function OfferForm({ onClose, onDirtyChange }: OfferFormProps) {
+export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -100,7 +100,9 @@ export function OfferForm({ onClose, onDirtyChange }: OfferFormProps) {
       settings={settings}
       clients={clients}
       onClose={onClose}
-      onSaved={async () => {}}
+      onSaved={async () => {
+        await onSaved?.();
+      }}
       layout="embedded"
       showHeader={false}
       onDirtyChange={onDirtyChange}

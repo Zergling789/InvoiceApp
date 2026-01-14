@@ -17,7 +17,7 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
-import { mapErrorCodeToToast } from "@/utils/errorMapping";
+import { formatErrorToast } from "@/utils/errorMapping";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
@@ -330,9 +330,14 @@ export default function TodosPage() {
     try {
       await invoiceService.finalizeInvoice(invoice.id);
     } catch (error) {
-      const code = (error as Error & { code?: string }).code;
+      const errAny = error as Error & { code?: string; requestId?: string };
       toast.error(
-        mapErrorCodeToToast(code ?? error.message) || "Rechnung konnte nicht finalisiert werden."
+        formatErrorToast({
+          code: errAny.code,
+          message: errAny.message,
+          requestId: errAny.requestId,
+          fallback: "Rechnung konnte nicht finalisiert werden.",
+        })
       );
       return null;
     }
@@ -427,6 +432,11 @@ export default function TodosPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const openNewCustomer = () => {
+    setFabOpen(false);
+    navigate("/app/customers/new", { state: { backgroundLocation: location } });
   };
 
   return (
@@ -693,8 +703,14 @@ export default function TodosPage() {
       </div>
 
       {fabOpen && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden">
-          <div className="w-full rounded-t-2xl bg-white p-6 shadow-xl">
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
+          onPointerDown={() => setFabOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-2xl bg-white p-6 shadow-xl"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
             <div className="space-y-3">
               <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
@@ -710,10 +726,7 @@ export default function TodosPage() {
               <AppButton
                 variant="secondary"
                 className="w-full justify-center"
-                onClick={() => {
-                  setFabOpen(false);
-                  navigate("/app/clients");
-                }}
+                onClick={openNewCustomer}
               >
                 Neuer Kunde
               </AppButton>

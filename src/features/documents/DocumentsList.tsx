@@ -32,6 +32,7 @@ import {
   formatOfferStatus,
 } from "@/features/documents/utils/formatStatus";
 import { getErrorMessage, logError } from "@/utils/errors";
+import { formatErrorToast } from "@/utils/errorMapping";
 
 type EditorSeed = {
   id: string;
@@ -406,9 +407,15 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
       await refresh();
     } catch (e) {
       logError(e);
-      const msg = getErrorMessage(e);
-      setError(msg);
-      toast.error(msg);
+      const errAny = e as Error & { code?: string; requestId?: string };
+      const message = formatErrorToast({
+        code: errAny.code,
+        message: getErrorMessage(e),
+        requestId: errAny.requestId,
+        fallback: "Rechnung konnte nicht aktualisiert werden.",
+      });
+      setError(message);
+      toast.error(message);
     }
   };
 
