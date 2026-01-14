@@ -118,8 +118,8 @@ export default function Dashboard() {
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Überfällig",
           tone: "critical",
-          primaryCta: { label: "Mahnung senden", to: `/app/documents/invoice/${invoice.id}` },
-          secondaryCta: { label: "Details", to: `/app/documents/invoice/${invoice.id}` },
+          primaryCta: { label: "Mahnung senden", to: `/app/invoices/${invoice.id}` },
+          secondaryCta: { label: "Details", to: `/app/invoices/${invoice.id}` },
         };
       });
 
@@ -145,8 +145,8 @@ export default function Dashboard() {
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Offen",
           tone: "warning",
-          primaryCta: { label: "Rechnung senden", to: `/app/documents/invoice/${invoice.id}` },
-          secondaryCta: { label: "Details", to: `/app/documents/invoice/${invoice.id}` },
+          primaryCta: { label: "Rechnung senden", to: `/app/invoices/${invoice.id}` },
+          secondaryCta: { label: "Details", to: `/app/invoices/${invoice.id}` },
         };
       });
 
@@ -169,8 +169,8 @@ export default function Dashboard() {
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Follow-up fällig",
           tone: "neutral",
-          primaryCta: { label: "Nachfassen", to: `/app/documents/offer/${offer.id}` },
-          secondaryCta: { label: "Details", to: `/app/documents/offer/${offer.id}` },
+          primaryCta: { label: "Nachfassen", to: `/app/offers/${offer.id}` },
+          secondaryCta: { label: "Details", to: `/app/offers/${offer.id}` },
         };
       });
 
@@ -291,7 +291,7 @@ export default function Dashboard() {
           title="Jetzt erledigen"
           subtitle="Top-Prioritäten für deinen nächsten Zahlungseingang."
           action={
-            <Link to="/app/documents?mode=invoices">
+            <Link to="/app/invoices">
               <AppButton variant="secondary">Alle Rechnungen</AppButton>
             </Link>
           }
@@ -302,7 +302,7 @@ export default function Dashboard() {
           emptyState={
             <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-gray-200 p-6 text-sm text-gray-600">
               <span>✅ Alles sauber – keine offenen Follow-ups.</span>
-              <Link to="/app/offers?new=offer">
+              <Link to="/app/offers/new">
                 <AppButton>Neues Angebot erstellen</AppButton>
               </Link>
             </div>
@@ -329,10 +329,10 @@ export default function Dashboard() {
       <section className="space-y-3">
         <SectionHeader title="Schnellaktionen" subtitle="Starte neue Umsätze in Sekunden." />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Link to="/app/offers?new=offer">
+          <Link to="/app/offers/new">
             <AppButton className="w-full justify-center">Angebot erstellen</AppButton>
           </Link>
-          <Link to="/app/invoices?new=invoice">
+          <Link to="/app/invoices/new">
             <AppButton variant="secondary" className="w-full justify-center">
               Rechnung erstellen
             </AppButton>

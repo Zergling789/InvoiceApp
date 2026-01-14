@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation, type Location } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useParams, type Location } from "react-router-dom";
 import { LayoutDashboard, Users, FileText, ListTodo, Menu } from "lucide-react";
 
 import Dashboard from "@/features/dashboard/Dashboard";
@@ -6,9 +6,7 @@ import Clients from "@/features/clients/Clients";
 import Projects from "@/features/projects/Projects";
 import DocumentsPage from "@/features/documents/DocumentsPage";
 import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
-import DocumentDetailPage from "@/features/documents/DocumentDetailPage";
-import OfferEditPage from "@/features/documents/edit/OfferEditPage";
-import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
+import DocumentDetailRoute from "@/features/documents/DocumentDetailRoute";
 import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
 import InvoiceCreatePage from "@/features/documents/create/InvoiceCreatePage";
 import CustomerCreatePage from "@/features/clients/CustomerCreatePage";
@@ -26,6 +24,11 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import RequireAuth from "@/components/Auth/RequireAuth";
 import AngebotDetails from "@/pages/AngebotDetails";
+
+function LegacyDocumentRedirect({ type }: { type: "offer" | "invoice" }) {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/${type}s/${id ?? ""}`} replace />;
+}
 
 const navItems: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -65,13 +68,15 @@ export default function App() {
           <Route path="projects" element={<Projects />} />
           <Route path="offers" element={<DocumentsPage type="offer" />} />
           <Route path="offers/new" element={<OfferCreatePage />} />
+          <Route path="offers/:id" element={<DocumentDetailRoute forcedType="offer" />} />
           <Route path="invoices" element={<DocumentsPage type="invoice" />} />
           <Route path="invoices/new" element={<InvoiceCreatePage />} />
+          <Route path="invoices/:id" element={<DocumentDetailRoute forcedType="invoice" />} />
           <Route path="customers/new" element={<CustomerCreatePage />} />
           <Route path="projects/new" element={<ProjectCreatePage />} />
-          <Route path="documents/offer/:id/edit" element={<OfferEditPage />} />
-          <Route path="documents/invoice/:id/edit" element={<InvoiceEditPage />} />
-          <Route path="documents/:type/:id" element={<DocumentDetailPage />} />
+          <Route path="documents/offer/:id/edit" element={<LegacyDocumentRedirect type="offer" />} />
+          <Route path="documents/invoice/:id/edit" element={<LegacyDocumentRedirect type="invoice" />} />
+          <Route path="documents/:type/:id" element={<DocumentDetailRoute />} />
           <Route path="more" element={<MorePage />} />
           <Route path="settings" element={<SettingsView />} />
           <Route path="settings/email/verify" element={<VerifyEmailResult />} />
@@ -85,7 +90,9 @@ export default function App() {
       {backgroundLocation && (
         <Routes>
           <Route path="/app/offers/new" element={<OfferCreatePage />} />
+          <Route path="/app/offers/:id" element={<DocumentDetailRoute forcedType="offer" />} />
           <Route path="/app/invoices/new" element={<InvoiceCreatePage />} />
+          <Route path="/app/invoices/:id" element={<DocumentDetailRoute forcedType="invoice" />} />
           <Route path="/app/customers/new" element={<CustomerCreatePage />} />
           <Route path="/app/projects/new" element={<ProjectCreatePage />} />
         </Routes>

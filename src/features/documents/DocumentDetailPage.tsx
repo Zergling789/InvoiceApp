@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, type Location } from "react-router-dom";
 import { MoreVertical } from "lucide-react";
 
 import type { Client, Invoice, Offer, Position, UserSettings } from "@/types";
@@ -54,9 +54,15 @@ const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): Edito
   currency: type === "offer" ? (doc as Offer).currency ?? undefined : undefined,
 });
 
-export default function DocumentDetailPage() {
-  const { type, id } = useParams<{ type: "offer" | "invoice"; id: string }>();
+type DocumentDetailPageProps = {
+  forcedType?: "offer" | "invoice";
+  onDocumentsChange?: () => void;
+};
+
+export default function DocumentDetailPage({ forcedType, onDocumentsChange }: DocumentDetailPageProps) {
+  const { type, id } = useParams<{ type?: "offer" | "invoice"; id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const { confirm } = useConfirm();
 
@@ -73,22 +79,10 @@ export default function DocumentDetailPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
   const [editorInitial, setEditorInitial] = useState<any>(null);
-  const [isMobile, setIsMobile] = useState(false);
 
-  const docType = type === "invoice" ? "invoice" : "offer";
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia("(max-width: 639px)");
-    const handleChange = () => setIsMobile(mediaQuery.matches);
-    handleChange();
-    if ("addEventListener" in mediaQuery) {
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-    mediaQuery.addListener(handleChange);
-    return () => mediaQuery.removeListener(handleChange);
-  }, []);
+  const docType = forcedType ?? (type === "invoice" ? "invoice" : "offer");
+  const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
 
   useEffect(() => {
     let mounted = true;
@@ -197,6 +191,7 @@ export default function DocumentDetailPage() {
     try {
       const updated = await invoiceService.markInvoicePaid((doc as Invoice).id);
       if (updated) setDoc(updated);
+      onDocumentsChange?.();
       toast.success("Rechnung als bezahlt markiert.");
     } catch (error) {
       const errAny = error as Error & { code?: string; requestId?: string };
@@ -222,6 +217,7 @@ export default function DocumentDetailPage() {
     try {
       const updated = await invoiceService.markInvoiceSent((doc as Invoice).id);
       if (updated) setDoc(updated);
+      onDocumentsChange?.();
       toast.success("Rechnung als gesendet markiert.");
     } catch (error) {
       const errAny = error as Error & { code?: string; requestId?: string };
@@ -247,6 +243,7 @@ export default function DocumentDetailPage() {
     try {
       const updated = await invoiceService.cancelInvoice((doc as Invoice).id);
       if (updated) setDoc(updated);
+      onDocumentsChange?.();
       toast.success("Rechnung storniert.");
     } catch (error) {
       const errAny = error as Error & { code?: string; requestId?: string };
@@ -272,6 +269,7 @@ export default function DocumentDetailPage() {
     if (!ok) return;
     await offerService.saveOffer({ ...offer, status: OfferStatus.ACCEPTED });
     setDoc({ ...offer, status: OfferStatus.ACCEPTED });
+    onDocumentsChange?.();
     toast.success("Angebot als angenommen markiert.");
   };
 
@@ -286,6 +284,7 @@ export default function DocumentDetailPage() {
     if (!ok) return;
     await offerService.saveOffer({ ...offer, status: OfferStatus.REJECTED });
     setDoc({ ...offer, status: OfferStatus.REJECTED });
+    onDocumentsChange?.();
     toast.success("Angebot als abgelehnt markiert.");
   };
 
@@ -316,7 +315,15 @@ export default function DocumentDetailPage() {
       toast.error("Rechnung konnte nicht erstellt werden.");
       return;
     }
-    navigate(`/app/documents/invoice/${invoiceId}`);
+    onDocumentsChange?.();
+    navigate(`/app/invoices/${invoiceId}`, {
+      state: backgroundLocation
+        ? {
+            backgroundLocation,
+            returnTo: returnTo ?? `${location.pathname}${location.search}`,
+          }
+        : undefined,
+    });
   };
 
   const handleOpenSend = (templateType?: "reminder" | "dunning" | "followup") => {
@@ -338,6 +345,7 @@ export default function DocumentDetailPage() {
       const updated = await invoiceService.finalizeInvoice(invoice.id);
       if (updated) {
         setDoc(updated);
+        onDocumentsChange?.();
       }
     } catch (error) {
       const errAny = error as Error & { code?: string; requestId?: string };
@@ -498,10 +506,6 @@ export default function DocumentDetailPage() {
       toast.info("Finalisiert – nicht editierbar.");
       return;
     }
-    if (isMobile) {
-      navigate(`/app/documents/${docType}/${doc.id}/edit`);
-      return;
-    }
     setEditorSeed(buildEditorSeed(doc, docType));
     setEditorInitial({
       id: doc.id,
@@ -537,6 +541,7 @@ export default function DocumentDetailPage() {
     if (!id) return;
     const updated = docType === "invoice" ? await invoiceService.getInvoice(id) : await offerService.getOffer(id);
     if (updated) setDoc(updated);
+    onDocumentsChange?.();
   };
 
   if (loading) {
@@ -549,7 +554,7 @@ export default function DocumentDetailPage() {
         <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
           {error ?? "Dokument konnte nicht geladen werden."}
         </div>
-        <Link to="/app/documents">
+        <Link to={docType === "invoice" ? "/app/invoices" : "/app/offers"}>
           <AppButton variant="secondary">Zurück zu Dokumenten</AppButton>
         </Link>
       </div>

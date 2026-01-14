@@ -11,7 +11,9 @@ export default function InvoiceCreatePage() {
   const skipConfirmRef = useRef(false);
   const refreshTokenRef = useRef<number | null>(null);
 
-  const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
+  const state = location.state as { backgroundLocation?: Location; returnTo?: string } | null;
+  const backgroundLocation = state?.backgroundLocation;
+  const returnTo = state?.returnTo;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
 
   const handleClose = ({ skipConfirm = false }: { skipConfirm?: boolean } = {}) => {
@@ -31,10 +33,12 @@ export default function InvoiceCreatePage() {
     };
 
     if (backgroundLocation) {
-      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, {
-        replace: true,
-        state: buildState(backgroundLocation.state),
-      });
+      navigate(-1, { state: buildState(undefined) });
+      return;
+    }
+
+    if (returnTo) {
+      navigate(returnTo, { replace: true, state: buildState(undefined) });
       return;
     }
 
@@ -46,7 +50,7 @@ export default function InvoiceCreatePage() {
     if (window.history.length > 1) {
       navigate(-1);
     } else {
-      navigate("/app", { state: buildState(undefined) });
+      navigate("/app/invoices", { state: buildState(undefined) });
     }
   };
 

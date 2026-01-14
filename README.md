@@ -100,3 +100,10 @@ Troubleshooting:
 npm run build
 npm run test:ui
 ```
+
+### TEST PLAN (manuell)
+1. /app/documents öffnen → Angebot in der Liste klicken → Modal öffnet → schließen → zurück zur Liste.
+2. /app/documents öffnen → Rechnung in der Liste klicken → Modal öffnet → schließen → zurück zur Liste.
+3. /app/offers/new öffnen → speichern → Modal bleibt offen → schließen → Liste aktualisiert.
+4. /app/invoices/new öffnen → speichern → Modal bleibt offen → schließen → Liste aktualisiert.
+5. Deep Link /app/offers/:id direkt öffnen → Seite rendert ohne Background-Location.
