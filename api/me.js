@@ -1,3 +1,9 @@
-app.get("/api/me", requireAuth, (req, res) => {
-  res.json({ ok: true, user: req.user, sessionUserId: req.session?.userId ?? null });
-});
+export default function handler(_req, res) {
+  res.status(404).json({
+    ok: false,
+    error: {
+      code: "NOT_FOUND",
+      message: "Not Found",
+    },
+  });
+}
