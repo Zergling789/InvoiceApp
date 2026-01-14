@@ -145,6 +145,16 @@ const resolveChromiumLauncher = async () => {
   return playwrightModule.chromium ?? playwrightModule.default?.chromium;
 };
 
+const toBooleanHeadless = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return true;
+};
+
 const getChromiumLaunchOptions = async () => {
   if (!IS_VERCEL) {
     return { headless: true };
@@ -160,10 +170,16 @@ const getChromiumLaunchOptions = async () => {
     throw err;
   }
   const chromium = chromiumModule.default ?? chromiumModule;
+  const headless = toBooleanHeadless(chromium.headless);
+  if (typeof chromium.headless !== "boolean") {
+    console.warn("[pdf] Coerced chromium.headless to boolean.", {
+      headlessType: typeof chromium.headless,
+    });
+  }
   return {
     args: chromium.args,
     executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
+    headless,
   };
 };
 
