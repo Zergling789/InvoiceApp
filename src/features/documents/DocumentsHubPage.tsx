@@ -372,7 +372,7 @@ export default function DocumentsHubPage() {
     const target = type === "offer" ? "/app/offers?new=offer" : "/app/invoices?new=invoice";
     setFabOpen(false);
     setNewMenuOpen(false);
-    navigate(target, { state: { backgroundLocation: location } });
+    navigate(target);
   };
 
   const openNewCustomer = () => {
