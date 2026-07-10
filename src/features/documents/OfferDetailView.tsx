@@ -50,7 +50,7 @@ export function OfferDetailView({
   onMore,
 }: OfferDetailViewProps) {
   return (
-    <div className="space-y-7 pb-8">
+    <div className="space-y-7 px-4 pb-8 pt-5 sm:px-6 sm:pt-6 lg:px-8 lg:pb-10 lg:pt-8">
       <header className="flex flex-col gap-5 border-b border-[var(--app-border)] pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="app-eyebrow">Angebot</div>
