@@ -38,7 +38,7 @@ export function ModalSheet({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
       {showBackdrop && (
         <button
           type="button"
@@ -47,14 +47,14 @@ export function ModalSheet({
           onClick={closeOnBackdrop ? onClose : undefined}
         />
       )}
-      <div className="relative z-10 w-full sm:max-w-4xl bg-white rounded-t-2xl sm:rounded-xl shadow-xl h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col">
+      <div className="relative z-10 flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-auto sm:max-h-[90dvh] sm:max-w-4xl sm:rounded-xl">
         <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b">
           <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
             <ArrowLeft size={18} />
           </AppButton>
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         </div>
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
       </div>
     </div>
   );

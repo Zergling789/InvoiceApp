@@ -832,7 +832,7 @@ export function DocumentEditor({
           ? "min-h-screen-safe bg-gray-50"
           : isEmbeddedLayout
           ? "bg-white flex flex-col min-h-0"
-          : "fixed inset-0 bg-gray-900/50 flex items-end sm:items-center justify-center p-4 z-40"
+          : "fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4"
       }
     >
       {sendModal}
@@ -842,7 +842,7 @@ export function DocumentEditor({
             ? "bg-white min-h-screen-safe flex flex-col"
             : isEmbeddedLayout
             ? "bg-white flex flex-col min-h-0"
-            : "bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-4xl h-[100vh] h-[100dvh] sm:h-[90vh] flex flex-col safe-bottom"
+            : "flex h-[100dvh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:h-[90dvh] sm:rounded-xl"
         }
       >
         {showOfferWizard ? (

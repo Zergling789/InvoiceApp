@@ -29,19 +29,19 @@ export function ActionSheet({ isOpen, title, actions, onClose }: ActionSheetProp
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-3 sm:p-4">
       <button
         aria-label="Schließen"
         className="absolute inset-0 h-full w-full"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl safe-bottom">
+      <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl safe-bottom">
         {title && (
           <div className="border-b px-5 py-4">
             <div className="text-sm font-semibold text-gray-700">{title}</div>
           </div>
         )}
-        <div className="flex flex-col gap-2 px-5 py-4">
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-5 py-4">
           {actions.map((action) => (
             <AppButton
               key={action.label}

@@ -41,9 +41,9 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm" role="presentation">
-      <div className="app-card max-h-[90dvh] w-full max-w-3xl overflow-y-auto p-5 sm:p-7" role="dialog" aria-modal="true" aria-labelledby="ai-draft-title">
-        <div className="flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/35 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="presentation">
+      <div className="app-card flex max-h-[100dvh] w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-b-none p-0 sm:max-h-[90dvh] sm:rounded-[var(--app-radius-lg)]" role="dialog" aria-modal="true" aria-labelledby="ai-draft-title">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--app-border)] p-5 sm:px-7">
           <div>
             <div className="app-eyebrow">KI-Entwurf</div>
             <h2 id="ai-draft-title" className="mt-1 text-2xl font-semibold tracking-tight">Dokument mit KI erstellen</h2>
@@ -52,7 +52,8 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
           <button type="button" onClick={onClose} aria-label="Abbrechen" className="grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-black/5 dark:hover:bg-white/10"><X size={19} /></button>
         </div>
 
-        <label className="mt-6 block text-sm font-semibold" htmlFor="ai-draft-description">Leistungen beschreiben</label>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-7">
+        <label className="mt-5 block text-sm font-semibold" htmlFor="ai-draft-description">Leistungen beschreiben</label>
         <textarea
           id="ai-draft-description"
           rows={5}
@@ -90,7 +91,9 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
+        </div>
+
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:px-7">
           <AppButton variant="ghost" onClick={onClose}>Abbrechen</AppButton>
           {!draft ? <AppButton onClick={() => void generate()} disabled={loading || !description.trim()}><Sparkles size={17} /> {loading ? "Vorschlag wird erstellt …" : "Vorschlag erstellen"}</AppButton>
             : <AppButton onClick={() => onApply(draft)}>Übernehmen</AppButton>}

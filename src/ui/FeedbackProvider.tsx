@@ -103,8 +103,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={api}>
       {children}
       {dialog && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/50 p-4">
-          <div className="w-full max-w-md rounded-t-2xl sm:rounded-xl bg-white p-6 shadow-xl safe-bottom">
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
+          <div className="max-h-[100dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl safe-bottom sm:max-h-[90dvh] sm:rounded-xl sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900">{dialog.title}</h3>
             <p className="mt-2 text-sm text-gray-600">{dialog.message}</p>
             <div className="mt-6 flex justify-end gap-2">

@@ -263,8 +263,8 @@ export function SendDocumentModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/50 p-4">
-      <div className="w-full max-w-4xl rounded-t-2xl sm:rounded-xl bg-white shadow-xl safe-bottom">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
+      <div className="flex max-h-[100dvh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:max-h-[90dvh] sm:rounded-xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Dokument senden</h3>
@@ -278,7 +278,7 @@ export function SendDocumentModal({
           </AppButton>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -385,7 +385,7 @@ export function SendDocumentModal({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2 justify-end border-t px-6 py-4 bg-gray-50">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t bg-gray-50 px-4 py-3 sm:px-6 sm:py-4">
           <AppButton variant="secondary" onClick={onClose}>
             Abbrechen
           </AppButton>
