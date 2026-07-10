@@ -42,6 +42,8 @@ SMTP_PASS=<smtp-pass>
 SMTP_FROM=billing@lightningbold.com
 SENDER_DOMAIN_NAME=Lightning Bold
 REDIS_URL=<optional-rate-limit-redis>
+OPENAI_API_KEY=<server-only-openai-key>
+OPENAI_MODEL=<responses-api-model>
 LOG_SERVER_CONFIG=1
 ```
 
@@ -87,6 +89,7 @@ standardmäßig im `package.json` enthalten ist.
      - `REDIS_URL` (optional, für Rate-Limiting)
      - `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` (optional)
      - `LOG_SERVER_CONFIG=1` (optional, Startup-Config-Log in Vercel)
+     - `OPENAI_API_KEY` und `OPENAI_MODEL` (nur serverseitig für KI-Entwürfe; niemals als `VITE_*` setzen)
 5. Deploy auslösen.
 
 Troubleshooting:

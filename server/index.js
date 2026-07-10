@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
+import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import {
   extractEmailAddress,
   generateToken,
@@ -1004,6 +1005,44 @@ const enforceLegacyPayloadMatch = (body, payload) => {
     throw err;
   }
 };
+
+app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`ai_user_${req.user.id}`, 20);
+    if (req.ip) checkRateLimit(`ai_ip_${req.ip}`, 60);
+
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    const documentType = req.body?.documentType;
+    if (!description) return sendError(res, 400, "AI_INPUT_REQUIRED", "Bitte beschreibe die gewünschten Leistungen.", req);
+    if (description.length > 4000) return sendError(res, 400, "AI_INPUT_TOO_LONG", "Die Beschreibung darf höchstens 4.000 Zeichen enthalten.", req);
+    if (documentType !== "invoice" && documentType !== "offer") {
+      return sendError(res, 400, "AI_INVALID_DOCUMENT_TYPE", "Ungültiger Dokumenttyp.", req);
+    }
+
+    const currency = typeof req.body?.currency === "string" && /^[A-Z]{3}$/.test(req.body.currency)
+      ? req.body.currency
+      : "EUR";
+    const vatRate = Number.isFinite(Number(req.body?.vatRate)) ? Number(req.body.vatRate) : 0;
+    const draft = await generateInvoiceDraft({
+      description,
+      documentType,
+      currency,
+      vatRate,
+      userId: req.user.id,
+    });
+    return res.json({ draft });
+  } catch (error) {
+    const requestId = req.requestId;
+    console.error("[ai_invoice_draft]", { requestId, errorClass: error?.constructor?.name, code: error?.code });
+    if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele KI-Anfragen. Bitte versuche es später erneut.", req);
+    if (error?.code === "AI_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Funktion ist nicht konfiguriert.", req);
+    if (error?.code === "AI_MODEL_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Modell ist nicht konfiguriert.", req);
+    if (error?.code === "AI_INVALID_RESPONSE" || error?.name === "ZodError") {
+      return sendError(res, 502, "AI_INVALID_RESPONSE", "Der KI-Vorschlag hatte ein ungültiges Format.", req);
+    }
+    return sendError(res, 502, "AI_GENERATION_FAILED", "KI-Vorschlag konnte nicht erstellt werden.", req);
+  }
+});
 
 app.post("/api/pdf", requireAuth, async (req, res) => {
   try {

@@ -1,7 +1,7 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings } from "lucide-react";
+import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings, Sparkles } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
@@ -32,6 +32,8 @@ import {
   type DocumentFormData as FormData,
   type EditorSeed,
 } from "@/features/documents/documentEditorModel";
+import { AiDocumentDraftDialog } from "@/features/documents/AiDocumentDraftDialog";
+import type { AiDocumentDraft } from "@/app/ai/aiService";
 
 export type { EditorSeed } from "@/features/documents/documentEditorModel";
 
@@ -82,6 +84,7 @@ export function DocumentEditor({
   const location = useLocation();
   const [showPrint, setShowPrint] = useState(startInPrint);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showAiDraftDialog, setShowAiDraftDialog] = useState(false);
   const [pdfError, setPdfError] = useState<{ status?: number; message: string } | null>(null);
 
   const [formData, setFormData] = useState<FormData>(() =>
@@ -216,6 +219,21 @@ export function DocumentEditor({
       ...prev,
       positions: (prev.positions ?? []).filter((_, i) => i !== index),
     }));
+  };
+
+  const applyAiDraft = (draft: AiDocumentDraft) => {
+    if (disabled) return;
+    setFormData((current) => ({
+      ...current,
+      positions: [
+        ...(current.positions ?? []),
+        ...draft.positions.map((position) => ({ ...position, id: newId() })),
+      ],
+      introText: current.introText.trim() ? current.introText : draft.introText,
+      footerText: current.footerText.trim() ? current.footerText : draft.footerText,
+    }));
+    setShowAiDraftDialog(false);
+    toast.success("KI-Vorschlag wurde übernommen.");
   };
 
   const totals = useMemo(() => {
@@ -1561,6 +1579,9 @@ export function DocumentEditor({
           <div>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-semibold text-gray-800">Positionen</h3>
+              <AppButton type="button" variant="ghost" onClick={() => setShowAiDraftDialog(true)} disabled={disabled}>
+                <Sparkles size={16} /> Mit KI erstellen
+              </AppButton>
             </div>
 
             <div className="space-y-2">
@@ -1682,6 +1703,16 @@ export function DocumentEditor({
         </div>
               )}
             </div>
+
+        {showAiDraftDialog && (
+          <AiDocumentDraftDialog
+            documentType={type}
+            currency={documentCurrency}
+            vatRate={toNumberOrZero(formData.vatRate)}
+            onApply={applyAiDraft}
+            onClose={() => setShowAiDraftDialog(false)}
+          />
+        )}
 
         {showActionBar && (
           <BottomActionBar

@@ -10,6 +10,7 @@ import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 const saveInvoiceMock = vi.fn();
 const getInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
+const createAiDocumentDraftMock = vi.fn();
 
 
 vi.mock("@/app/invoices/invoiceService", () => ({
@@ -32,6 +33,10 @@ vi.mock("@/app/email/emailService", () => ({
 
 vi.mock("@/app/pdf/documentPdfService", () => ({
   downloadDocumentPdf: vi.fn(),
+}));
+
+vi.mock("@/app/ai/aiService", () => ({
+  createAiDocumentDraft: (...args: unknown[]) => createAiDocumentDraftMock(...args),
 }));
 
 const seed = {
@@ -90,6 +95,47 @@ describe("DocumentEditor send email status", () => {
     saveInvoiceMock.mockReset();
     getInvoiceMock.mockReset();
     sendDocumentEmailMock.mockReset();
+    createAiDocumentDraftMock.mockReset();
+  });
+
+  it("appends an accepted AI draft and preserves existing content", async () => {
+    createAiDocumentDraftMock.mockResolvedValue({
+      positions: [{ description: "Hosting", quantity: 12, unit: "Monat", price: 15 }],
+      introText: "Neue Einleitung",
+      footerText: "Neuer Fußtext",
+      warnings: [],
+    });
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        initial={{
+          clientId: "client-1",
+          positions: [{ id: "existing", description: "Beratung", quantity: 1, unit: "Std", price: 100 }],
+          introText: "Bestehende Einleitung",
+          footerText: "Bestehender Fußtext",
+          status: InvoiceStatus.DRAFT,
+        }}
+      />,
+      { route: "/app/invoices/inv-1/edit" }
+    );
+
+    await user.click(screen.getByRole("button", { name: /mit ki erstellen/i }));
+    await user.type(screen.getByLabelText(/leistungen beschreiben/i), "Hosting für zwölf Monate");
+    await user.click(screen.getByRole("button", { name: /vorschlag erstellen/i }));
+    await screen.findByLabelText("KI-Vorschau");
+    await user.click(screen.getByRole("button", { name: /^übernehmen$/i }));
+
+    expect(screen.getByDisplayValue("Beratung")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Hosting")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Bestehende Einleitung")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Bestehender Fußtext")).toBeInTheDocument();
+    expect(saveInvoiceMock).not.toHaveBeenCalled();
   });
 
   it("sets status SENT on successful send", async () => {
