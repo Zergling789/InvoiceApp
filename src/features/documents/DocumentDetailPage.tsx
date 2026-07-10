@@ -14,6 +14,7 @@ import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { OfferDetailView } from "@/features/documents/OfferDetailView";
 import { supabase } from "@/supabaseClient";
 import { formatErrorToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
@@ -579,6 +580,82 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           }
         : null;
 
+  if (docType === "offer") {
+    const offer = doc as Offer;
+    return (
+      <div className={primaryAction ? "pb-24" : "pb-4"}>
+        {showSendModal && client && (
+          <SendDocumentModal
+            isOpen={showSendModal}
+            onClose={() => {
+              setShowSendModal(false);
+              setSendTemplateType(undefined);
+            }}
+            documentType="offer"
+            document={offer}
+            client={client}
+            settings={settings}
+            defaultSubject={defaultSubject}
+            defaultMessage={defaultMessage}
+            templateType={sendTemplateType}
+            onSent={handleSaved}
+          />
+        )}
+
+        {editorOpen && editorSeed && (
+          <DocumentEditor
+            type="offer"
+            seed={editorSeed}
+            settings={settings}
+            clients={clients}
+            onClose={() => {
+              setEditorOpen(false);
+              setEditorSeed(null);
+              setEditorInitial(null);
+            }}
+            onSaved={handleSaved}
+            initial={editorInitial ?? undefined}
+          />
+        )}
+
+        <OfferDetailView
+          offer={offer}
+          client={client}
+          locale={locale}
+          currency={documentCurrency}
+          statusLabel={formatDocumentStatus("offer", offer.status)}
+          statusTone={statusTone(phase ?? String(offer.status))}
+          totals={totals}
+          timeline={timeline}
+          canEdit={capabilities?.canEdit}
+          canSend={capabilities?.canSend}
+          canConvert={capabilities?.canConvertToInvoice}
+          onEdit={handleEdit}
+          onSend={() => handleOpenSend()}
+          onConvert={() => void handleConvertToInvoice()}
+          onMore={() => setShowActionSheet(true)}
+        />
+
+        <ActionSheet
+          isOpen={showActionSheet}
+          onClose={() => setShowActionSheet(false)}
+          title="Angebotsaktionen"
+          actions={actions}
+        />
+
+        {primaryAction && (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--app-border)] bg-[var(--app-surface)] backdrop-blur-xl safe-bottom">
+            <div className="app-container py-3">
+              <AppButton onClick={primaryAction.onClick} className="w-full sm:ml-auto sm:w-auto">
+                {primaryAction.label}
+              </AppButton>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-24">
       {showSendModal && client && settings && (
@@ -630,11 +707,6 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
               {docType === "invoice" && (doc as Invoice).dueDate && (
                 <>
                   {" "}· Fällig: {formatDate((doc as Invoice).dueDate ?? "", locale)}
-                </>
-              )}
-              {docType === "offer" && (doc as Offer).validUntil && (
-                <>
-                  {" "}· Gültig bis: {formatDate((doc as Offer).validUntil ?? "", locale)}
                 </>
               )}
             </div>
