@@ -842,7 +842,7 @@ export function DocumentEditor({
             ? "bg-white min-h-screen-safe flex flex-col"
             : isEmbeddedLayout
             ? "bg-white flex flex-col min-h-0"
-            : "flex h-[100dvh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:h-[90dvh] sm:rounded-xl"
+            : `${showOfferWizard ? "grid grid-rows-[auto_minmax(0,1fr)_auto]" : "flex flex-col"} h-[100dvh] w-full max-w-4xl min-h-0 overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:h-[90dvh] sm:rounded-xl`
         }
       >
         {showOfferWizard ? (
@@ -859,7 +859,7 @@ export function DocumentEditor({
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-gray-50">
+            <div className="row-start-2 min-h-0 overflow-y-auto overscroll-contain bg-gray-50">
               <div className="px-6 pt-4 pb-3 border-b bg-white">
                 <div className="text-base font-semibold text-gray-700">Kundendaten eingeben</div>
               </div>
@@ -1156,7 +1156,7 @@ export function DocumentEditor({
               </div>
             </div>
 
-            <div className="flex shrink-0 justify-between gap-3 border-t bg-white px-4 py-3 safe-bottom sm:px-6 sm:py-4">
+            <div className="relative z-20 row-start-3 flex min-h-[68px] shrink-0 items-center justify-between gap-3 border-t bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] safe-bottom sm:px-6 sm:py-4">
               <AppButton
                 variant="secondary"
                 onClick={() => onClose()}
