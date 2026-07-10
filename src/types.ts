@@ -47,6 +47,37 @@ export interface Client {
   email: string;
   address: string;
   notes: string;
+  customerNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  jobTitle?: string;
+  department?: string;
+  phone?: string;
+  mobile?: string;
+  website?: string;
+  street?: string;
+  houseNumber?: string;
+  addressAddition?: string;
+  postalCode?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  legalForm?: string;
+  industry?: string;
+  vatId?: string;
+  taxNumber?: string;
+  registrationNumber?: string;
+  invoiceEmail?: string;
+  billingAddress?: string;
+  paymentTermsDays?: number | null;
+  currency?: string;
+  defaultVatRate?: number | null;
+  preferredLanguage?: string;
+  preferredDeliveryMethod?: "email" | "download" | "post";
+  source?: string;
+  tags?: string[];
+  lastContactAt?: string | null;
+  nextFollowUpAt?: string | null;
 }
 
 export interface Project {

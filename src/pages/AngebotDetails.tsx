@@ -44,11 +44,11 @@ export default function AngebotDetails() {
             { label: "Erstellt", value: "27.12.2025" },
             { label: "Gesendet", value: "28.12.2025" },
           ]}
-          canEdit
-          canSend
-          canConvert
-          onEdit={() => undefined}
-          onSend={() => undefined}
+          directActions={[
+            { label: "Senden", onSelect: () => undefined },
+            { label: "Bearbeiten", onSelect: () => undefined },
+          ]}
+          hasMoreActions
           onConvert={() => undefined}
           onMore={() => undefined}
         />

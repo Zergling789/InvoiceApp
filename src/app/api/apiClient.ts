@@ -4,9 +4,9 @@ type ApiFetchOptions = {
   auth?: boolean;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  ?? import.meta.env.VITE_API_PROXY
-  ?? "";
+// VITE_API_PROXY configures only Vite's development proxy (vite.config.ts).
+// Browser requests must remain same-origin in development so Vite can proxy /api.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 const resolveApiUrl = (input: RequestInfo): RequestInfo => {
   if (typeof input !== "string") {

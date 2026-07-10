@@ -108,6 +108,7 @@ export function InvoiceForm({ onClose, onSaved, onDirtyChange }: InvoiceFormProp
       }}
       layout="embedded"
       showHeader={false}
+      useCreateComposer
       onDirtyChange={onDirtyChange}
     />
   );

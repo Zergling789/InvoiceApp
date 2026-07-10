@@ -48,6 +48,15 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
   const introHtml = doc.introText ? sanitizeMultiline(doc.introText) : "";
   const footerHtml = doc.footerText ? sanitizeMultiline(doc.footerText) : "";
   const settingsFooterHtml = settings.footerText ? sanitizeMultiline(settings.footerText) : "";
+  const templateId = ["classic", "minimal", "modern"].includes(settings.templateId)
+    ? settings.templateId
+    : "classic";
+  const primaryColor = /^#[0-9a-f]{6}$/i.test(settings.primaryColor ?? "")
+    ? settings.primaryColor
+    : "#4f46e5";
+  const logoDataUrl = /^data:image\/(png|jpeg|webp);base64,/i.test(settings.logoDataUrl ?? "")
+    ? settings.logoDataUrl
+    : "";
 
   return `
 <!DOCTYPE html>
@@ -61,7 +70,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
         --muted: #6b7280;
         --border: #e5e7eb;
         --bg: #ffffff;
-        --accent: #111827;
+        --accent: ${primaryColor};
       }
       * { box-sizing: border-box; }
       body {
@@ -85,6 +94,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
         margin-bottom: 32px;
       }
       .company-name { font-size: 22px; font-weight: 700; }
+      .company-logo { display: block; max-width: 45mm; max-height: 20mm; object-fit: contain; object-position: left center; margin-bottom: 10px; }
       .muted { color: var(--muted); font-size: 12px; line-height: 1.5; white-space: pre-line; }
       .doc-meta { text-align: right; }
       .doc-title { font-size: 28px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -147,12 +157,24 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
       .w-14 { width: 14%; }
       .w-14r { width: 14%; text-align: right; }
       .page-break { page-break-inside: avoid; }
+      body.template-minimal .page { padding: 24mm 20mm; }
+      body.template-minimal .top { margin-bottom: 44px; }
+      body.template-minimal .company-name { font-size: 16px; font-weight: 600; }
+      body.template-minimal .doc-title { font-size: 22px; font-weight: 600; letter-spacing: 2px; }
+      body.template-minimal .table th { border-bottom-width: 1px; font-weight: 600; }
+      body.template-minimal .bank { border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; padding-inline: 0; }
+      body.template-modern .page { border-top: 7mm solid var(--accent); padding-top: 13mm; }
+      body.template-modern .doc-title { color: var(--accent); }
+      body.template-modern .table th { color: var(--accent); border-bottom-color: var(--accent); }
+      body.template-modern .totals-row.total { margin-top: 5px; border-radius: 5px; background: var(--accent); color: white; padding: 9px 10px; }
+      body.template-modern .bank { border-color: color-mix(in srgb, var(--accent) 28%, white); background: color-mix(in srgb, var(--accent) 6%, white); }
     </style>
   </head>
-  <body>
+  <body class="template-${templateId}">
     <div class="page">
       <div class="top">
         <div>
+          ${logoDataUrl ? `<img class="company-logo" src="${logoDataUrl}" alt="" />` : ""}
           <div class="company-name">${escapeHtml(companyName)}</div>
           <div class="muted">${addressLines.map(escapeHtml).join("<br />")}</div>
         </div>

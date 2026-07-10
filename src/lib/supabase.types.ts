@@ -47,36 +47,129 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          address_addition: string | null
+          billing_address: string | null
+          city: string | null
           company_name: string | null
           contact_person: string | null
+          country: string | null
           created_at: string
+          currency: string | null
+          customer_number: string | null
+          default_vat_rate: number | null
+          department: string | null
           email: string | null
+          first_name: string | null
+          house_number: string | null
           id: string
+          industry: string | null
+          invoice_email: string | null
+          job_title: string | null
+          last_contact_at: string | null
+          last_name: string | null
+          legal_form: string | null
+          mobile: string | null
+          next_follow_up_at: string | null
           notes: string | null
+          payment_terms_days: number | null
+          phone: string | null
+          postal_code: string | null
+          preferred_delivery_method: string | null
+          preferred_language: string | null
+          registration_number: string | null
+          source: string | null
+          state: string | null
+          street: string | null
+          tags: string[]
+          tax_number: string | null
           updated_at: string
           user_id: string
+          vat_id: string | null
+          website: string | null
         }
         Insert: {
           address?: string | null
+          address_addition?: string | null
+          billing_address?: string | null
+          city?: string | null
           company_name?: string | null
           contact_person?: string | null
+          country?: string | null
           created_at?: string
+          currency?: string | null
+          customer_number?: string | null
+          default_vat_rate?: number | null
+          department?: string | null
           email?: string | null
+          first_name?: string | null
+          house_number?: string | null
           id?: string
+          industry?: string | null
+          invoice_email?: string | null
+          job_title?: string | null
+          last_contact_at?: string | null
+          last_name?: string | null
+          legal_form?: string | null
+          mobile?: string | null
+          next_follow_up_at?: string | null
           notes?: string | null
+          payment_terms_days?: number | null
+          phone?: string | null
+          postal_code?: string | null
+          preferred_delivery_method?: string | null
+          preferred_language?: string | null
+          registration_number?: string | null
+          source?: string | null
+          state?: string | null
+          street?: string | null
+          tags?: string[]
+          tax_number?: string | null
           updated_at?: string
           user_id: string
+          vat_id?: string | null
+          website?: string | null
         }
         Update: {
           address?: string | null
+          address_addition?: string | null
+          billing_address?: string | null
+          city?: string | null
           company_name?: string | null
           contact_person?: string | null
+          country?: string | null
           created_at?: string
+          currency?: string | null
+          customer_number?: string | null
+          default_vat_rate?: number | null
+          department?: string | null
           email?: string | null
+          first_name?: string | null
+          house_number?: string | null
           id?: string
+          industry?: string | null
+          invoice_email?: string | null
+          job_title?: string | null
+          last_contact_at?: string | null
+          last_name?: string | null
+          legal_form?: string | null
+          mobile?: string | null
+          next_follow_up_at?: string | null
           notes?: string | null
+          payment_terms_days?: number | null
+          phone?: string | null
+          postal_code?: string | null
+          preferred_delivery_method?: string | null
+          preferred_language?: string | null
+          registration_number?: string | null
+          source?: string | null
+          state?: string | null
+          street?: string | null
+          tags?: string[]
+          tax_number?: string | null
           updated_at?: string
           user_id?: string
+          vat_id?: string | null
+          website?: string | null
         }
         Relationships: []
       }
@@ -133,6 +226,7 @@ export type Database = {
       }
       invoices: {
         Row: {
+          branding_snapshot: Json | null
           canceled_at: string | null
           client_address: string | null
           client_company_name: string | null
@@ -173,6 +267,7 @@ export type Database = {
           vat_rate: number
         }
         Insert: {
+          branding_snapshot?: Json | null
           canceled_at?: string | null
           client_address?: string | null
           client_company_name?: string | null
@@ -213,6 +308,7 @@ export type Database = {
           vat_rate?: number
         }
         Update: {
+          branding_snapshot?: Json | null
           canceled_at?: string | null
           client_address?: string | null
           client_company_name?: string | null
@@ -635,6 +731,7 @@ export type Database = {
       convert_offer_to_invoice: {
         Args: { offer_id: string }
         Returns: {
+          branding_snapshot: Json | null
           canceled_at: string | null
           client_address: string | null
           client_company_name: string | null
@@ -684,6 +781,7 @@ export type Database = {
       copy_customer_snapshot_to_invoice: {
         Args: { p_invoice_id: string }
         Returns: {
+          branding_snapshot: Json | null
           canceled_at: string | null
           client_address: string | null
           client_company_name: string | null
@@ -733,6 +831,7 @@ export type Database = {
       finalize_invoice: {
         Args: { invoice_id: string }
         Returns: {
+          branding_snapshot: Json | null
           canceled_at: string | null
           client_address: string | null
           client_company_name: string | null
@@ -782,6 +881,7 @@ export type Database = {
       mark_invoice_sent: {
         Args: { doc_id: string; p_to: string; p_via: string }
         Returns: {
+          branding_snapshot: Json | null
           canceled_at: string | null
           client_address: string | null
           client_company_name: string | null
@@ -996,3 +1096,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

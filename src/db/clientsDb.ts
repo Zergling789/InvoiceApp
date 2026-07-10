@@ -6,7 +6,7 @@ type DbClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type DbClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 
 const CLIENT_FIELDS =
-  "id,user_id,company_name,contact_person,email,address,notes,updated_at,created_at" as const;
+  "id,user_id,company_name,contact_person,email,address,notes,customer_number,first_name,last_name,job_title,department,phone,mobile,website,street,house_number,address_addition,postal_code,city,state,country,legal_form,industry,vat_id,tax_number,registration_number,invoice_email,billing_address,payment_terms_days,currency,default_vat_rate,preferred_language,preferred_delivery_method,source,tags,last_contact_at,next_follow_up_at,updated_at,created_at" as const;
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -23,6 +23,12 @@ function toClient(r: DbClientRow): Client {
     email: r.email ?? "",
     address: r.address ?? "",
     notes: r.notes ?? "",
+    customerNumber: r.customer_number ?? "", firstName: r.first_name ?? "", lastName: r.last_name ?? "",
+    jobTitle: r.job_title ?? "", department: r.department ?? "", phone: r.phone ?? "", mobile: r.mobile ?? "", website: r.website ?? "",
+    street: r.street ?? "", houseNumber: r.house_number ?? "", addressAddition: r.address_addition ?? "", postalCode: r.postal_code ?? "", city: r.city ?? "", state: r.state ?? "", country: r.country ?? "Deutschland",
+    legalForm: r.legal_form ?? "", industry: r.industry ?? "", vatId: r.vat_id ?? "", taxNumber: r.tax_number ?? "", registrationNumber: r.registration_number ?? "",
+    invoiceEmail: r.invoice_email ?? "", billingAddress: r.billing_address ?? "", paymentTermsDays: r.payment_terms_days, currency: r.currency ?? "", defaultVatRate: r.default_vat_rate === null ? null : Number(r.default_vat_rate),
+    preferredLanguage: r.preferred_language ?? "de", preferredDeliveryMethod: (r.preferred_delivery_method as Client["preferredDeliveryMethod"]) ?? "email", source: r.source ?? "", tags: r.tags ?? [], lastContactAt: r.last_contact_at, nextFollowUpAt: r.next_follow_up_at,
   };
 }
 
@@ -35,6 +41,12 @@ function toPayload(uid: string, c: Client): DbClientInsert {
     email: c.email || null,
     address: c.address || null,
     notes: c.notes || null,
+    customer_number: c.customerNumber || null, first_name: c.firstName || null, last_name: c.lastName || null,
+    job_title: c.jobTitle || null, department: c.department || null, phone: c.phone || null, mobile: c.mobile || null, website: c.website || null,
+    street: c.street || null, house_number: c.houseNumber || null, address_addition: c.addressAddition || null, postal_code: c.postalCode || null, city: c.city || null, state: c.state || null, country: c.country || null,
+    legal_form: c.legalForm || null, industry: c.industry || null, vat_id: c.vatId || null, tax_number: c.taxNumber || null, registration_number: c.registrationNumber || null,
+    invoice_email: c.invoiceEmail || null, billing_address: c.billingAddress || null, payment_terms_days: c.paymentTermsDays ?? null, currency: c.currency || null, default_vat_rate: c.defaultVatRate ?? null,
+    preferred_language: c.preferredLanguage || null, preferred_delivery_method: c.preferredDeliveryMethod || null, source: c.source || null, tags: c.tags ?? [], last_contact_at: c.lastContactAt ?? null, next_follow_up_at: c.nextFollowUpAt ?? null,
     updated_at: new Date().toISOString(),
   };
 }

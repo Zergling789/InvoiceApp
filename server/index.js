@@ -1,5 +1,5 @@
 // server/index.js
-import "dotenv/config";
+import dotenv from "dotenv";
 import crypto from "crypto";
 import express from "express";
 import nodemailer from "nodemailer";
@@ -7,6 +7,7 @@ import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
+import { extractBusinessCard } from "./ai/businessCard.js";
 import {
   extractEmailAddress,
   generateToken,
@@ -15,6 +16,17 @@ import {
   parseEmailList,
   sanitizeFilename,
 } from "./requestUtils.js";
+
+// Keep production compatible with `.env`, while allowing one local file for
+// both Vite and the Express process. Local values intentionally win.
+dotenv.config();
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.NODE_ENV !== "test" &&
+  process.env.SERVER_TEST_MODE !== "1"
+) {
+  dotenv.config({ path: ".env.local", override: false });
+}
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -821,7 +833,28 @@ const mapSettingsRow = (row = {}) => ({
   bic: row.bic ?? "",
   bankName: row.bank_name ?? "",
   footerText: row.footer_text ?? "",
+  logoUrl: row.logo_url ?? "",
+  primaryColor: row.primary_color ?? "#4f46e5",
+  templateId: row.template_id === "default" ? "classic" : row.template_id ?? "classic",
+  locale: row.locale ?? "de-DE",
+  currency: row.currency ?? "EUR",
 });
+
+const loadLogoDataUrl = async (db, logoPath) => {
+  if (!logoPath || !db?.storage) return "";
+  try {
+    const { data, error } = await db.storage.from("company-assets").download(logoPath);
+    if (error || !data) return "";
+    const bytes = Buffer.from(await data.arrayBuffer());
+    if (bytes.length > 2 * 1024 * 1024) return "";
+    const contentType = data.type && ["image/png", "image/jpeg", "image/webp"].includes(data.type)
+      ? data.type
+      : "image/png";
+    return `data:${contentType};base64,${bytes.toString("base64")}`;
+  } catch {
+    return "";
+  }
+};
 
 const mapInvoiceSnapshotClient = (row = {}) => ({
   id: row.client_id ?? "",
@@ -873,7 +906,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, project_id, date, invoice_date, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note"
+    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, project_id, date, invoice_date, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db
@@ -901,11 +934,16 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 
   const { data: settingsRow } = await db
     .from("user_settings")
-    .select("company_name, address, tax_id, iban, bic, bank_name, footer_text")
+    .select("company_name, address, tax_id, iban, bic, bank_name, footer_text, logo_url, primary_color, template_id, locale, currency")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const settings = mapSettingsRow(settingsRow ?? {});
+  const currentSettings = mapSettingsRow(settingsRow ?? {});
+  const snapshot = resolvedType === "invoice" && docRow.branding_snapshot && typeof docRow.branding_snapshot === "object"
+    ? docRow.branding_snapshot
+    : null;
+  const settings = snapshot ? { ...currentSettings, ...snapshot } : currentSettings;
+  settings.logoDataUrl = await loadLogoDataUrl(db, settings.logoUrl);
 
   let client = mapClientRow({});
   if (resolvedType === "invoice") {
@@ -1041,6 +1079,23 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
       return sendError(res, 502, "AI_INVALID_RESPONSE", "Der KI-Vorschlag hatte ein ungültiges Format.", req);
     }
     return sendError(res, 502, "AI_GENERATION_FAILED", "KI-Vorschlag konnte nicht erstellt werden.", req);
+  }
+});
+
+app.post("/api/ai/business-card", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`ai_card_user_${req.user.id}`, 12);
+    if (req.ip) checkRateLimit(`ai_card_ip_${req.ip}`, 30);
+    const contact = await extractBusinessCard({ imageDataUrl: req.body?.imageDataUrl, userId: req.user.id });
+    return res.json({ contact });
+  } catch (error) {
+    console.error("[ai_business_card]", { requestId: req.requestId, errorClass: error?.constructor?.name, code: error?.code });
+    if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele Scan-Anfragen. Bitte versuche es später erneut.", req);
+    if (error?.code === "AI_CARD_INVALID_IMAGE") return sendError(res, 400, error.code, "Bitte verwende ein JPEG-, PNG- oder WebP-Bild.", req);
+    if (error?.code === "AI_CARD_IMAGE_SIZE") return sendError(res, 413, error.code, "Das Bild ist zu groß oder ungültig.", req);
+    if (error?.code === "AI_NOT_CONFIGURED" || error?.code === "AI_MODEL_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Funktion ist nicht konfiguriert.", req);
+    if (error?.code === "AI_INVALID_RESPONSE" || error?.name === "ZodError") return sendError(res, 502, "AI_INVALID_RESPONSE", "Die Kontaktdaten konnten nicht sicher erkannt werden.", req);
+    return sendError(res, 502, "AI_CARD_FAILED", "Visitenkarte konnte nicht analysiert werden.", req);
   }
 });
 

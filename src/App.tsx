@@ -24,6 +24,7 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import RequireAuth from "@/components/Auth/RequireAuth";
 import AngebotDetails from "@/pages/AngebotDetails";
+import PricingPage from "@/features/billing/PricingPage";
 
 function LegacyDocumentRedirect({ type }: { type: "offer" | "invoice" }) {
   const { id } = useParams<{ id: string }>();
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="documents/:type/:id" element={<DocumentDetailRoute />} />
           <Route path="more" element={<MorePage />} />
           <Route path="settings" element={<SettingsView />} />
+          <Route path="plans" element={<PricingPage />} />
           <Route path="settings/email/verify" element={<VerifyEmailResult />} />
 
           <Route path="*" element={<Navigate to="/app" replace />} />

@@ -34,6 +34,7 @@ import {
 } from "@/features/documents/documentEditorModel";
 import { AiDocumentDraftDialog } from "@/features/documents/AiDocumentDraftDialog";
 import type { AiDocumentDraft } from "@/app/ai/aiService";
+import { DocumentCreateComposer } from "@/features/documents/DocumentCreateComposer";
 
 export type { EditorSeed } from "@/features/documents/documentEditorModel";
 
@@ -53,6 +54,7 @@ export function DocumentEditor({
   primaryActionLabel = "Speichern",
   disableOfferWizard = false,
   showHeader = true,
+  useCreateComposer = false,
   onDirtyChange,
 }: {
   type: "offer" | "invoice";
@@ -70,6 +72,7 @@ export function DocumentEditor({
   primaryActionLabel?: string;
   disableOfferWizard?: boolean;
   showHeader?: boolean;
+  useCreateComposer?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const isInvoice = type === "invoice";
@@ -163,14 +166,21 @@ export function DocumentEditor({
   const displayClient = isInvoice ? invoiceSnapshotClient : selectedClient;
 
   const handleClientChange = (clientId: string) => {
+    const client = clients.find((c) => c.id === clientId);
+    const customerDefaults = useCreateComposer && client
+      ? {
+          ...(client.paymentTermsDays != null ? { paymentTermsDays: client.paymentTermsDays } : {}),
+          ...(client.currency ? { currency: client.currency } : {}),
+          ...(client.defaultVatRate != null ? { vatRate: client.defaultVatRate } : {}),
+        }
+      : {};
     if (!isInvoice || readOnly || locked || formData.status !== InvoiceStatus.DRAFT) {
-      setFormData((prev) => ({ ...prev, clientId }));
+      setFormData((prev) => ({ ...prev, clientId, ...customerDefaults }));
       return;
     }
 
-    const client = clients.find((c) => c.id === clientId);
     const snapshot = client ? buildSnapshotFromClient(client) : buildSnapshotFromClient();
-    setFormData((prev) => ({ ...prev, clientId, ...snapshot }));
+    setFormData((prev) => ({ ...prev, clientId, ...snapshot, ...customerDefaults }));
   };
   const { defaultSubject, defaultMessage } = useMemo(
     () => buildTemplateDefaults(formData),
@@ -824,6 +834,41 @@ export function DocumentEditor({
     );
   }
 
+  if (useCreateComposer) {
+    return (
+      <>
+        <DocumentCreateComposer
+          type={type}
+          data={formData}
+          clients={clients}
+          currency={documentCurrency}
+          locale={locale}
+          totals={totals}
+          disabled={disabled}
+          saving={saving}
+          onChange={setFormData}
+          onClientChange={handleClientChange}
+          onAddPosition={addPosition}
+          onUpdatePosition={updatePosition}
+          onRemovePosition={removePosition}
+          onOpenAi={() => setShowAiDraftDialog(true)}
+          onPreview={() => setShowPrint(true)}
+          onCancel={() => onClose()}
+          onSave={() => void handleSave({ closeAfterSave: true })}
+        />
+        {showAiDraftDialog && (
+          <AiDocumentDraftDialog
+            documentType={type}
+            currency={documentCurrency}
+            vatRate={toNumberOrZero(formData.vatRate)}
+            onApply={applyAiDraft}
+            onClose={() => setShowAiDraftDialog(false)}
+          />
+        )}
+      </>
+    );
+  }
+
   // ---------- Normal Editor ----------
   return (
     <div
@@ -1172,6 +1217,16 @@ export function DocumentEditor({
                 {saving ? "Speichere..." : "Weiter"}
               </AppButton>
             </div>
+
+            {showAiDraftDialog && (
+              <AiDocumentDraftDialog
+                documentType={type}
+                currency={documentCurrency}
+                vatRate={toNumberOrZero(formData.vatRate)}
+                onApply={applyAiDraft}
+                onClose={() => setShowAiDraftDialog(false)}
+              />
+            )}
           </>
         ) : (
           <>

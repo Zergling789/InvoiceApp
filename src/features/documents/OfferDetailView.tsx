@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, FileText, Mail, MoreVertical, Pencil, ReceiptText, UserRound } from "lucide-react";
+import { ArrowRight, CalendarDays, FileText, MoreVertical, ReceiptText, UserRound } from "lucide-react";
 
 import type { Client, Offer } from "@/types";
 import { formatDate } from "@/types";
@@ -18,11 +18,9 @@ type OfferDetailViewProps = {
   statusTone: "gray" | "green" | "blue" | "yellow" | "red";
   totals: { net: number; vat: number; gross: number };
   timeline: TimelineItem[];
-  canEdit?: boolean;
-  canSend?: boolean;
   canConvert?: boolean;
-  onEdit: () => void;
-  onSend: () => void;
+  directActions: Array<{ label: string; onSelect: () => void; variant?: "primary" | "secondary" }>;
+  hasMoreActions: boolean;
   onConvert: () => void;
   onMore: () => void;
 };
@@ -41,11 +39,9 @@ export function OfferDetailView({
   statusTone,
   totals,
   timeline,
-  canEdit,
-  canSend,
   canConvert,
-  onEdit,
-  onSend,
+  directActions,
+  hasMoreActions,
   onConvert,
   onMore,
 }: OfferDetailViewProps) {
@@ -65,9 +61,8 @@ export function OfferDetailView({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canEdit && <AppButton variant="secondary" onClick={onEdit}><Pencil size={16} /> Bearbeiten</AppButton>}
-          {canSend && <AppButton variant="secondary" onClick={onSend}><Mail size={16} /> Senden</AppButton>}
-          <AppButton variant="ghost" onClick={onMore}><MoreVertical size={17} /> Mehr</AppButton>
+          {directActions.map((action) => <AppButton key={action.label} variant={action.variant ?? "secondary"} onClick={action.onSelect}>{action.label}</AppButton>)}
+          {hasMoreActions && <AppButton variant="ghost" onClick={onMore}><MoreVertical size={17} /> Mehr</AppButton>}
         </div>
       </header>
 

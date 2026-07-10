@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Check, ChevronDown, ListFilter, Plus } from "lucide-react";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { formatDate } from "@/types";
@@ -99,6 +99,7 @@ export default function DocumentsHubPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const lastRefreshTokenRef = useRef<number | null>(null);
 
@@ -182,15 +183,16 @@ export default function DocumentsHubPage() {
   }, [mode]);
 
   useEffect(() => {
-    if (!newMenuOpen) return;
+    if (!newMenuOpen && !statusMenuOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setNewMenuOpen(false);
+        setStatusMenuOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [newMenuOpen]);
+  }, [newMenuOpen, statusMenuOpen]);
 
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -420,14 +422,84 @@ export default function DocumentsHubPage() {
       </div>
 
       <div className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
           <input
-            className="w-full border rounded-lg px-3 py-2 text-sm sm:flex-1"
+            className="min-w-0 flex-1 border rounded-lg px-3 py-2 text-sm"
             placeholder="Suche nach Nummer oder Kunde"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-          <div className="relative sm:ml-2">
+          <div className={`relative sm:ml-2 ${statusMenuOpen ? "z-50" : ""}`}>
+            <AppButton
+              variant="secondary"
+              onClick={() => {
+                setNewMenuOpen(false);
+                setStatusMenuOpen((open) => !open);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={statusMenuOpen}
+            >
+              <ListFilter size={16} />
+              Status
+              {selectedStatuses.length > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[var(--app-primary)] px-1.5 text-xs text-white">
+                  {selectedStatuses.length}
+                </span>
+              )}
+              <ChevronDown
+                size={15}
+                className={`transition-transform ${statusMenuOpen ? "rotate-180" : ""}`}
+              />
+            </AppButton>
+            {statusMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onPointerDown={() => setStatusMenuOpen(false)}
+                  aria-label="Statusfilter schließen"
+                />
+                <div
+                  role="menu"
+                  className="absolute left-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] p-2 shadow-[var(--app-shadow)] sm:left-auto sm:right-0"
+                >
+                  <div className="flex items-center justify-between px-3 pb-2 pt-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--app-muted)]">
+                      Status filtern
+                    </span>
+                    {selectedStatuses.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-[var(--app-primary)] hover:underline"
+                        onClick={() => setSelectedStatuses([])}
+                      >
+                        Zurücksetzen
+                      </button>
+                    )}
+                  </div>
+                  {statusOptions.map((status) => {
+                    const selected = selectedStatuses.includes(status);
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={selected}
+                        onClick={() => toggleStatus(status)}
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"
+                      >
+                        <span>{statusLabel(status)}</span>
+                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${selected ? "border-[var(--app-primary)] bg-[var(--app-primary)] text-white" : "border-[var(--app-border)]"}`}>
+                          {selected && <Check size={14} />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="relative hidden sm:ml-2 sm:block">
             <AppButton
               variant="primary"
               className="w-full justify-center sm:w-auto"
@@ -436,7 +508,7 @@ export default function DocumentsHubPage() {
               aria-expanded={newMenuOpen}
             >
               <Plus size={16} className="mr-2" />
-              + Neu
+              Neu
             </AppButton>
             {newMenuOpen && (
               <>
@@ -474,23 +546,6 @@ export default function DocumentsHubPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {statusOptions.map((status) => (
-            <button
-              key={status}
-              type="button"
-              onClick={() => toggleStatus(status)}
-              className={[
-                "px-3 py-1.5 rounded-full text-xs font-medium border transition",
-                selectedStatuses.includes(status)
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300",
-              ].join(" ")}
-            >
-              {statusLabel(status)}
-            </button>
-          ))}
-        </div>
       </div>
 
       {error && (

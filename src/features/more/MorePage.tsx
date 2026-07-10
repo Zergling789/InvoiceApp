@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FolderKanban, Settings } from "lucide-react";
+import { CreditCard, FolderKanban, Settings } from "lucide-react";
 
 import { AppCard } from "@/ui/AppCard";
 
@@ -15,6 +15,12 @@ const links = [
     label: "Einstellungen",
     description: "Branding, Nummernkreise und Absenderdaten.",
     icon: <Settings size={18} />,
+  },
+  {
+    to: "/app/plans",
+    label: "Tarife & Abrechnung",
+    description: "Tarife vergleichen und Abonnement verwalten.",
+    icon: <CreditCard size={18} />,
   },
 ];
 

@@ -106,6 +106,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
       }}
       layout="embedded"
       showHeader={false}
+      useCreateComposer
       onDirtyChange={onDirtyChange}
     />
   );

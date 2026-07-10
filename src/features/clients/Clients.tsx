@@ -1,6 +1,6 @@
 // src/features/clients/Clients.tsx
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, ScanLine, Trash2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import type { Client } from "@/types";
@@ -24,6 +24,9 @@ export default function Clients() {
 
   const startNew = () => {
     navigate("/app/customers/new", { state: { backgroundLocation: location } });
+  };
+  const scanBusinessCard = () => {
+    navigate("/app/customers/new", { state: { backgroundLocation: location, scanBusinessCard: true } });
   };
   const startEdit = (c: Client) => {
     setEditing({ ...c });
@@ -72,9 +75,7 @@ export default function Clients() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Kunden</h1>
-        <AppButton onClick={startNew} className="w-full sm:w-auto justify-center">
-          <Plus size={16} /> Neuer Kunde
-        </AppButton>
+        <div className="flex flex-col gap-2 sm:flex-row"><AppButton variant="secondary" onClick={scanBusinessCard} className="w-full justify-center sm:w-auto"><ScanLine size={16} />Visitenkarte scannen</AppButton><AppButton onClick={startNew} className="w-full sm:w-auto justify-center"><Plus size={16} /> Neuer Kunde</AppButton></div>
       </div>
 
       {error && (

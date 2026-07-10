@@ -18,6 +18,7 @@ import {
 } from "@/app/senderIdentities/senderIdentitiesService";
 import { trackEvent } from "@/lib/track";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
+import { BrandingSettingsSection } from "@/features/settings/BrandingSettingsSection";
 
 const defaultSettings: UserSettings = {
   name: "",
@@ -313,6 +314,7 @@ export default function SettingsView() {
             />
           </div>
         </div>
+
       </AppCard>
 
       <AppCard className="space-y-4">
@@ -572,48 +574,18 @@ export default function SettingsView() {
           </div>
         </div>
 
-        <div className="border-t pt-4 space-y-4">
-          <div className="text-sm font-semibold text-gray-700">Branding</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
-              <input
-                className="w-full border rounded p-2"
-                value={settings.logoUrl ?? ""}
-                onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Primärfarbe</label>
-              <input
-                type="color"
-                className="w-24 h-10 border rounded p-1"
-                value={settings.primaryColor ?? "#4f46e5"}
-                onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
-              <select
-                className="w-full border rounded p-2"
-                value={settings.templateId ?? "default"}
-                onChange={(e) => setSettings({ ...settings, templateId: e.target.value })}
-              >
-                <option value="default">Default</option>
-                <option value="minimal">Minimal</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Footer (Dokumente)</label>
-              <textarea
-                className="w-full border rounded p-2"
-                rows={2}
-                value={settings.footerText ?? ""}
-                onChange={(e) => setSettings({ ...settings, footerText: e.target.value })}
-              />
-            </div>
-          </div>
+        <BrandingSettingsSection settings={settings} onChange={setSettings} />
+
+        <div className="border-t border-[var(--app-border)] pt-4">
+          <label className="mb-1 block text-sm font-medium">Footer (Dokumente)</label>
+          <textarea
+            className="w-full border rounded p-2"
+            rows={2}
+            value={settings.footerText ?? ""}
+            onChange={(event) => setSettings({ ...settings, footerText: event.target.value })}
+          />
         </div>
+
       </AppCard>
 
       <AppCard className="space-y-4">

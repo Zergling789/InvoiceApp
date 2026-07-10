@@ -27,5 +27,6 @@ dist-ssr
 # Environment files (secrets)
 .env
 .env.*
+!.env.example
 server/.env
 server/.env.*

@@ -15,6 +15,7 @@ import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { OfferDetailView } from "@/features/documents/OfferDetailView";
+import { InvoiceDetailView } from "@/features/documents/InvoiceDetailView";
 import { supabase } from "@/supabaseClient";
 import { formatErrorToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
@@ -567,23 +568,30 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   const locale = settings.locale ?? "de-DE";
   const documentCurrency =
     docType === "offer" ? (doc as Offer).currency ?? settings.currency ?? "EUR" : settings.currency ?? "EUR";
-  const primaryAction =
+  const statusAction =
     docType === "invoice" && capabilities?.canMarkPaid
       ? {
           label: "Als bezahlt markieren",
-          onClick: handleMarkPaid,
+          onSelect: () => void handleMarkPaid(),
+          variant: "primary" as const,
         }
       : docType === "offer" && capabilities?.canAccept
         ? {
             label: "Als angenommen markieren",
-            onClick: handleOfferAccepted,
+            onSelect: () => void handleOfferAccepted(),
+            variant: "primary" as const,
           }
         : null;
+  const availableActions = statusAction
+    ? [statusAction, ...actions.filter((action) => action.label !== statusAction.label)]
+    : actions;
+  const directActions = availableActions.slice(0, 2);
+  const overflowActions = availableActions.slice(2);
 
   if (docType === "offer") {
     const offer = doc as Offer;
     return (
-      <div className={primaryAction ? "pb-24" : "pb-4"}>
+      <div className="pb-4">
         {showSendModal && client && (
           <SendDocumentModal
             isOpen={showSendModal}
@@ -627,11 +635,9 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           statusTone={statusTone(phase ?? String(offer.status))}
           totals={totals}
           timeline={timeline}
-          canEdit={capabilities?.canEdit}
-          canSend={capabilities?.canSend}
-          canConvert={capabilities?.canConvertToInvoice}
-          onEdit={handleEdit}
-          onSend={() => handleOpenSend()}
+          canConvert={false}
+          directActions={directActions}
+          hasMoreActions={overflowActions.length > 0}
           onConvert={() => void handleConvertToInvoice()}
           onMore={() => setShowActionSheet(true)}
         />
@@ -640,22 +646,76 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           isOpen={showActionSheet}
           onClose={() => setShowActionSheet(false)}
           title="Angebotsaktionen"
-          actions={actions}
+          actions={overflowActions}
         />
 
-        {primaryAction && (
-          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--app-border)] bg-[var(--app-surface)] backdrop-blur-xl safe-bottom">
-            <div className="app-container py-3">
-              <AppButton onClick={primaryAction.onClick} className="w-full sm:ml-auto sm:w-auto">
-                {primaryAction.label}
-              </AppButton>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
+  const invoice = doc as Invoice;
+  return (
+    <div className="pb-4">
+      {showSendModal && client && (
+        <SendDocumentModal
+          isOpen={showSendModal}
+          onClose={() => {
+            setShowSendModal(false);
+            setSendTemplateType(undefined);
+          }}
+          documentType="invoice"
+          document={invoice}
+          client={client}
+          settings={settings}
+          defaultSubject={defaultSubject}
+          defaultMessage={defaultMessage}
+          templateType={sendTemplateType}
+          onSent={handleSaved}
+        />
+      )}
+
+      {editorOpen && editorSeed && (
+        <DocumentEditor
+          type="invoice"
+          seed={editorSeed}
+          settings={settings}
+          clients={clients}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditorSeed(null);
+            setEditorInitial(null);
+          }}
+          onSaved={handleSaved}
+          initial={editorInitial ?? undefined}
+        />
+      )}
+
+      <InvoiceDetailView
+        invoice={invoice}
+        client={client}
+        settings={settings}
+        locale={locale}
+        currency={documentCurrency}
+        statusLabel={formatInvoiceDisplayStatus(invoice)}
+        statusTone={overdue ? "red" : statusTone(phase ?? String(invoice.status))}
+        totals={totals}
+        timeline={timeline}
+        directActions={directActions}
+        hasMoreActions={overflowActions.length > 0}
+        onMore={() => setShowActionSheet(true)}
+      />
+
+      <ActionSheet
+        isOpen={showActionSheet}
+        onClose={() => setShowActionSheet(false)}
+        title="Rechnungsaktionen"
+        actions={overflowActions}
+      />
+
+    </div>
+  );
+
+  /* Legacy detail markup retained temporarily for reference during the shared-view migration.
   return (
     <div className="space-y-6 pb-24">
       {showSendModal && client && settings && (
@@ -859,4 +919,5 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
       )}
     </div>
   );
+  */
 }

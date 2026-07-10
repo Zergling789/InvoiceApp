@@ -7,6 +7,7 @@ process.env.PDF_TEST_MODE = "1";
 const { loadDocumentPayloadFromDb, createPdfBufferFromPayload, createPdfAttachment } = await import(
   "../index.js"
 );
+const { renderDocumentHtml } = await import("../renderDocumentHtml.js");
 
 const fixtures = {
   invoices: [
@@ -109,4 +110,39 @@ test("Email attachment uses the server-generated PDF buffer", async () => {
   const directBuffer = await createPdfBufferFromPayload("invoice", payload);
 
   assert.equal(buffer.toString("utf8"), directBuffer.toString("utf8"));
+});
+
+test("PDF renderer applies the selected layout, color, and embedded logo", () => {
+  const logoDataUrl = "data:image/png;base64,iVBORw0KGgo=";
+  const html = renderDocumentHtml({
+    type: "invoice",
+    doc: fixtures.invoices[0],
+    settings: {
+      companyName: "Acme GmbH",
+      templateId: "modern",
+      primaryColor: "#123abc",
+      logoDataUrl,
+    },
+    client: fixtures.clients[0],
+  });
+
+  assert.match(html, /class="template-modern"/);
+  assert.match(html, /--accent: #123abc/);
+  assert.match(html, /class="company-logo"/);
+  assert.match(html, /data:image\/png;base64,iVBORw0KGgo=/);
+});
+
+test("PDF renderer rejects unsafe branding values", () => {
+  const html = renderDocumentHtml({
+    type: "invoice",
+    settings: {
+      templateId: "<script>",
+      primaryColor: "red; background:url(x)",
+      logoDataUrl: "javascript:alert(1)",
+    },
+  });
+
+  assert.match(html, /class="template-classic"/);
+  assert.match(html, /--accent: #4f46e5/);
+  assert.doesNotMatch(html, /javascript:alert/);
 });

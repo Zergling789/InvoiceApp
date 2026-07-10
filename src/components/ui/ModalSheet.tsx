@@ -11,6 +11,7 @@ type ModalSheetProps = {
   closeOnBackdrop?: boolean;
   showBackdrop?: boolean;
   contentMode?: "scroll" | "contained";
+  width?: "default" | "wide";
 };
 
 export function ModalSheet({
@@ -21,6 +22,7 @@ export function ModalSheet({
   closeOnBackdrop = true,
   showBackdrop = true,
   contentMode = "scroll",
+  width = "default",
 }: ModalSheetProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -49,7 +51,7 @@ export function ModalSheet({
           onClick={closeOnBackdrop ? onClose : undefined}
         />
       )}
-      <div className="relative z-10 flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[90dvh] sm:max-w-4xl sm:rounded-xl">
+      <div className={`relative z-10 flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[92dvh] sm:rounded-xl ${width === "wide" ? "sm:max-w-6xl" : "sm:max-w-4xl"}`}>
         <div className="flex shrink-0 items-center gap-3 border-b px-4 py-4 sm:px-6">
           <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
             <ArrowLeft size={18} />

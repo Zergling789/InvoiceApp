@@ -1,0 +1,84 @@
+import { CalendarDays, Eye, FileText, Plus, Sparkles, Trash2, UserRound } from "lucide-react";
+
+import type { Client, Position } from "@/types";
+import type { DocumentFormData } from "@/features/documents/documentEditorModel";
+import { formatMoney } from "@/utils/money";
+import { AppButton } from "@/ui/AppButton";
+import { AppCard } from "@/ui/AppCard";
+
+type Props = {
+  type: "offer" | "invoice";
+  data: DocumentFormData;
+  clients: Client[];
+  currency: string;
+  locale: string;
+  totals: { subtotal: number; tax: number; total: number };
+  disabled: boolean;
+  saving: boolean;
+  onChange: (data: DocumentFormData) => void;
+  onClientChange: (clientId: string) => void;
+  onAddPosition: () => void;
+  onUpdatePosition: (index: number, field: keyof Position, value: string | number) => void;
+  onRemovePosition: (index: number) => void;
+  onOpenAi: () => void;
+  onPreview: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+};
+
+const inputClass = "w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] px-3 py-2.5 text-sm";
+
+export function DocumentCreateComposer({ type, data, clients, currency, locale, totals, disabled, saving, onChange, onClientChange, onAddPosition, onUpdatePosition, onRemovePosition, onOpenAi, onPreview, onCancel, onSave }: Props) {
+  const isInvoice = type === "invoice";
+  const client = clients.find((item) => item.id === data.clientId);
+  const canSave = Boolean(data.clientId && data.positions.length > 0 && (isInvoice || data.validUntil));
+
+  return (
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-[var(--app-bg)]">
+      <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto grid max-w-6xl items-start gap-6 xl:grid-cols-[minmax(0,1fr)_310px]">
+          <main className="min-w-0 space-y-5">
+            <div><div className="app-eyebrow">Neues Dokument</div><h2 className="mt-1 text-2xl font-semibold tracking-[-0.035em]">{isInvoice ? "Rechnung erstellen" : "Angebot erstellen"}</h2><p className="mt-2 text-sm text-[var(--app-muted)]">Alle Angaben auf einer übersichtlichen Arbeitsfläche.</p></div>
+
+            <AppCard className="p-0 overflow-hidden">
+              <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4"><span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">1</span><div><div className="font-semibold">Kunde</div><div className="text-xs text-[var(--app-muted)]">Empfänger des Dokuments auswählen</div></div></div>
+              <div className="p-5">
+                <label htmlFor="composer-client" className="text-sm font-medium">Kunde auswählen</label>
+                <select id="composer-client" className={`${inputClass} mt-2`} value={data.clientId} disabled={disabled} onChange={(event) => onClientChange(event.target.value)}><option value="">Kunde suchen oder auswählen</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.companyName}</option>)}</select>
+                {client && <div className="mt-3 flex items-start gap-3 rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.04]"><UserRound size={18} className="mt-0.5 text-[var(--app-muted)]" /><div><div className="text-sm font-semibold">{client.companyName}</div><div className="mt-1 text-xs text-[var(--app-muted)]">{[client.contactPerson, client.email].filter(Boolean).join(" · ") || "Keine Kontaktdaten hinterlegt"}</div></div></div>}
+              </div>
+            </AppCard>
+
+            <AppCard className="p-0 overflow-hidden">
+              <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4"><span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">2</span><div><div className="font-semibold">Dokumentdaten</div><div className="text-xs text-[var(--app-muted)]">Nummer, Datum und Konditionen</div></div></div>
+              <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
+                <label className="text-sm font-medium">{isInvoice ? "Rechnungsnummer" : "Angebotsnummer"}<input className={`${inputClass} mt-2`} value={data.number ?? ""} disabled={disabled || isInvoice} placeholder={isInvoice ? "Wird beim Finalisieren vergeben" : "ANG-0001"} onChange={(event) => onChange({ ...data, number: event.target.value })} /></label>
+                <label className="text-sm font-medium">Datum<input type="date" className={`${inputClass} mt-2`} value={data.date} disabled={disabled} onChange={(event) => onChange({ ...data, date: event.target.value })} /></label>
+                {isInvoice ? <label className="text-sm font-medium">Zahlungsziel<select className={`${inputClass} mt-2`} value={data.paymentTermsDays ?? 14} disabled={disabled} onChange={(event) => onChange({ ...data, paymentTermsDays: Number(event.target.value) })}><option value={7}>7 Tage</option><option value={14}>14 Tage</option><option value={30}>30 Tage</option><option value={60}>60 Tage</option></select></label> : <label className="text-sm font-medium">Gültig bis<input type="date" className={`${inputClass} mt-2`} value={data.validUntil ?? ""} disabled={disabled} onChange={(event) => onChange({ ...data, validUntil: event.target.value })} /></label>}
+                <label className="text-sm font-medium">MwSt. (%)<input type="number" min="0" step="any" className={`${inputClass} mt-2`} value={data.vatRate ?? 0} disabled={disabled} onChange={(event) => onChange({ ...data, vatRate: Number(event.target.value) })} /></label>
+                {!isInvoice && <label className="text-sm font-medium">Währung<select className={`${inputClass} mt-2`} value={data.currency ?? currency} disabled={disabled} onChange={(event) => onChange({ ...data, currency: event.target.value })}>{["EUR", "USD", "CHF", "GBP"].map((item) => <option key={item}>{item}</option>)}</select></label>}
+              </div>
+            </AppCard>
+
+            <AppCard className="p-0 overflow-hidden">
+              <div className="flex flex-col gap-3 border-b border-[var(--app-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">3</span><div><div className="font-semibold">Positionen</div><div className="text-xs text-[var(--app-muted)]">Leistungen und Preise erfassen</div></div></div><AppButton type="button" variant="secondary" onClick={onOpenAi} disabled={disabled}><Sparkles size={16} />Mit KI erstellen</AppButton></div>
+              <div className="p-5">
+                {data.positions.length === 0 ? <div className="rounded-2xl border border-dashed border-[var(--app-border)] px-5 py-8 text-center"><FileText className="mx-auto text-[var(--app-muted)]" /><div className="mt-3 font-medium">Noch keine Positionen</div><p className="mt-1 text-sm text-[var(--app-muted)]">Füge eine Position hinzu oder lasse einen KI-Entwurf erstellen.</p></div> : <div className="space-y-3">{data.positions.map((position, index) => <div key={position.id} className="grid gap-2 rounded-2xl border border-[var(--app-border)] p-3 md:grid-cols-[minmax(0,1fr)_85px_90px_120px_44px] md:items-center"><input aria-label={`Beschreibung ${index + 1}`} className={inputClass} placeholder="Beschreibung" value={position.description} disabled={disabled} onChange={(event) => onUpdatePosition(index, "description", event.target.value)} /><input aria-label={`Menge ${index + 1}`} type="number" className={inputClass} value={position.quantity} disabled={disabled} onChange={(event) => onUpdatePosition(index, "quantity", Number(event.target.value))} /><input aria-label={`Einheit ${index + 1}`} className={inputClass} value={position.unit} disabled={disabled} onChange={(event) => onUpdatePosition(index, "unit", event.target.value)} /><input aria-label={`Preis ${index + 1}`} type="number" className={inputClass} value={position.price} disabled={disabled} onChange={(event) => onUpdatePosition(index, "price", Number(event.target.value))} /><button type="button" aria-label={`Position ${index + 1} löschen`} className="grid h-11 w-11 place-items-center rounded-full text-red-500 hover:bg-red-500/10" onClick={() => onRemovePosition(index)}><Trash2 size={16} /></button></div>)}</div>}
+                <AppButton type="button" variant="ghost" className="mt-4" onClick={onAddPosition} disabled={disabled}><Plus size={17} />Position hinzufügen</AppButton>
+              </div>
+            </AppCard>
+
+            <AppCard className="p-0 overflow-hidden"><div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4"><span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">4</span><div><div className="font-semibold">Texte & Optionen</div><div className="text-xs text-[var(--app-muted)]">Persönliche Einleitung und Abschluss</div></div></div><div className="grid gap-4 p-5 sm:grid-cols-2"><label className="text-sm font-medium">Einleitung<textarea rows={4} className={`${inputClass} mt-2 resize-y`} value={data.introText} disabled={disabled} onChange={(event) => onChange({ ...data, introText: event.target.value })} /></label><label className="text-sm font-medium">Abschlusstext<textarea rows={4} className={`${inputClass} mt-2 resize-y`} value={data.footerText} disabled={disabled} onChange={(event) => onChange({ ...data, footerText: event.target.value })} /></label></div></AppCard>
+          </main>
+
+          <aside className="space-y-4 xl:sticky xl:top-4">
+            <AppCard className="p-5"><div className="app-eyebrow">Zusammenfassung</div><div className="mt-4 flex items-start gap-3"><UserRound size={17} className="mt-0.5 text-[var(--app-muted)]" /><div><div className="text-xs text-[var(--app-muted)]">Kunde</div><div className="text-sm font-medium">{client?.companyName || "Noch nicht ausgewählt"}</div></div></div><div className="mt-4 flex items-start gap-3"><CalendarDays size={17} className="mt-0.5 text-[var(--app-muted)]" /><div><div className="text-xs text-[var(--app-muted)]">Dokumentdatum</div><div className="text-sm font-medium">{new Date(data.date).toLocaleDateString(locale)}</div></div></div><div className="my-5 h-px bg-[var(--app-border)]" /><div className="space-y-2 text-sm"><div className="flex justify-between text-[var(--app-muted)]"><span>Netto</span><span>{formatMoney(totals.subtotal, currency, locale)}</span></div><div className="flex justify-between text-[var(--app-muted)]"><span>MwSt.</span><span>{formatMoney(totals.tax, currency, locale)}</span></div><div className="flex justify-between border-t border-[var(--app-border)] pt-3 text-lg font-semibold"><span>Gesamt</span><span>{formatMoney(totals.total, currency, locale)}</span></div></div><AppButton type="button" variant="secondary" className="mt-5 w-full" onClick={onPreview}><Eye size={17} />Dokumentvorschau</AppButton></AppCard>
+            {!canSave && <div className="rounded-2xl bg-amber-500/10 p-4 text-sm leading-6 text-amber-800 dark:text-amber-200">Wähle einen Kunden und füge mindestens eine Position hinzu.</div>}
+          </aside>
+        </div>
+      </div>
+
+      <footer className="border-t border-[var(--app-border)] bg-[var(--app-surface-solid)] px-4 py-3 safe-bottom sm:px-6"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3"><AppButton type="button" variant="ghost" onClick={onCancel}>Abbrechen</AppButton><div className="flex gap-2"><AppButton type="button" variant="secondary" className="hidden sm:inline-flex" onClick={onPreview}><Eye size={16} />Vorschau</AppButton><AppButton type="button" onClick={onSave} disabled={!canSave || saving}>{saving ? "Wird gespeichert …" : isInvoice ? "Rechnung erstellen" : "Angebot erstellen"}</AppButton></div></div></footer>
+    </div>
+  );
+}

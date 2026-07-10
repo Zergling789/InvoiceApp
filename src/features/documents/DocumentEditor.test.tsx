@@ -4,7 +4,7 @@ import { vi, beforeEach, describe, it, expect } from "vitest";
 
 import { DocumentEditor } from "./DocumentEditor";
 import { renderWithProviders } from "@/test/renderWithProviders";
-import { InvoiceStatus } from "@/types";
+import { InvoiceStatus, OfferStatus } from "@/types";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
 const saveInvoiceMock = vi.fn();
@@ -114,6 +114,7 @@ describe("DocumentEditor send email status", () => {
         clients={clients}
         onClose={vi.fn()}
         onSaved={vi.fn()}
+        useCreateComposer
         initial={{
           clientId: "client-1",
           positions: [{ id: "existing", description: "Beratung", quantity: 1, unit: "Std", price: 100 }],
@@ -136,6 +137,56 @@ describe("DocumentEditor send email status", () => {
     expect(screen.getByDisplayValue("Bestehende Einleitung")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Bestehender Fußtext")).toBeInTheDocument();
     expect(saveInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the AI dialog from the offer creation wizard", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DocumentEditor
+        type="offer"
+        seed={{ ...seed, id: "offer-1", number: "ANG-0001" }}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        useCreateComposer
+        initial={{
+          clientId: "client-1",
+          positions: [],
+          status: OfferStatus.DRAFT,
+          validUntil: "2025-01-31",
+          currency: "EUR",
+        }}
+      />,
+      { route: "/app/offers/new" }
+    );
+
+    await user.click(screen.getByRole("button", { name: /mit ki erstellen/i }));
+
+    expect(await screen.findByRole("dialog", { name: /dokument mit ki erstellen/i })).toBeVisible();
+    expect(screen.getByLabelText(/leistungen beschreiben/i)).toBeEnabled();
+  });
+
+  it("uses the shared composer for new invoices", () => {
+    renderWithProviders(
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        useCreateComposer
+        initial={{ clientId: "client-1", positions: [], status: InvoiceStatus.DRAFT }}
+      />,
+      { route: "/app/invoices/new" }
+    );
+
+    expect(screen.getByRole("heading", { name: /rechnung erstellen/i })).toBeVisible();
+    expect(screen.getByText("Dokumentdaten")).toBeVisible();
+    expect(screen.getByText("Positionen")).toBeVisible();
+    expect(screen.getByText("Zusammenfassung")).toBeVisible();
+    expect(screen.getByRole("button", { name: /rechnung erstellen/i })).toBeDisabled();
   });
 
   it("sets status SENT on successful send", async () => {

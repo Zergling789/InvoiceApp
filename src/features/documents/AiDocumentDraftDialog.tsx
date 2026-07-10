@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Sparkles, X } from "lucide-react";
 
 import { createAiDocumentDraft, type AiDocumentDraft } from "@/app/ai/aiService";
@@ -40,7 +41,9 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
     }));
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/35 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="presentation">
       <div className="app-card flex max-h-[100dvh] w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-b-none p-0 sm:max-h-[90dvh] sm:rounded-[var(--app-radius-lg)]" role="dialog" aria-modal="true" aria-labelledby="ai-draft-title">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--app-border)] p-5 sm:px-7">
@@ -99,6 +102,7 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
             : <AppButton onClick={() => onApply(draft)}>Übernehmen</AppButton>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
