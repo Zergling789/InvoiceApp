@@ -860,6 +860,7 @@ export function DocumentEditor({
             )}
 
             <div className="row-start-2 min-h-0 overflow-y-auto overscroll-contain bg-gray-50">
+            <div className="row-start-2 min-h-0 overflow-y-auto overscroll-contain bg-gray-50">
               <div className="px-6 pt-4 pb-3 border-b bg-white">
                 <div className="text-base font-semibold text-gray-700">Kundendaten eingeben</div>
               </div>
@@ -1156,6 +1157,7 @@ export function DocumentEditor({
               </div>
             </div>
 
+            <div className="relative z-20 row-start-3 flex min-h-[68px] shrink-0 items-center justify-between gap-3 border-t bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] safe-bottom sm:px-6 sm:py-4">
             <div className="relative z-20 row-start-3 flex min-h-[68px] shrink-0 items-center justify-between gap-3 border-t bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] safe-bottom sm:px-6 sm:py-4">
               <AppButton
                 variant="secondary"
