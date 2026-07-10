@@ -11,17 +11,16 @@ export function MobileNav({ items, hidden = false }: MobileNavProps) {
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      "flex flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium",
-      "min-h-[44px] min-w-[44px] rounded-md",
-      isActive ? "text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-slate-400",
+      "flex min-h-[52px] min-w-[44px] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition-colors",
+      isActive ? "bg-black/[0.05] text-[var(--app-primary)] dark:bg-white/10" : "text-[var(--app-muted)]",
     ].join(" ");
 
   return (
     <nav
-      className="mobile-nav md:hidden fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur safe-bottom dark:border-slate-800 dark:bg-slate-900/95"
+      className="mobile-nav safe-bottom fixed inset-x-3 bottom-3 z-40 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[var(--app-shadow)] backdrop-blur-xl md:hidden"
       aria-label="Mobile Navigation"
     >
-      <div className="grid grid-cols-5 gap-1 px-2 py-2">
+      <div className="grid grid-cols-5 gap-1 p-2">
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
             <span className="text-base">{item.icon}</span>

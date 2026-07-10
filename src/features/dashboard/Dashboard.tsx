@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { Plus } from "lucide-react";
 
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -247,12 +248,16 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-2">
+    <div className="space-y-12 pb-8">
+      <div className="flex flex-col gap-5 pt-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-gray-900">{company ? `Hallo ${company}` : "Hallo"}</h1>
-          <p className="text-sm text-gray-600">{headerSubtitle}</p>
+          <div className="app-eyebrow">Übersicht</div>
+          <h1 className="text-3xl font-semibold tracking-[-0.045em] text-[var(--app-text)] sm:text-4xl">{company ? `Hallo ${company}` : "Hallo"}</h1>
+          <p className="text-sm text-[var(--app-muted)]">{headerSubtitle}</p>
         </div>
+        <Link to="/app/invoices/new">
+          <AppButton><Plus size={17} /> Neue Rechnung</AppButton>
+        </Link>
         {error && (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{error}</div>
         )}

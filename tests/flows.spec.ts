@@ -1,14 +1,16 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "playwright/test";
 import {
   admin,
   createClientRecord,
   createSenderIdentity,
   createTestUser,
   deleteTestUser,
+  hasE2eSupabaseEnv,
   seedUserSettings,
 } from "./helpers/supabaseAdmin";
 
 test.describe.serial("value stream: offer -> invoice", () => {
+  test.skip(!hasE2eSupabaseEnv, "Supabase E2E credentials are not configured.");
   let user: { id: string; email: string; password: string };
   let client: { id: string; companyName: string; email: string; address: string };
 

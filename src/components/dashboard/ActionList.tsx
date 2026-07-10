@@ -24,9 +24,9 @@ export interface ActionItem {
 }
 
 const toneStyles: Record<ActionTone, string> = {
-  neutral: "bg-slate-100 text-slate-700",
-  warning: "bg-amber-100 text-amber-800",
-  critical: "bg-red-100 text-red-700",
+  neutral: "bg-black/[0.05] text-gray-600 dark:bg-white/10 dark:text-gray-300",
+  warning: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  critical: "bg-red-500/10 text-red-700 dark:text-red-300",
 };
 
 export function ActionList({
@@ -39,7 +39,7 @@ export function ActionList({
   emptyState?: React.ReactNode;
 }) {
   return (
-    <AppCard className="space-y-4">
+    <AppCard className="space-y-4 p-2 sm:p-3">
       {isLoading ? (
         <div className="space-y-4 animate-pulse">
           {Array.from({ length: 4 }).map((_, index) => (
@@ -56,21 +56,21 @@ export function ActionList({
       ) : items.length === 0 ? (
         emptyState
       ) : (
-        <div className="space-y-3">
+        <div className="divide-y divide-[var(--app-border)]">
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex flex-col gap-4 rounded-lg border border-gray-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-4 rounded-2xl p-4 transition-colors hover:bg-black/[0.025] sm:flex-row sm:items-center sm:justify-between dark:hover:bg-white/[0.035]"
             >
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-base font-semibold text-gray-900">{item.title}</div>
+                  <div className="text-base font-semibold text-[var(--app-text)]">{item.title}</div>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${toneStyles[item.tone]}`}>
                     {item.statusLabel}
                   </span>
                 </div>
-                <div className="text-sm text-gray-600">{item.subtitle}</div>
-                <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                <div className="text-sm text-[var(--app-muted)]">{item.subtitle}</div>
+                <div className="flex flex-wrap gap-3 text-xs text-[var(--app-muted)]">
                   <span>{item.amountLabel}</span>
                   <span>{item.ageLabel}</span>
                 </div>

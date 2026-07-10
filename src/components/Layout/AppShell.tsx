@@ -16,7 +16,7 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
 
   return (
     <div
-      className={`min-h-screen-safe bg-gray-50 dark:bg-slate-950 app-shell${
+      className={`min-h-screen-safe bg-[var(--app-bg)] app-shell${
         hideMobileNav ? " app-shell--no-mobile-nav" : ""
       }`}
     >
@@ -29,12 +29,12 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
       <Topbar />
 
       <div className="app-container">
-        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4 md:gap-6">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-[232px_minmax(0,1fr)] md:gap-8 lg:gap-10">
           <div className="hidden md:block">
             <Sidebar items={navItems} />
           </div>
 
-          <main id="main-content" className="app-card min-w-0">
+          <main id="main-content" className="min-w-0 animate-enter">
             <Outlet />
           </main>
         </div>

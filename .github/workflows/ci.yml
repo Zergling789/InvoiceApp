@@ -6,15 +6,48 @@ on:
   pull_request:
 
 jobs:
-  build-test:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
       - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:ui
+      - run: npm run test:server
       - run: npm run build
-      - run: npx playwright install --with-deps || npx playwright install
-      - run: npm test
+      - run: npm run audit
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/basic.spec.ts
+
+  supabase-e2e:
+    runs-on: ubuntu-latest
+    env:
+      E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      E2E_SUPABASE_SERVICE_ROLE: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE }}
+      VITE_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run Supabase integration flows
+        if: ${{ env.E2E_SUPABASE_URL != '' && env.E2E_SUPABASE_SERVICE_ROLE != '' && env.VITE_SUPABASE_ANON_KEY != '' }}
+        run: npx playwright test tests/flows.spec.ts tests/invoice-status.spec.ts

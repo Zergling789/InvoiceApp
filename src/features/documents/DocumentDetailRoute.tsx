@@ -35,7 +35,7 @@ export default function DocumentDetailRoute({ forcedType }: DocumentDetailRouteP
     const navState = refreshDocuments ? { refreshDocuments } : undefined;
 
     if (backgroundLocation) {
-      navigate(-1, { state: navState });
+      navigate(-1);
       return;
     }
 

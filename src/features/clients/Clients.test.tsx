@@ -1,10 +1,9 @@
-import React from "react";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, beforeEach, describe, it, expect } from "vitest";
 
 import Clients from "./Clients";
-import { ConfirmProvider, ToastProvider } from "@/ui/FeedbackProvider";
+import { renderWithProviders } from "@/test/renderWithProviders";
 
 let removeMock: ReturnType<typeof vi.fn>;
 let refreshMock: ReturnType<typeof vi.fn>;
@@ -37,13 +36,7 @@ describe("Clients delete flow", () => {
 
   it("shows dialog and cancels without deleting", async () => {
     const user = userEvent.setup();
-    render(
-      <ToastProvider>
-        <ConfirmProvider>
-          <Clients />
-        </ConfirmProvider>
-      </ToastProvider>
-    );
+    renderWithProviders(<Clients />, { route: "/app/clients" });
 
     await user.click(screen.getByRole("button", { name: /loeschen|l?schen/i }));
     expect(screen.getByText("Kunde loeschen")).toBeInTheDocument();
@@ -54,13 +47,7 @@ describe("Clients delete flow", () => {
 
   it("confirms and deletes", async () => {
     const user = userEvent.setup();
-    render(
-      <ToastProvider>
-        <ConfirmProvider>
-          <Clients />
-        </ConfirmProvider>
-      </ToastProvider>
-    );
+    renderWithProviders(<Clients />, { route: "/app/clients" });
 
     await user.click(screen.getByRole("button", { name: /loeschen|l?schen/i }));
     expect(screen.getByText("Kunde loeschen")).toBeInTheDocument();

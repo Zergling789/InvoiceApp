@@ -7,39 +7,8 @@ import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 type DbSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
 type DbSettingsInsert = Database["public"]["Tables"]["user_settings"]["Insert"];
 
-const SETTINGS_FIELDS = [
-  "user_id",
-  "name",
-  "company_name",
-  "address",
-  "tax_id",
-  "default_vat_rate",
-  "default_payment_terms",
-  "payment_terms_days",
-  "iban",
-  "bic",
-  "bank_name",
-  "email",
-  "email_default_subject",
-  "email_default_text",
-  "is_small_business",
-  "small_business_note",
-  "logo_url",
-  "primary_color",
-  "template_id",
-  "locale",
-  "currency",
-  "prefix_invoice",
-  "prefix_offer",
-  "number_padding",
-  "invoice_number_prefix",
-  "invoice_number_next",
-  "invoice_number_padding",
-  "invoice_number_include_year",
-  "footer_text",
-  "default_sender_identity_id",
-  "updated_at",
-] as const satisfies readonly (keyof DbSettingsRow)[];
+const SETTINGS_FIELDS =
+  "user_id,name,company_name,address,tax_id,default_vat_rate,default_payment_terms,payment_terms_days,iban,bic,bank_name,email,email_default_subject,email_default_text,is_small_business,small_business_note,logo_url,primary_color,template_id,locale,currency,prefix_invoice,prefix_offer,number_padding,invoice_number_prefix,invoice_number_next,invoice_number_padding,invoice_number_include_year,footer_text,default_sender_identity_id,created_at,updated_at" as const;
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -53,7 +22,7 @@ export async function dbGetSettings(): Promise<UserSettings> {
 
   const { data, error } = await supabase
     .from("user_settings")
-    .select(SETTINGS_FIELDS.join(","))
+    .select(SETTINGS_FIELDS)
     .eq("user_id", uid)
     .order("updated_at", { ascending: false })
     .limit(1);

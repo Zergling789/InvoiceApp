@@ -8,18 +8,18 @@ const SUPABASE_URL =
 const SUPABASE_SERVICE_ROLE =
   process.env.E2E_SUPABASE_SERVICE_ROLE ?? process.env.SUPABASE_SERVICE_ROLE;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-  throw new Error(
-    "Missing Supabase admin env. Set E2E_SUPABASE_URL and E2E_SUPABASE_SERVICE_ROLE."
-  );
-}
+export const hasE2eSupabaseEnv = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE);
 
-export const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
+export const admin = createClient(
+  SUPABASE_URL ?? "https://example.supabase.co",
+  SUPABASE_SERVICE_ROLE ?? "missing-e2e-service-role",
+  {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
   },
-});
+  }
+);
 
 export type TestUser = {
   id: string;

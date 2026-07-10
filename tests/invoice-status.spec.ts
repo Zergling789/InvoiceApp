@@ -1,6 +1,12 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { admin, createClientRecord, createTestUser, deleteTestUser } from "./helpers/supabaseAdmin";
+import {
+  admin,
+  createClientRecord,
+  createTestUser,
+  deleteTestUser,
+  hasE2eSupabaseEnv,
+} from "./helpers/supabaseAdmin";
 
 const SUPABASE_URL =
   process.env.E2E_SUPABASE_URL ??
@@ -9,15 +15,18 @@ const SUPABASE_URL =
 const SUPABASE_ANON_KEY =
   process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Missing Supabase env. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-}
+const hasInvoiceStatusEnv = hasE2eSupabaseEnv && Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const userClient = createClient(
+  SUPABASE_URL ?? "https://example.supabase.co",
+  SUPABASE_ANON_KEY ?? "missing-e2e-anon-key",
+  {
   auth: { autoRefreshToken: false, persistSession: false },
-});
+  }
+);
 
 test.describe.serial("invoice status transitions", () => {
+  test.skip(!hasInvoiceStatusEnv, "Supabase E2E credentials are not configured.");
   let user: { id: string; email: string; password: string };
   let client: { id: string; companyName: string; email: string; address: string };
   let accessToken: string;

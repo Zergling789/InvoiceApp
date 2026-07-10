@@ -8,9 +8,7 @@ type DocumentActivityEvent = Pick<
   "id" | "event_type" | "meta" | "created_at"
 >;
 
-const ACTIVITY_FIELDS = ["id", "event_type", "meta", "created_at"] as const satisfies readonly (
-  keyof DocumentActivityRow
-)[];
+const ACTIVITY_FIELDS = "id,event_type,meta,created_at" as const;
 
 export async function dbListDocumentActivity(
   docType: "offer" | "invoice",
@@ -18,7 +16,7 @@ export async function dbListDocumentActivity(
 ): Promise<DocumentActivityEvent[]> {
   const { data, error } = await supabase
     .from("document_activity")
-    .select(ACTIVITY_FIELDS.join(","))
+    .select(ACTIVITY_FIELDS)
     .eq("doc_type", docType)
     .eq("doc_id", docId)
     .order("created_at", { ascending: false });

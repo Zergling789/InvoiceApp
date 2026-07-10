@@ -6,6 +6,14 @@ import nodemailer from "nodemailer";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
+import {
+  extractEmailAddress,
+  generateToken,
+  hashToken,
+  normalizeEmail,
+  parseEmailList,
+  sanitizeFilename,
+} from "./requestUtils.js";
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -40,14 +48,6 @@ const RAW_APP_BASE_URL =
   process.env.APP_BASE_URL ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${PORT}`);
 const APP_BASE_URL = String(RAW_APP_BASE_URL).trim().replace(/\/+$/, "");
-
-const extractEmailAddress = (value) => {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  const match = raw.match(/<([^>]+)>/);
-  if (match?.[1]) return match[1].trim();
-  return raw;
-};
 
 const FROM_HEADER = process.env.SMTP_FROM || process.env.SMTP_USER;
 const FROM_ADDRESS = extractEmailAddress(FROM_HEADER);
@@ -112,14 +112,6 @@ const createUserSupabaseClient = (token) => {
     },
   });
 };
-
-const sanitizeFilename = (name = "") =>
-  String(name)
-    .normalize("NFKD")
-    .replace(/[^\w.-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 120) || "document";
 
 let browserPromise = null;
 let playwrightPromise = null;
@@ -277,17 +269,6 @@ const getMailer = async () => {
   }
   return mailerPromise;
 };
-
-const normalizeEmail = (email = "") => String(email).trim().toLowerCase();
-const parseEmailList = (value = "") =>
-  String(value)
-    .split(/[;,]/)
-    .map((entry) => normalizeEmail(entry))
-    .filter(Boolean);
-
-const generateToken = () => crypto.randomBytes(32).toString("base64url");
-const hashToken = (token) =>
-  crypto.createHash("sha256").update(token, "utf8").digest("hex");
 
 const PDF_DOWNLOAD_TOKEN_TTL_MS = Number.isFinite(Number(process.env.PDF_DOWNLOAD_TOKEN_TTL_MS))
   ? Number(process.env.PDF_DOWNLOAD_TOKEN_TTL_MS)

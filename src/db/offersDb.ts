@@ -6,26 +6,8 @@ import type { Offer } from "@/types";
 type DbOfferRow = Database["public"]["Tables"]["offers"]["Row"];
 type DbOfferInsert = Database["public"]["Tables"]["offers"]["Insert"];
 
-const OFFER_FIELDS = [
-  "id",
-  "number",
-  "client_id",
-  "project_id",
-  "currency",
-  "date",
-  "valid_until",
-  "positions",
-  "intro_text",
-  "footer_text",
-  "vat_rate",
-  "status",
-  "sent_at",
-  "last_sent_at",
-  "last_sent_to",
-  "sent_count",
-  "sent_via",
-  "invoice_id",
-] as const satisfies readonly (keyof DbOfferRow)[];
+const OFFER_FIELDS =
+  "id,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
 
 const normalizeOfferStatus = (status: string | null | undefined): OfferStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -62,7 +44,7 @@ export async function dbListOffers(): Promise<Offer[]> {
 
   const { data, error } = await supabase
     .from("offers")
-    .select(OFFER_FIELDS.join(","))
+    .select(OFFER_FIELDS)
     .eq("user_id", uid)
     .order("date", { ascending: false });
 
@@ -76,7 +58,7 @@ export async function dbListOffers(): Promise<Offer[]> {
     currency: r.currency ?? "EUR",
     date: r.date,
     validUntil: r.valid_until ?? "",
-    positions: r.positions ?? [],
+    positions: (Array.isArray(r.positions) ? r.positions : []) as unknown as Offer["positions"],
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
     vatRate: Number(r.vat_rate ?? 0),
@@ -85,7 +67,7 @@ export async function dbListOffers(): Promise<Offer[]> {
     lastSentAt: r.last_sent_at ?? null,
     lastSentTo: r.last_sent_to ?? null,
     sentCount: Number(r.sent_count ?? 0),
-    sentVia: r.sent_via ?? null,
+    sentVia: (r.sent_via as Offer["sentVia"]) ?? null,
     invoiceId: r.invoice_id ?? null,
   }));
 }
@@ -96,7 +78,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
 
   const { data, error } = await supabase
     .from("offers")
-    .select(OFFER_FIELDS.join(","))
+    .select(OFFER_FIELDS)
     .eq("id", id)
     .eq("user_id", uid)
     .single();
@@ -111,7 +93,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
     currency: data.currency ?? "EUR",
     date: data.date,
     validUntil: data.valid_until ?? "",
-    positions: data.positions ?? [],
+    positions: (Array.isArray(data.positions) ? data.positions : []) as unknown as Offer["positions"],
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
     vatRate: Number(data.vat_rate ?? 0),
@@ -120,7 +102,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
     lastSentAt: data.last_sent_at ?? null,
     lastSentTo: data.last_sent_to ?? null,
     sentCount: Number(data.sent_count ?? 0),
-    sentVia: data.sent_via ?? null,
+    sentVia: (data.sent_via as Offer["sentVia"]) ?? null,
     invoiceId: data.invoice_id ?? null,
   };
 }
@@ -141,7 +123,7 @@ export async function dbUpsertOffer(o: Offer): Promise<void> {
     date: o.date,
     valid_until: o.validUntil ?? null,
 
-    positions: o.positions ?? [],
+    positions: (o.positions ?? []) as unknown as Database["public"]["Tables"]["offers"]["Insert"]["positions"],
     intro_text: o.introText ?? "",
     footer_text: o.footerText ?? "",
 

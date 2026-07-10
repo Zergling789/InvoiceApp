@@ -2,46 +2,13 @@ import { supabase } from "@/supabaseClient";
 import type { Database } from "@/lib/supabase.types";
 import { InvoiceStatus } from "@/types";
 import type { Invoice } from "@/types";
+import { calcDueDate } from "@/domain/rules/invoiceRules";
 
 type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
 type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
 
-const INVOICE_FIELDS = [
-  "id",
-  "invoice_number",
-  "number",
-  "offer_id",
-  "client_id",
-  "client_name",
-  "client_company_name",
-  "client_contact_person",
-  "client_email",
-  "client_phone",
-  "client_vat_id",
-  "client_address",
-  "project_id",
-  "date",
-  "invoice_date",
-  "payment_terms_days",
-  "due_date",
-  "payment_date",
-  "paid_at",
-  "canceled_at",
-  "positions",
-  "intro_text",
-  "footer_text",
-  "vat_rate",
-  "is_small_business",
-  "small_business_note",
-  "status",
-  "is_locked",
-  "finalized_at",
-  "sent_at",
-  "last_sent_at",
-  "last_sent_to",
-  "sent_count",
-  "sent_via",
-] as const satisfies readonly (keyof DbInvoiceRow)[];
+const INVOICE_FIELDS =
+  "id,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,project_id,date,invoice_date,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
 
 const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -94,7 +61,7 @@ export async function dbListInvoices(): Promise<Invoice[]> {
 
   const { data, error } = await supabase
     .from("invoices")
-    .select(INVOICE_FIELDS.join(","))
+    .select(INVOICE_FIELDS)
     .eq("user_id", uid)
     .order("invoice_date", { ascending: false });
 
@@ -120,7 +87,7 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     paidAt: r.paid_at ?? null,
     canceledAt: r.canceled_at ?? null,
     isOverdue: computeIsOverdue(r),
-    positions: r.positions ?? [],
+    positions: (Array.isArray(r.positions) ? r.positions : []) as unknown as Invoice["positions"],
     introText: r.intro_text ?? "",
     footerText: r.footer_text ?? "",
     vatRate: Number(r.vat_rate ?? 0),
@@ -133,7 +100,7 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     lastSentAt: r.last_sent_at ?? null,
     lastSentTo: r.last_sent_to ?? null,
     sentCount: Number(r.sent_count ?? 0),
-    sentVia: r.sent_via ?? null,
+    sentVia: (r.sent_via as Invoice["sentVia"]) ?? null,
   }));
 }
 
@@ -143,7 +110,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 
   const { data, error } = await supabase
     .from("invoices")
-    .select(INVOICE_FIELDS.join(","))
+    .select(INVOICE_FIELDS)
     .eq("id", id)
     .eq("user_id", uid)
     .single();
@@ -170,7 +137,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     paidAt: data.paid_at ?? null,
     canceledAt: data.canceled_at ?? null,
     isOverdue: computeIsOverdue(data),
-    positions: data.positions ?? [],
+    positions: (Array.isArray(data.positions) ? data.positions : []) as unknown as Invoice["positions"],
     introText: data.intro_text ?? "",
     footerText: data.footer_text ?? "",
     vatRate: Number(data.vat_rate ?? 0),
@@ -183,7 +150,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     lastSentAt: data.last_sent_at ?? null,
     lastSentTo: data.last_sent_to ?? null,
     sentCount: Number(data.sent_count ?? 0),
-    sentVia: data.sent_via ?? null,
+    sentVia: (data.sent_via as Invoice["sentVia"]) ?? null,
   };
 }
 
@@ -211,11 +178,12 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     date: inv.date,
     invoice_date: inv.date,
     payment_terms_days: Number(inv.paymentTermsDays ?? 14),
+    due_date: inv.dueDate || calcDueDate(inv.date, Number(inv.paymentTermsDays ?? 14)),
     payment_date: inv.paymentDate ?? null,
     paid_at: inv.paidAt ?? null,
     canceled_at: inv.canceledAt ?? null,
 
-    positions: inv.positions ?? [],
+    positions: (inv.positions ?? []) as unknown as Database["public"]["Tables"]["invoices"]["Insert"]["positions"],
 
     intro_text: (inv as any).introText ?? "",
     footer_text: (inv as any).footerText ?? "",

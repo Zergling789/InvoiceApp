@@ -5,17 +5,8 @@ import type { Client } from "@/types";
 type DbClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type DbClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 
-const CLIENT_FIELDS = [
-  "id",
-  "user_id",
-  "company_name",
-  "contact_person",
-  "email",
-  "address",
-  "notes",
-  "updated_at",
-  "created_at",
-] as const satisfies readonly (keyof DbClientRow)[];
+const CLIENT_FIELDS =
+  "id,user_id,company_name,contact_person,email,address,notes,updated_at,created_at" as const;
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -54,7 +45,7 @@ export async function dbListClients(): Promise<Client[]> {
 
   const { data, error } = await supabase
     .from("clients")
-    .select(CLIENT_FIELDS.join(","))
+    .select(CLIENT_FIELDS)
     .eq("user_id", uid)
     .order("company_name", { ascending: true });
 
@@ -69,7 +60,7 @@ export async function dbGetClientById(id: string): Promise<Client | null> {
 
   const { data, error } = await supabase
     .from("clients")
-    .select(CLIENT_FIELDS.join(","))
+    .select(CLIENT_FIELDS)
     .eq("id", id)
     .eq("user_id", uid)
     .maybeSingle();

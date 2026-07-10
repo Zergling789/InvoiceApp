@@ -33,7 +33,7 @@ export default function InvoiceCreatePage() {
     };
 
     if (backgroundLocation) {
-      navigate(-1, { state: buildState(undefined) });
+      navigate(-1);
       return;
     }
 

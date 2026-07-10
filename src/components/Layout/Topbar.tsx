@@ -18,11 +18,10 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
   const [menuOpen, setMenuOpen] = useState(false);
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[44px]",
-      "focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60",
+      "flex min-h-[44px] items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors",
       isActive
-        ? "bg-indigo-600 text-white"
-        : "text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800",
+        ? "bg-[var(--app-primary)] text-white"
+        : "text-[var(--app-muted)] hover:bg-black/5 hover:text-[var(--app-text)] dark:hover:bg-white/10",
     ].join(" ");
 
   const handleSignOut = async () => {
@@ -37,9 +36,10 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b safe-top dark:bg-slate-950 dark:border-slate-800">
-      <div className="app-container flex items-center justify-between gap-3">
-        <Link to="/app" className="font-bold text-gray-900 no-underline dark:text-slate-100">
+    <header className="safe-top sticky top-0 z-30 border-b border-[var(--app-border)] bg-[var(--app-surface)] backdrop-blur-xl">
+      <div className="app-container flex items-center justify-between gap-3 py-3">
+        <Link to="/app" className="flex items-center gap-2.5 font-semibold tracking-[-0.02em] text-[var(--app-text)] no-underline">
+          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-[var(--app-text)] text-sm font-bold text-[var(--app-bg)]">F</span>
           {brand}
         </Link>
         <nav className="hidden md:flex items-center gap-2">
@@ -58,7 +58,7 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
         </nav>
         <button
           type="button"
-          className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 h-11 w-11 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] md:hidden"
           onClick={() => setMenuOpen(true)}
           aria-label="Menü öffnen"
         >
@@ -66,8 +66,8 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
         </button>
       </div>
       {menuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-gray-900/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl p-4 space-y-2 dark:bg-slate-900">
+        <div className="fixed inset-0 z-40 flex items-start justify-end bg-black/30 p-4 backdrop-blur-sm md:hidden">
+          <div className="app-card w-full max-w-sm space-y-2 rounded-3xl p-4">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold text-gray-700 dark:text-slate-200">Menü</div>
               <button

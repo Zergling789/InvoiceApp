@@ -23,153 +23,17 @@ import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
 import { ApiRequestError, getErrorMessage, logError } from "@/utils/errors";
+import {
+  applyDocumentTemplate as applyTemplate,
+  buildClientSnapshot as buildSnapshotFromClient,
+  buildDocumentFormData as buildFormData,
+  createDocumentPositionId as newId,
+  toNumberOrZero,
+  type DocumentFormData as FormData,
+  type EditorSeed,
+} from "@/features/documents/documentEditorModel";
 
-export type EditorSeed = {
-  id: string;
-  number: string | null;
-  date: string;
-  paymentTermsDays?: number;
-  dueDate?: string;
-  validUntil?: string;
-  vatRate: number;
-  isSmallBusiness?: boolean;
-  smallBusinessNote?: string | null;
-  introText: string;
-  footerText: string;
-  currency?: string;
-};
-
-type FormData = {
-  id: string;
-  number: string | null;
-  date: string;
-  paymentTermsDays?: number;
-  dueDate?: string;
-  validUntil?: string;
-  clientId: string;
-  clientName?: string;
-  clientCompanyName?: string | null;
-  clientContactPerson?: string | null;
-  clientEmail?: string | null;
-  clientPhone?: string | null;
-  clientVatId?: string | null;
-  clientAddress?: string | null;
-  positions: Position[];
-  introText: string;
-  footerText: string;
-  status: InvoiceStatus | OfferStatus;
-  vatRate: number;
-  isSmallBusiness?: boolean;
-  smallBusinessNote?: string | null;
-  currency?: string;
-  paymentDate?: string;
-  paidAt?: string | null;
-  canceledAt?: string | null;
-  offerId?: string;
-  projectId?: string;
-  isLocked?: boolean;
-  finalizedAt?: string | null;
-  sentAt?: string | null;
-  lastSentAt?: string | null;
-  lastSentTo?: string | null;
-  sentCount?: number;
-  sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
-  invoiceId?: string | null;
-};
-
-function toNumberOrZero(v: unknown): number {
-  const n = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
-}
-
-function newId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
-function applyTemplate(template: string, data: Record<string, string>) {
-  return template.replace(/\{(\w+)\}/g, (match, key) => data[key] ?? match);
-}
-
-function buildSnapshotFromClient(client?: Client | null) {
-  const companyName = client?.companyName ?? "";
-  const contactPerson = client?.contactPerson ?? "";
-  return {
-    clientName: companyName.trim() ? companyName : contactPerson,
-    clientCompanyName: companyName,
-    clientContactPerson: contactPerson,
-    clientEmail: client?.email ?? "",
-    clientPhone: null,
-    clientVatId: null,
-    clientAddress: client?.address ?? "",
-  };
-}
-
-function buildFormData(
-  seed: EditorSeed,
-  initial: Partial<FormData> | undefined,
-  isInvoice: boolean,
-  defaultCurrency?: string
-): FormData {
-  const base: FormData = {
-    id: seed.id,
-    number: seed.number ?? null,
-    date: seed.date,
-    paymentTermsDays: seed.paymentTermsDays ?? 14,
-    dueDate: seed.dueDate,
-    validUntil: seed.validUntil,
-    clientId: "",
-    clientName: "",
-    clientCompanyName: "",
-    clientContactPerson: "",
-    clientEmail: "",
-    clientPhone: null,
-    clientVatId: null,
-    clientAddress: "",
-    positions: [],
-    introText: seed.introText ?? "",
-    footerText: seed.footerText ?? "",
-    status: isInvoice ? InvoiceStatus.DRAFT : OfferStatus.DRAFT,
-    vatRate: seed.vatRate ?? 0,
-    isSmallBusiness: seed.isSmallBusiness ?? false,
-    smallBusinessNote: seed.smallBusinessNote ?? "",
-    currency: isInvoice ? undefined : defaultCurrency ?? "EUR",
-    paymentDate: undefined,
-    offerId: undefined,
-    projectId: undefined,
-    isLocked: false,
-    finalizedAt: null,
-    sentAt: null,
-    lastSentAt: null,
-    lastSentTo: null,
-    sentCount: 0,
-    sentVia: null,
-    invoiceId: null,
-  };
-
-  const merged = { ...base, ...(initial ?? {}) };
-
-  return {
-    ...merged,
-    clientId: merged.clientId ?? "",
-    clientName: merged.clientName ?? "",
-    clientCompanyName: merged.clientCompanyName ?? "",
-    clientContactPerson: merged.clientContactPerson ?? "",
-    clientEmail: merged.clientEmail ?? "",
-    clientPhone: merged.clientPhone ?? null,
-    clientVatId: merged.clientVatId ?? null,
-    clientAddress: merged.clientAddress ?? "",
-    positions: Array.isArray(merged.positions) ? (merged.positions as Position[]) : [],
-    introText: merged.introText ?? "",
-    footerText: merged.footerText ?? "",
-    vatRate: Number(merged.vatRate ?? 0),
-    paymentTermsDays: Number(merged.paymentTermsDays ?? 14),
-    isSmallBusiness: Boolean(merged.isSmallBusiness ?? false),
-    smallBusinessNote: merged.smallBusinessNote ?? "",
-    currency: isInvoice ? undefined : merged.currency ?? defaultCurrency ?? "EUR",
-  };
-}
+export type { EditorSeed } from "@/features/documents/documentEditorModel";
 
 export function DocumentEditor({
   type,
@@ -395,7 +259,7 @@ export function DocumentEditor({
       if (isInvoice) {
         await invoiceService.saveInvoice({
           id: data.id,
-          number: data.number,
+          number: data.number ?? "",
           offerId: data.offerId,
           clientId: data.clientId,
           clientName: data.clientName ?? "",
@@ -427,7 +291,7 @@ export function DocumentEditor({
       } else {
         await offerService.saveOffer({
           id: data.id,
-          number: data.number,
+          number: data.number ?? "",
           clientId: data.clientId,
           projectId: data.projectId,
           currency: data.currency ?? settings.currency ?? "EUR",
@@ -576,16 +440,16 @@ export function DocumentEditor({
     return true;
   };
 
-  const handleFinalizeInvoice = async (): Promise<FormData | null> => {
-    if (!isInvoice || readOnly || locked) return;
-    if (!validateFinalizeInvoice()) return;
+  const handleFinalizeInvoice = async (): Promise<import("@/types").Invoice | null> => {
+    if (!isInvoice || readOnly || locked) return null;
+    if (!validateFinalizeInvoice()) return null;
 
     const ok = await confirm({
       title: "Rechnung finalisieren",
       message:
         "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
     });
-    if (!ok) return;
+    if (!ok) return null;
 
     try {
       const updated = await invoiceService.finalizeInvoice(formData.id);
@@ -616,7 +480,7 @@ export function DocumentEditor({
     };
     setFormData(nextData);
     await onSaved();
-    return nextData;
+    return nextData as import("@/types").Invoice;
   };
 
   const applyOfferUpdate = async (patch: Partial<FormData>) => {
@@ -967,7 +831,7 @@ export function DocumentEditor({
           <>
             {showHeader && (
               <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-                <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                <AppButton variant="ghost" onClick={() => onClose()} aria-label="Zurück">
                   <ArrowLeft size={20} />
                 </AppButton>
                 <h2 className="text-lg font-semibold text-gray-900">Angebot erstellen</h2>
@@ -1266,7 +1130,7 @@ export function DocumentEditor({
             <div className="px-6 py-4 border-t bg-white flex justify-between gap-3">
               <AppButton
                 variant="secondary"
-                onClick={onClose}
+                onClick={() => onClose()}
                 className="w-full sm:w-40 justify-center"
               >
                 Zurück
@@ -1307,7 +1171,7 @@ export function DocumentEditor({
                     </div>
                   )}
                 </div>
-                <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
+                <AppButton variant="ghost" onClick={() => onClose()} aria-label="Zurück">
                   {isPageLayout ? <ArrowLeft size={20} /> : <X size={20} />}
                 </AppButton>
               </div>

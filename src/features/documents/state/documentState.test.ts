@@ -10,6 +10,7 @@ const baseInvoice: Invoice = {
   paymentTermsDays: 14,
   positions: [],
   vatRate: 0,
+  isSmallBusiness: false,
   introText: "",
   footerText: "",
   status: InvoiceStatus.DRAFT,

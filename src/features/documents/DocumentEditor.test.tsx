@@ -1,10 +1,9 @@
-import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, beforeEach, describe, it, expect } from "vitest";
 
 import { DocumentEditor } from "./DocumentEditor";
-import { ConfirmProvider, ToastProvider } from "@/ui/FeedbackProvider";
+import { renderWithProviders } from "@/test/renderWithProviders";
 import { InvoiceStatus } from "@/types";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 
@@ -16,6 +15,11 @@ const sendDocumentEmailMock = vi.fn();
 vi.mock("@/app/invoices/invoiceService", () => ({
   saveInvoice: (...args: unknown[]) => saveInvoiceMock(...args),
   getInvoice: (...args: unknown[]) => getInvoiceMock(...args),
+  listInvoices: vi.fn().mockResolvedValue([]),
+  buildDueDate: (startIso: string, days: number) => {
+    const due = new Date(new Date(startIso).getTime() + days * 86_400_000);
+    return due.toISOString().slice(0, 10);
+  },
 }));
 
 vi.mock("@/app/offers/offerService", () => ({
@@ -92,16 +96,22 @@ describe("DocumentEditor send email status", () => {
     sendDocumentEmailMock.mockResolvedValue({ ok: true });
     getInvoiceMock.mockResolvedValue({
       id: "inv-1",
+      number: "RE-0001",
       clientId: "client-1",
+      clientName: "Client AG",
+      clientEmail: "client@example.com",
+      date: "2025-01-01",
       positions: [],
+      vatRate: 19,
+      isSmallBusiness: false,
+      introText: "",
+      footerText: "",
       status: InvoiceStatus.SENT,
       paymentTermsDays: 14,
     });
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <ConfirmProvider>
+    renderWithProviders(
           <DocumentEditor
             type="invoice"
             seed={seed}
@@ -113,15 +123,17 @@ describe("DocumentEditor send email status", () => {
               id: "inv-1",
               clientId: "client-1",
               positions: [],
-              status: InvoiceStatus.DRAFT,
+              status: InvoiceStatus.ISSUED,
               paymentTermsDays: 14,
             }}
-          />
-        </ConfirmProvider>
-      </ToastProvider>
+          />,
+      { route: "/app/invoices/inv-1" }
     );
 
+    await user.click(screen.getByRole("button", { name: /mehr optionen/i }));
     await user.click(screen.getByRole("button", { name: /per e-mail senden/i }));
+    await user.type(screen.getByPlaceholderText("to@example.com"), "client@example.com");
+    await user.click(screen.getByRole("button", { name: /^senden$/i }));
 
     await waitFor(() => {
       expect(sendDocumentEmailMock).toHaveBeenCalled();
@@ -138,9 +150,7 @@ describe("DocumentEditor send email status", () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <ConfirmProvider>
+    renderWithProviders(
           <DocumentEditor
             type="invoice"
             seed={seed}
@@ -152,14 +162,16 @@ describe("DocumentEditor send email status", () => {
               id: "inv-1",
               clientId: "client-1",
               positions: [],
-              status: InvoiceStatus.DRAFT,
+              status: InvoiceStatus.ISSUED,
             }}
-          />
-        </ConfirmProvider>
-      </ToastProvider>
+          />,
+      { route: "/app/invoices/inv-1" }
     );
 
+    await user.click(screen.getByRole("button", { name: /mehr optionen/i }));
     await user.click(screen.getByRole("button", { name: /per e-mail senden/i }));
+    await user.type(screen.getByPlaceholderText("to@example.com"), "client@example.com");
+    await user.click(screen.getByRole("button", { name: /^senden$/i }));
 
     await waitFor(() => {
       expect(sendDocumentEmailMock).toHaveBeenCalled();
@@ -174,9 +186,7 @@ describe("DocumentEditor send email status", () => {
 
 
   it("is read-only when invoice is locked", async () => {
-    render(
-      <ToastProvider>
-        <ConfirmProvider>
+    renderWithProviders(
           <DocumentEditor
             type="invoice"
             seed={seed}
@@ -188,12 +198,11 @@ describe("DocumentEditor send email status", () => {
               id: "inv-1",
               clientId: "client-1",
               positions: [],
-              status: InvoiceStatus.DRAFT,
+              status: InvoiceStatus.ISSUED,
               isLocked: true,
             }}
-          />
-        </ConfirmProvider>
-      </ToastProvider>
+          />,
+      { route: "/app/invoices/inv-1" }
     );
 
     const numberInput = screen.getByLabelText("Nummer");
@@ -204,9 +213,7 @@ describe("DocumentEditor send email status", () => {
     sendDocumentEmailMock.mockResolvedValue({ ok: false, code: "EMAIL_NOT_CONFIGURED" });
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <ConfirmProvider>
+    renderWithProviders(
           <DocumentEditor
             type="invoice"
             seed={seed}
@@ -218,14 +225,16 @@ describe("DocumentEditor send email status", () => {
               id: "inv-1",
               clientId: "client-1",
               positions: [],
-              status: InvoiceStatus.DRAFT,
+              status: InvoiceStatus.ISSUED,
             }}
-          />
-        </ConfirmProvider>
-      </ToastProvider>
+          />,
+      { route: "/app/invoices/inv-1" }
     );
 
+    await user.click(screen.getByRole("button", { name: /mehr optionen/i }));
     await user.click(screen.getByRole("button", { name: /per e-mail senden/i }));
+    await user.type(screen.getByPlaceholderText("to@example.com"), "client@example.com");
+    await user.click(screen.getByRole("button", { name: /^senden$/i }));
 
     await waitFor(() => {
       expect(sendDocumentEmailMock).toHaveBeenCalled();

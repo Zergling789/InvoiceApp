@@ -10,15 +10,15 @@ export function AppBadge({
   color?: BadgeColor;
 }) {
   const colors: Record<BadgeColor, string> = {
-    gray: "bg-gray-100 text-gray-800",
-    green: "bg-green-100 text-green-800",
-    blue: "bg-blue-100 text-blue-800",
-    yellow: "bg-yellow-100 text-yellow-800",
-    red: "bg-red-100 text-red-800",
+    gray: "bg-black/[0.05] text-gray-600 dark:bg-white/10 dark:text-gray-300",
+    green: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    blue: "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+    yellow: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    red: "bg-red-500/10 text-red-700 dark:text-red-300",
   };
 
   return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[color]}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${colors[color]}`}>
       {children}
     </span>
   );

@@ -13,14 +13,17 @@ export function AppButton({
   ...props
 }: Props) {
   const base =
-    "min-h-[44px] px-4 py-2.5 rounded-md font-medium text-sm transition-colors flex items-center gap-2 " +
-    "disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500/60";
+    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold " +
+    "transition-[transform,background-color,color,border-color,box-shadow] duration-200 active:scale-[0.98] " +
+    "disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100";
 
   const variants: Record<ButtonVariant, string> = {
-    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
-    secondary: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50",
-    danger: "bg-red-50 text-red-600 hover:bg-red-100",
-    ghost: "text-gray-600 hover:bg-gray-100",
+    primary:
+      "bg-[var(--app-primary)] text-white shadow-[0_6px_18px_rgba(0,113,227,0.2)] hover:bg-[var(--app-primary-hover)] hover:shadow-[0_8px_22px_rgba(0,113,227,0.26)]",
+    secondary:
+      "border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] shadow-sm hover:bg-white/60 dark:hover:bg-white/10",
+    danger: "bg-red-500/10 text-red-600 hover:bg-red-500/15 dark:text-red-400",
+    ghost: "text-[var(--app-muted)] hover:bg-black/5 hover:text-[var(--app-text)] dark:hover:bg-white/10",
   };
 
   return (

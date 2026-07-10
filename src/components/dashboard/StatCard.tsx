@@ -4,9 +4,9 @@ import { AppCard } from "@/ui/AppCard";
 type StatCardTone = "default" | "warning" | "critical";
 
 const toneStyles: Record<StatCardTone, string> = {
-  default: "border-gray-200",
-  warning: "border-amber-200 bg-amber-50/40",
-  critical: "border-red-200 bg-red-50/40",
+  default: "",
+  warning: "border-amber-500/20",
+  critical: "border-red-500/20",
 };
 
 interface StatCardProps {
@@ -28,8 +28,8 @@ export function StatCard({
 }: StatCardProps) {
   const isSimpleValue = typeof value === "string" || typeof value === "number";
   return (
-    <AppCard className={`space-y-2 border ${toneStyles[tone]}`}>
-      <div className="text-xs uppercase tracking-wide text-gray-500">{title}</div>
+    <AppCard className={`min-h-44 space-y-3 p-5 sm:p-6 ${toneStyles[tone]}`}>
+      <div className="app-eyebrow">{title}</div>
       {isLoading ? (
         <div className="space-y-3 animate-pulse">
           <div className="h-8 w-32 rounded bg-gray-200" />
@@ -38,12 +38,12 @@ export function StatCard({
       ) : (
         <>
           {isSimpleValue ? (
-            <div className="text-3xl font-semibold text-gray-900">{value}</div>
+            <div className="text-3xl font-semibold tracking-[-0.04em] text-[var(--app-text)] lg:text-4xl">{value}</div>
           ) : (
-            <div className="text-gray-900">{value}</div>
+            <div className="text-[var(--app-text)]">{value}</div>
           )}
-          {subtitle && <div className="text-sm text-gray-600">{subtitle}</div>}
-          {meta && <div className="text-xs text-gray-500">{meta}</div>}
+          {subtitle && <div className="text-sm text-[var(--app-muted)]">{subtitle}</div>}
+          {meta && <div className="text-xs font-medium text-[var(--app-muted)]">{meta}</div>}
         </>
       )}
     </AppCard>

@@ -6,16 +6,8 @@ import type { Project } from "@/types";
 type DbProjectRow = Database["public"]["Tables"]["projects"]["Row"];
 type DbProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
 
-const PROJECT_FIELDS = [
-  "id",
-  "user_id",
-  "client_id",
-  "name",
-  "budget_type",
-  "hourly_rate",
-  "budget_total",
-  "status",
-] as const satisfies readonly (keyof DbProjectRow)[];
+const PROJECT_FIELDS =
+  "id,user_id,client_id,name,budget_type,hourly_rate,budget_total,status" as const;
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -29,7 +21,7 @@ export async function dbListProjects(): Promise<Project[]> {
 
   const { data, error } = await supabase
     .from("projects")
-    .select(PROJECT_FIELDS.join(","))
+    .select(PROJECT_FIELDS)
     .eq("user_id", uid)
     .order("created_at", { ascending: false });
 
@@ -39,10 +31,10 @@ export async function dbListProjects(): Promise<Project[]> {
     id: r.id,
     clientId: r.client_id,
     name: r.name,
-    budgetType: r.budget_type,
+    budgetType: r.budget_type as Project["budgetType"],
     hourlyRate: Number(r.hourly_rate ?? 0),
     budgetTotal: Number(r.budget_total ?? 0),
-    status: r.status,
+    status: r.status as Project["status"],
   }));
 }
 

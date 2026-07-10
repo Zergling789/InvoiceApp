@@ -27,6 +27,11 @@ const formatEventMeta = (eventType: string, meta: Record<string, unknown>) => {
   return "";
 };
 
+const asMetaRecord = (meta: ActivityEvent["meta"]): Record<string, unknown> =>
+  meta && typeof meta === "object" && !Array.isArray(meta)
+    ? (meta as Record<string, unknown>)
+    : {};
+
 export function ActivityTimeline({
   docType,
   docId,
@@ -72,7 +77,7 @@ export function ActivityTimeline({
       events.map((event) => ({
         ...event,
         label: EVENT_LABELS[event.event_type] ?? event.event_type,
-        metaText: formatEventMeta(event.event_type, event.meta ?? {}),
+        metaText: formatEventMeta(event.event_type, asMetaRecord(event.meta)),
       })),
     [events]
   );

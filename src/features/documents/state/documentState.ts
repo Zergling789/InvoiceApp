@@ -7,7 +7,7 @@ export type InvoicePhase = "draft" | "issued" | "sent" | "overdue" | "paid" | "c
 export type OfferPhase = "draft" | "sent" | "accepted" | "rejected" | "invoiced";
 export type DocumentPhase = InvoicePhase | OfferPhase;
 
-type InvoiceCapabilities = {
+export type InvoiceCapabilities = {
   canEdit: boolean;
   canFinalize: boolean;
   canSend: boolean;
@@ -16,14 +16,23 @@ type InvoiceCapabilities = {
   canMarkSent: boolean;
   canMarkPaid: boolean;
   canCancel: boolean;
+  canAccept: false;
+  canReject: false;
+  canConvertToInvoice: false;
 };
 
-type OfferCapabilities = {
+export type OfferCapabilities = {
   canEdit: boolean;
   canSend: boolean;
   canAccept: boolean;
   canReject: boolean;
   canConvertToInvoice: boolean;
+  canFinalize: false;
+  canSendReminder: false;
+  canSendDunning: false;
+  canMarkSent: false;
+  canMarkPaid: false;
+  canCancel: false;
 };
 
 const hasSentData = (value?: string | null) => Boolean(value && String(value).length > 0);
@@ -83,11 +92,26 @@ export const getOfferPhase = (offer: Offer): OfferPhase => {
   return "draft";
 };
 
-export const getDocumentCapabilities = (
+export function getDocumentCapabilities(
+  docType: "invoice",
+  doc: Invoice,
+  now?: Date
+): InvoiceCapabilities;
+export function getDocumentCapabilities(
+  docType: "offer",
+  doc: Offer,
+  now?: Date
+): OfferCapabilities;
+export function getDocumentCapabilities(
+  docType: DocType,
+  doc: Invoice | Offer,
+  now?: Date
+): InvoiceCapabilities | OfferCapabilities;
+export function getDocumentCapabilities(
   docType: DocType,
   doc: Invoice | Offer,
   now = new Date()
-): InvoiceCapabilities | OfferCapabilities => {
+): InvoiceCapabilities | OfferCapabilities {
   if (docType === "invoice") {
     const invoice = doc as Invoice;
     const phase = getInvoicePhase(invoice, now);
@@ -104,6 +128,9 @@ export const getDocumentCapabilities = (
       canMarkSent: phase === "issued",
       canMarkPaid: !paid && !canceled && ["issued", "sent", "overdue"].includes(phase),
       canCancel: !paid && !canceled && ["issued", "sent", "overdue"].includes(phase),
+      canAccept: false,
+      canReject: false,
+      canConvertToInvoice: false,
     };
   }
 
@@ -117,5 +144,11 @@ export const getDocumentCapabilities = (
     canAccept: phase === "sent",
     canReject: phase === "sent",
     canConvertToInvoice: phase === "accepted",
+    canFinalize: false,
+    canSendReminder: false,
+    canSendDunning: false,
+    canMarkSent: false,
+    canMarkPaid: false,
+    canCancel: false,
   };
-};
+}

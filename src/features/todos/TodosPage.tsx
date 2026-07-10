@@ -286,7 +286,7 @@ export default function TodosPage() {
     if (!settings) return "";
     const label = docType === "invoice" ? "Rechnung" : "Angebot";
     const template = settings.emailDefaultSubject?.trim() || `${label} {nummer}`;
-    return template.replace("{nummer}", docNumber);
+    return template.replace("{nummer}", docNumber ?? "");
   };
 
   const getDefaultMessage = () => {
@@ -509,7 +509,7 @@ export default function TodosPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link
-                    to={`/app/${card.type === "invoice" ? "invoices" : "offers"}/${card.id}`}
+                    to={`/app/offers/${card.id}`}
                     state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
                   >
                     <AppButton>Öffnen</AppButton>
@@ -589,7 +589,7 @@ export default function TodosPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link
-                    to={`/app/${card.type === "invoice" ? "invoices" : "offers"}/${card.id}`}
+                    to={`/app/offers/${card.id}`}
                     state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
                   >
                     <AppButton>Öffnen</AppButton>
