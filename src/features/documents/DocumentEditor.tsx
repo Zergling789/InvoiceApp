@@ -848,7 +848,7 @@ export function DocumentEditor({
         {showOfferWizard ? (
           <>
             {showHeader && (
-              <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
+              <div className="flex shrink-0 justify-between items-center px-6 py-4 border-b bg-white">
                 <AppButton variant="ghost" onClick={() => onClose()} aria-label="Zurück">
                   <ArrowLeft size={20} />
                 </AppButton>
@@ -859,7 +859,7 @@ export function DocumentEditor({
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto bg-gray-50">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-gray-50">
               <div className="px-6 pt-4 pb-3 border-b bg-white">
                 <div className="text-base font-semibold text-gray-700">Kundendaten eingeben</div>
               </div>
@@ -1070,13 +1070,24 @@ export function DocumentEditor({
                   )}
 
                   {!readOnly && (
-                    <AppButton
-                      variant="primary"
-                      onClick={addPosition}
-                      className="w-full sm:w-auto px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md"
-                    >
-                      <Plus size={18} /> Position hinzufügen
-                    </AppButton>
+                    <div className="flex w-full flex-col justify-center gap-2 sm:flex-row">
+                      <AppButton
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setShowAiDraftDialog(true)}
+                        disabled={disabled}
+                        className="w-full sm:w-auto"
+                      >
+                        <Sparkles size={17} /> Mit KI erstellen
+                      </AppButton>
+                      <AppButton
+                        type="button"
+                        onClick={addPosition}
+                        className="w-full sm:w-auto"
+                      >
+                        <Plus size={18} /> Position hinzufügen
+                      </AppButton>
+                    </div>
                   )}
                 </div>
 
@@ -1145,7 +1156,7 @@ export function DocumentEditor({
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t bg-white flex justify-between gap-3">
+            <div className="flex shrink-0 justify-between gap-3 border-t bg-white px-4 py-3 safe-bottom sm:px-6 sm:py-4">
               <AppButton
                 variant="secondary"
                 onClick={() => onClose()}
