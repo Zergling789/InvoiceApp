@@ -55,7 +55,7 @@ export default function OfferCreatePage() {
   };
 
   return (
-    <ModalSheet title="Neues Angebot" isOpen onClose={() => handleClose(false)}>
+    <ModalSheet title="Neues Angebot" isOpen onClose={() => handleClose(false)} contentMode="contained">
       <OfferForm
         onClose={handleClose}
         onDirtyChange={setIsDirty}

@@ -831,7 +831,7 @@ export function DocumentEditor({
         isPageLayout
           ? "min-h-screen-safe bg-gray-50"
           : isEmbeddedLayout
-          ? "bg-white flex flex-col min-h-0"
+          ? "flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white"
           : "fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4"
       }
     >
@@ -841,7 +841,7 @@ export function DocumentEditor({
           isPageLayout
             ? "bg-white min-h-screen-safe flex flex-col"
             : isEmbeddedLayout
-            ? "bg-white flex flex-col min-h-0"
+            ? `${showOfferWizard ? "grid grid-rows-[auto_minmax(0,1fr)_auto]" : "flex flex-col"} h-full min-h-0 flex-1 overflow-hidden bg-white`
             : `${showOfferWizard ? "grid grid-rows-[auto_minmax(0,1fr)_auto]" : "flex flex-col"} h-[100dvh] w-full max-w-4xl min-h-0 overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:h-[90dvh] sm:rounded-xl`
         }
       >

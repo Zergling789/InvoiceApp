@@ -10,6 +10,7 @@ type ModalSheetProps = {
   children: ReactNode;
   closeOnBackdrop?: boolean;
   showBackdrop?: boolean;
+  contentMode?: "scroll" | "contained";
 };
 
 export function ModalSheet({
@@ -19,6 +20,7 @@ export function ModalSheet({
   children,
   closeOnBackdrop = true,
   showBackdrop = true,
+  contentMode = "scroll",
 }: ModalSheetProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -47,14 +49,22 @@ export function ModalSheet({
           onClick={closeOnBackdrop ? onClose : undefined}
         />
       )}
-      <div className="relative z-10 flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-auto sm:max-h-[90dvh] sm:max-w-4xl sm:rounded-xl">
-        <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b">
+      <div className="relative z-10 flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[90dvh] sm:max-w-4xl sm:rounded-xl">
+        <div className="flex shrink-0 items-center gap-3 border-b px-4 py-4 sm:px-6">
           <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
             <ArrowLeft size={18} />
           </AppButton>
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        <div
+          className={
+            contentMode === "contained"
+              ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+              : "min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          }
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

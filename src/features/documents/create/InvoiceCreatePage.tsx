@@ -55,7 +55,7 @@ export default function InvoiceCreatePage() {
   };
 
   return (
-    <ModalSheet title="Neue Rechnung" isOpen onClose={handleClose}>
+    <ModalSheet title="Neue Rechnung" isOpen onClose={handleClose} contentMode="contained">
       <InvoiceForm
         onClose={handleClose}
         onDirtyChange={setIsDirty}
