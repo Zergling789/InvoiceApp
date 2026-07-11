@@ -25,6 +25,10 @@ const defaultSettings: UserSettings = {
   companyName: "",
   address: "",
   taxId: "",
+  sellerTaxNumber: "",
+  sellerVatId: "",
+  sellerCountry: "DE",
+  sellerStreet: "", sellerHouseNumber: "", sellerPostalCode: "", sellerCity: "", sellerElectronicAddress: "", sellerElectronicAddressScheme: "EM",
   defaultVatRate: 19,
   defaultPaymentTerms: 14,
   iban: "",
@@ -334,12 +338,16 @@ export default function SettingsView() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Steuernummer / USt-ID</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Steuernummer</label>
             <input
               className="w-full border rounded p-2"
-              value={settings.taxId}
-              onChange={(e) => setSettings({ ...settings, taxId: e.target.value })}
+              value={settings.sellerTaxNumber ?? settings.taxId}
+              onChange={(e) => setSettings({ ...settings, sellerTaxNumber: e.target.value, taxId: e.target.value })}
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">USt-ID (optional)</label>
+            <input className="w-full border rounded p-2" value={settings.sellerVatId ?? ""} onChange={(e) => setSettings({ ...settings, sellerVatId: e.target.value })} />
           </div>
 
           <div className="md:col-span-2">
@@ -351,6 +359,11 @@ export default function SettingsView() {
               onChange={(e) => setSettings({ ...settings, address: e.target.value })}
             />
           </div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Straße</label><input className="w-full border rounded p-2" value={settings.sellerStreet ?? ""} onChange={(e) => setSettings({ ...settings, sellerStreet: e.target.value })} /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Hausnummer</label><input className="w-full border rounded p-2" value={settings.sellerHouseNumber ?? ""} onChange={(e) => setSettings({ ...settings, sellerHouseNumber: e.target.value })} /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">PLZ</label><input className="w-full border rounded p-2" value={settings.sellerPostalCode ?? ""} onChange={(e) => setSettings({ ...settings, sellerPostalCode: e.target.value })} /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Ort</label><input className="w-full border rounded p-2" value={settings.sellerCity ?? ""} onChange={(e) => setSettings({ ...settings, sellerCity: e.target.value })} /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Elektronische Adresse</label><input type="email" className="w-full border rounded p-2" value={settings.sellerElectronicAddress ?? ""} onChange={(e) => setSettings({ ...settings, sellerElectronicAddress: e.target.value, sellerElectronicAddressScheme: "EM" })} placeholder="rechnung@unternehmen.de" /></div>
         </div>
 
         <div className="border-t pt-4 space-y-4">

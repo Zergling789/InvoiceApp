@@ -33,6 +33,23 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test tests/basic.spec.ts
 
+  einvoice-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - run: npm ci
+      - run: npm run test:einvoice
+      - run: npm run validate:kosit
+      - run: npm run validate:zugferd
+
   supabase-e2e:
     runs-on: ubuntu-latest
     env:

@@ -104,6 +104,10 @@ npm run build
 npm run test:ui
 ```
 
+### Aktuell unterstützter Rechnungsumfang
+
+FreelanceFlow begrenzt die Finalisierung derzeit technisch auf einfache inländische B2B-Rechnungen: Verkäufer, Geschäftskunde und Leistungsort müssen in Deutschland liegen, die Währung ist EUR. Unterstützt werden ausschließlich Regelsteuersatz 19 %, ermäßigter Steuersatz 7 % und die Kleinunternehmerregelung mit 0 %. Reverse Charge, Steuerbefreiungen, sonstige Nullsteuersätze, B2C, Fremdwährungen und internationale Sachverhalte werden blockiert. Jede Rechnung muss vor dem Ausstellen manuell geprüft werden; die Anwendung ersetzt keine steuerliche oder rechtliche Beratung.
+
 ### TEST PLAN (manuell)
 1. /app/documents öffnen → Angebot in der Liste klicken → Modal öffnet → schließen → zurück zur Liste.
 2. /app/documents öffnen → Rechnung in der Liste klicken → Modal öffnet → schließen → zurück zur Liste.

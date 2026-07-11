@@ -19,7 +19,7 @@ import { formatErrorToast } from "@/utils/errorMapping";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { calculateDocumentTotals, getTaxLabel } from "@/domain/rules/tax";
-import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
+import { downloadDocumentPdf, downloadInvoiceCii } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
 import { ApiRequestError, getErrorMessage, logError } from "@/utils/errors";
@@ -303,8 +303,18 @@ export function DocumentEditor({
           clientPhone: data.clientPhone ?? null,
           clientVatId: data.clientVatId ?? null,
           clientAddress: data.clientAddress ?? "",
+          clientStreet: data.clientStreet ?? null, clientHouseNumber: data.clientHouseNumber ?? null, clientPostalCode: data.clientPostalCode ?? null, clientCity: data.clientCity ?? null, clientElectronicAddress: data.clientElectronicAddress ?? null, clientElectronicAddressScheme: data.clientElectronicAddressScheme ?? "EM",
           projectId: data.projectId,
           date: data.date,
+          serviceDate: data.serviceDate,
+          servicePeriodStart: data.servicePeriodStart,
+          servicePeriodEnd: data.servicePeriodEnd,
+          sellerCountry: data.sellerCountry ?? "DE",
+          customerCountry: data.customerCountry ?? "DE",
+          customerType: data.customerType ?? "BUSINESS",
+          serviceCountry: data.serviceCountry ?? "DE",
+          currency: data.currency ?? "EUR",
+          buyerReference: data.buyerReference,
           paymentTermsDays: Number(data.paymentTermsDays ?? 14),
           positions: data.positions ?? [],
           vatRate: toNumberOrZero(data.vatRate),
@@ -452,8 +462,8 @@ export function DocumentEditor({
       toast.error("Bitte Absenderadresse in den Einstellungen ergänzen");
       return false;
     }
-    if (!settings.taxId?.trim()) {
-      toast.error("Bitte Steuernummer in den Einstellungen ergänzen");
+    if (!settings.sellerTaxNumber?.trim() && !settings.sellerVatId?.trim() && !settings.taxId?.trim()) {
+      toast.error("Bitte Steuernummer oder USt-ID in den Einstellungen ergänzen");
       return false;
     }
     if (!Number.isFinite(formData.vatRate)) {
@@ -495,6 +505,11 @@ export function DocumentEditor({
     return true;
   };
 
+  const handleDownloadCii = async () => {
+    try { await downloadInvoiceCii(formData.id); }
+    catch (error) { logError(error); toast.error(getErrorMessage(error, "CII-XML konnte nicht erstellt werden.")); }
+  };
+
   const handleFinalizeInvoice = async (): Promise<import("@/types").Invoice | null> => {
     if (!isInvoice || readOnly || locked) return null;
     if (!validateFinalizeInvoice()) return null;
@@ -502,7 +517,7 @@ export function DocumentEditor({
     const ok = await confirm({
       title: "Rechnung finalisieren",
       message:
-        "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+        "FreelanceFlow unterstützt derzeit ausschließlich einfache inländische B2B-Rechnungen für deutsche Unternehmen. Bitte prüfe die Rechnung vor dem Ausstellen. FreelanceFlow ersetzt keine steuerliche oder rechtliche Beratung.\n\nMit der Bestätigung bestätigst du, diesen Hinweis gelesen und die Rechnung manuell geprüft zu haben.",
     });
     if (!ok) return null;
 
@@ -638,6 +653,7 @@ export function DocumentEditor({
                   <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
                     <FileDown size={16} /> PDF herunterladen
                   </AppButton>
+                  {isInvoice && formData.status !== InvoiceStatus.DRAFT && <AppButton variant="secondary" onClick={() => void handleDownloadCii()}><FileDown size={16} /> CII-XML (Vorab)</AppButton>}
 
                   <AppButton
                     variant="secondary"
@@ -856,6 +872,7 @@ export function DocumentEditor({
                 <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
                   <FileDown size={16} /> PDF herunterladen
                 </AppButton>
+                {isInvoice && formData.status !== InvoiceStatus.DRAFT && <AppButton variant="secondary" onClick={() => void handleDownloadCii()}><FileDown size={16} /> CII-XML (Vorab)</AppButton>}
 
                 <AppButton
                   variant="secondary"
@@ -1502,6 +1519,7 @@ export function DocumentEditor({
                     </select>
                   </div>
                   {formData.serviceDate ? <div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-date">Leistungsdatum</label><input id="document-service-date" type="date" className="w-full border rounded p-2" value={formData.serviceDate} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, serviceDate: event.target.value })} /></div> : <><div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-start">Leistung von</label><input id="document-service-start" type="date" className="w-full border rounded p-2" value={formData.servicePeriodStart ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, servicePeriodStart: event.target.value })} /></div><div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-end">Leistung bis</label><input id="document-service-end" type="date" className="w-full border rounded p-2" value={formData.servicePeriodEnd ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, servicePeriodEnd: event.target.value })} /></div></>}
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-buyer-reference">Bestellnummer / Buyer Reference (optional)</label><input id="document-buyer-reference" className="w-full border rounded p-2" value={formData.buyerReference ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, buyerReference: event.target.value })} /></div>
                   {!isSmallBusiness && (
                     <div>
                       <label

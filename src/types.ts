@@ -5,6 +5,15 @@ export interface UserSettings {
   companyName: string;
   address: string;
   taxId: string;
+  sellerTaxNumber?: string;
+  sellerVatId?: string;
+  sellerCountry?: SupportedCountry;
+  sellerStreet?: string;
+  sellerHouseNumber?: string;
+  sellerPostalCode?: string;
+  sellerCity?: string;
+  sellerElectronicAddress?: string;
+  sellerElectronicAddressScheme?: string;
   defaultVatRate: number;
   defaultPaymentTerms: number;
   iban: string;
@@ -109,6 +118,9 @@ export type TaxCategory =
   | "SMALL_BUSINESS"
   | "REVERSE_CHARGE";
 
+export type CustomerType = "BUSINESS" | "PRIVATE";
+export type SupportedCountry = "DE";
+
 export enum OfferStatus {
   DRAFT = "DRAFT",
   SENT = "SENT",
@@ -158,11 +170,23 @@ export interface Invoice {
   clientPhone?: string | null;
   clientVatId?: string | null;
   clientAddress?: string | null;
+  clientStreet?: string | null;
+  clientHouseNumber?: string | null;
+  clientPostalCode?: string | null;
+  clientCity?: string | null;
+  clientElectronicAddress?: string | null;
+  clientElectronicAddressScheme?: string | null;
   projectId?: string;
   date: string;
   serviceDate?: string;
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
+  sellerCountry?: string;
+  customerCountry?: string;
+  customerType?: CustomerType;
+  serviceCountry?: string;
+  currency?: string;
+  buyerReference?: string;
   paymentTermsDays: number;
   dueDate?: string;
   positions: Position[];

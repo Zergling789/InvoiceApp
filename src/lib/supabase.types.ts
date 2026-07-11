@@ -227,8 +227,15 @@ export type Database = {
       invoices: {
         Row: {
           branding_snapshot: Json | null
+          buyer_reference: string | null
           canceled_at: string | null
           client_address: string | null
+          client_street: string | null
+          client_house_number: string | null
+          client_postal_code: string | null
+          client_city: string | null
+          client_electronic_address: string | null
+          client_electronic_address_scheme: string | null
           client_company_name: string | null
           client_contact_person: string | null
           client_email: string | null
@@ -263,6 +270,11 @@ export type Database = {
           service_date: string | null
           service_period_end: string | null
           service_period_start: string | null
+          seller_country: string
+          customer_country: string
+          customer_type: string
+          service_country: string
+          currency: string
           small_business_note: string | null
           status: string
           updated_at: string
@@ -271,8 +283,15 @@ export type Database = {
         }
         Insert: {
           branding_snapshot?: Json | null
+          buyer_reference?: string | null
           canceled_at?: string | null
           client_address?: string | null
+          client_street?: string | null
+          client_house_number?: string | null
+          client_postal_code?: string | null
+          client_city?: string | null
+          client_electronic_address?: string | null
+          client_electronic_address_scheme?: string | null
           client_company_name?: string | null
           client_contact_person?: string | null
           client_email?: string | null
@@ -307,6 +326,11 @@ export type Database = {
           service_date?: string | null
           service_period_end?: string | null
           service_period_start?: string | null
+          seller_country?: string
+          customer_country?: string
+          customer_type?: string
+          service_country?: string
+          currency?: string
           small_business_note?: string | null
           status?: string
           updated_at?: string
@@ -315,8 +339,15 @@ export type Database = {
         }
         Update: {
           branding_snapshot?: Json | null
+          buyer_reference?: string | null
           canceled_at?: string | null
           client_address?: string | null
+          client_street?: string | null
+          client_house_number?: string | null
+          client_postal_code?: string | null
+          client_city?: string | null
+          client_electronic_address?: string | null
+          client_electronic_address_scheme?: string | null
           client_company_name?: string | null
           client_contact_person?: string | null
           client_email?: string | null
@@ -351,6 +382,11 @@ export type Database = {
           service_date?: string | null
           service_period_end?: string | null
           service_period_start?: string | null
+          seller_country?: string
+          customer_country?: string
+          customer_type?: string
+          service_country?: string
+          currency?: string
           small_business_note?: string | null
           status?: string
           updated_at?: string
@@ -650,6 +686,15 @@ export type Database = {
           primary_color: string
           small_business_note: string | null
           tax_id: string
+          seller_tax_number: string | null
+          seller_vat_id: string | null
+          seller_country: string
+          seller_street: string | null
+          seller_house_number: string | null
+          seller_postal_code: string | null
+          seller_city: string | null
+          seller_electronic_address: string | null
+          seller_electronic_address_scheme: string
           template_id: string
           updated_at: string
           user_id: string
@@ -684,6 +729,15 @@ export type Database = {
           primary_color?: string
           small_business_note?: string | null
           tax_id?: string
+          seller_tax_number?: string | null
+          seller_vat_id?: string | null
+          seller_country?: string
+          seller_street?: string | null
+          seller_house_number?: string | null
+          seller_postal_code?: string | null
+          seller_city?: string | null
+          seller_electronic_address?: string | null
+          seller_electronic_address_scheme?: string
           template_id?: string
           updated_at?: string
           user_id: string
@@ -718,6 +772,15 @@ export type Database = {
           primary_color?: string
           small_business_note?: string | null
           tax_id?: string
+          seller_tax_number?: string | null
+          seller_vat_id?: string | null
+          seller_country?: string
+          seller_street?: string | null
+          seller_house_number?: string | null
+          seller_postal_code?: string | null
+          seller_city?: string | null
+          seller_electronic_address?: string | null
+          seller_electronic_address_scheme?: string
           template_id?: string
           updated_at?: string
           user_id?: string
@@ -1117,4 +1180,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

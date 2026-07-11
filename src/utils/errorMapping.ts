@@ -49,6 +49,12 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Kleinunternehmerregelung und Positionssteuern widersprechen sich.";
     case "UNSUPPORTED_TAX_CASE":
       return "Dieser Steuerfall wird derzeit nicht unterstützt. Reverse Charge und Auslandssachverhalte bitte steuerlich prüfen.";
+    case "UNSUPPORTED_MARKET_SCOPE":
+      return "Unterstützt werden derzeit nur inländische B2B-Rechnungen deutscher Unternehmen in EUR.";
+    case "SELLER_TAX_IDENTIFICATION_REQUIRED":
+      return "Bitte hinterlege in den Einstellungen eine Steuernummer oder USt-ID.";
+    case "CII_PREFLIGHT_FAILED":
+      return "Die Rechnung enthält noch unvollständige oder nicht unterstützte E-Rechnungsdaten.";
     case "UNIQUE_VIOLATION":
       return "Ein Eintrag mit diesen Daten existiert bereits.";
     case "FOREIGN_KEY_VIOLATION":

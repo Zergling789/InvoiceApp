@@ -207,6 +207,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
           ${isInvoice && doc.serviceDate ? `<div class="meta-line">Leistungsdatum: ${escapeHtml(formatDate(doc.serviceDate, settings.locale ?? "de-DE"))}</div>` : ""}
           ${isInvoice && doc.servicePeriodStart && doc.servicePeriodEnd ? `<div class="meta-line">Leistungszeitraum: ${escapeHtml(formatDate(doc.servicePeriodStart, settings.locale ?? "de-DE"))} – ${escapeHtml(formatDate(doc.servicePeriodEnd, settings.locale ?? "de-DE"))}</div>` : ""}
           ${isInvoice && doc.dueDate ? `<div class="meta-line">Fällig: ${escapeHtml(formatDate(doc.dueDate, settings.locale ?? "de-DE"))}</div>` : ""}
+          ${isInvoice && doc.buyerReference ? `<div class="meta-line">Bestellnummer / Buyer Reference: ${escapeHtml(doc.buyerReference)}</div>` : ""}
           ${!isInvoice && doc.validUntil ? `<div class="meta-line">Gültig bis: ${escapeHtml(formatDate(doc.validUntil, settings.locale ?? "de-DE"))}</div>` : ""}
         </div>
       </div>
@@ -290,9 +291,10 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
           isInvoice
             ? `<div class="bank">
                 <div><strong>Bankverbindung</strong>${escapeHtml(settings.bankName ?? "")}</div>
-                <div style="text-align: right;"><strong>Steuer-Nr:</strong> ${escapeHtml(settings.taxId ?? "")}</div>
+                <div style="text-align: right;"><strong>Steuer-Nr:</strong> ${escapeHtml(settings.sellerTaxNumber ?? settings.taxId ?? "")}</div>
                 <div><strong>IBAN:</strong> ${escapeHtml(settings.iban ?? "")}</div>
                 <div style="text-align: right;"><strong>BIC:</strong> ${escapeHtml(settings.bic ?? "")}</div>
+                ${settings.sellerVatId ? `<div style="text-align: right;"><strong>USt-ID:</strong> ${escapeHtml(settings.sellerVatId)}</div>` : ""}
               </div>
               <div class="muted" style="margin-top: 6px;">Bitte geben Sie bei der Zahlung die Rechnungsnummer an.</div>`
             : ""

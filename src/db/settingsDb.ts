@@ -8,7 +8,7 @@ type DbSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
 type DbSettingsInsert = Database["public"]["Tables"]["user_settings"]["Insert"];
 
 const SETTINGS_FIELDS =
-  "user_id,name,company_name,address,tax_id,default_vat_rate,default_payment_terms,payment_terms_days,iban,bic,bank_name,email,email_default_subject,email_default_text,is_small_business,small_business_note,logo_url,primary_color,template_id,locale,currency,prefix_invoice,prefix_offer,number_padding,invoice_number_prefix,invoice_number_next,invoice_number_padding,invoice_number_include_year,footer_text,default_sender_identity_id,created_at,updated_at" as const;
+  "user_id,name,company_name,address,tax_id,seller_tax_number,seller_vat_id,seller_country,seller_street,seller_house_number,seller_postal_code,seller_city,seller_electronic_address,seller_electronic_address_scheme,default_vat_rate,default_payment_terms,payment_terms_days,iban,bic,bank_name,email,email_default_subject,email_default_text,is_small_business,small_business_note,logo_url,primary_color,template_id,locale,currency,prefix_invoice,prefix_offer,number_padding,invoice_number_prefix,invoice_number_next,invoice_number_padding,invoice_number_include_year,footer_text,default_sender_identity_id,created_at,updated_at" as const;
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -37,6 +37,8 @@ export async function dbGetSettings(): Promise<UserSettings> {
       company_name: "",
       address: "",
       tax_id: "",
+      seller_tax_number: "", seller_vat_id: "", seller_country: "DE",
+      seller_street: "", seller_house_number: "", seller_postal_code: "", seller_city: "", seller_electronic_address: "", seller_electronic_address_scheme: "EM",
       default_vat_rate: 19,
       default_payment_terms: 14,
       payment_terms_days: 14,
@@ -74,6 +76,8 @@ export async function dbGetSettings(): Promise<UserSettings> {
       companyName: "",
       address: "",
       taxId: "",
+      sellerTaxNumber: "", sellerVatId: "", sellerCountry: "DE",
+      sellerStreet: "", sellerHouseNumber: "", sellerPostalCode: "", sellerCity: "", sellerElectronicAddress: "", sellerElectronicAddressScheme: "EM",
       defaultVatRate: 19,
       defaultPaymentTerms: 14,
       iban: "",
@@ -106,6 +110,10 @@ export async function dbGetSettings(): Promise<UserSettings> {
     companyName: row.company_name ?? "",
     address: row.address ?? "",
     taxId: row.tax_id ?? "",
+    sellerTaxNumber: row.seller_tax_number ?? row.tax_id ?? "",
+    sellerVatId: row.seller_vat_id ?? "",
+    sellerCountry: "DE",
+    sellerStreet: row.seller_street ?? "", sellerHouseNumber: row.seller_house_number ?? "", sellerPostalCode: row.seller_postal_code ?? "", sellerCity: row.seller_city ?? "", sellerElectronicAddress: row.seller_electronic_address ?? "", sellerElectronicAddressScheme: row.seller_electronic_address_scheme ?? "EM",
     defaultVatRate: Number(row.default_vat_rate ?? 19),
     defaultPaymentTerms: Number(row.payment_terms_days ?? row.default_payment_terms ?? 14),
     iban: row.iban ?? "",
@@ -143,6 +151,10 @@ export async function dbSaveSettings(s: UserSettings): Promise<void> {
     company_name: s.companyName ?? "",
     address: s.address ?? "",
     tax_id: s.taxId ?? "",
+    seller_tax_number: s.sellerTaxNumber ?? s.taxId ?? "",
+    seller_vat_id: s.sellerVatId ?? "",
+    seller_country: s.sellerCountry ?? "DE",
+    seller_street: s.sellerStreet || null, seller_house_number: s.sellerHouseNumber || null, seller_postal_code: s.sellerPostalCode || null, seller_city: s.sellerCity || null, seller_electronic_address: s.sellerElectronicAddress || null, seller_electronic_address_scheme: s.sellerElectronicAddressScheme || "EM",
     default_vat_rate: Number(s.defaultVatRate ?? 19),
     default_payment_terms: paymentTermsDays,
     payment_terms_days: paymentTermsDays,

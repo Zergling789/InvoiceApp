@@ -8,7 +8,7 @@ type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
 type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
 
 const INVOICE_FIELDS =
-  "id,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,project_id,date,invoice_date,service_date,service_period_start,service_period_end,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
+  "id,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,client_street,client_house_number,client_postal_code,client_city,client_electronic_address,client_electronic_address_scheme,project_id,date,invoice_date,service_date,service_period_start,service_period_end,seller_country,customer_country,customer_type,service_country,currency,buyer_reference,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
 
 const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -79,11 +79,13 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     clientPhone: r.client_phone ?? null,
     clientVatId: r.client_vat_id ?? null,
     clientAddress: r.client_address ?? null,
+    clientStreet: r.client_street, clientHouseNumber: r.client_house_number, clientPostalCode: r.client_postal_code, clientCity: r.client_city, clientElectronicAddress: r.client_electronic_address, clientElectronicAddressScheme: r.client_electronic_address_scheme,
     projectId: r.project_id ?? undefined,
     date: r.invoice_date ?? r.date,
     serviceDate: r.service_date ?? undefined,
     servicePeriodStart: r.service_period_start ?? undefined,
     servicePeriodEnd: r.service_period_end ?? undefined,
+    sellerCountry: r.seller_country ?? "DE", customerCountry: r.customer_country ?? "DE", customerType: (r.customer_type === "PRIVATE" ? "PRIVATE" : "BUSINESS"), serviceCountry: r.service_country ?? "DE", currency: r.currency ?? "EUR", buyerReference: r.buyer_reference ?? undefined,
     paymentTermsDays: Number(r.payment_terms_days ?? 14),
     dueDate: r.due_date ?? "",
     paymentDate: r.payment_date ?? undefined,
@@ -132,11 +134,13 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     clientPhone: data.client_phone ?? null,
     clientVatId: data.client_vat_id ?? null,
     clientAddress: data.client_address ?? null,
+    clientStreet: data.client_street, clientHouseNumber: data.client_house_number, clientPostalCode: data.client_postal_code, clientCity: data.client_city, clientElectronicAddress: data.client_electronic_address, clientElectronicAddressScheme: data.client_electronic_address_scheme,
     projectId: data.project_id ?? undefined,
     date: data.invoice_date ?? data.date,
     serviceDate: data.service_date ?? undefined,
     servicePeriodStart: data.service_period_start ?? undefined,
     servicePeriodEnd: data.service_period_end ?? undefined,
+    sellerCountry: data.seller_country ?? "DE", customerCountry: data.customer_country ?? "DE", customerType: (data.customer_type === "PRIVATE" ? "PRIVATE" : "BUSINESS"), serviceCountry: data.service_country ?? "DE", currency: data.currency ?? "EUR", buyerReference: data.buyer_reference ?? undefined,
     paymentTermsDays: Number(data.payment_terms_days ?? 14),
     dueDate: data.due_date ?? "",
     paymentDate: data.payment_date ?? undefined,
@@ -179,6 +183,7 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     client_phone: isDraft ? inv.clientPhone ?? null : undefined,
     client_vat_id: isDraft ? inv.clientVatId ?? null : undefined,
     client_address: isDraft ? inv.clientAddress ?? null : undefined,
+    client_street: isDraft ? inv.clientStreet ?? null : undefined, client_house_number: isDraft ? inv.clientHouseNumber ?? null : undefined, client_postal_code: isDraft ? inv.clientPostalCode ?? null : undefined, client_city: isDraft ? inv.clientCity ?? null : undefined, client_electronic_address: isDraft ? inv.clientElectronicAddress ?? null : undefined, client_electronic_address_scheme: isDraft ? inv.clientElectronicAddressScheme ?? "EM" : undefined,
     project_id: inv.projectId ?? null,
 
     date: inv.date,
@@ -186,6 +191,7 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
     service_date: inv.serviceDate || null,
     service_period_start: inv.servicePeriodStart || null,
     service_period_end: inv.servicePeriodEnd || null,
+    seller_country: inv.sellerCountry, customer_country: inv.customerCountry, customer_type: inv.customerType, service_country: inv.serviceCountry, currency: inv.currency, buyer_reference: inv.buyerReference || null,
     payment_terms_days: Number(inv.paymentTermsDays ?? 14),
     due_date: inv.dueDate || calcDueDate(inv.date, Number(inv.paymentTermsDays ?? 14)),
     payment_date: inv.paymentDate ?? null,
@@ -194,8 +200,8 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
 
     positions: (inv.positions ?? []) as unknown as Database["public"]["Tables"]["invoices"]["Insert"]["positions"],
 
-    intro_text: (inv as any).introText ?? "",
-    footer_text: (inv as any).footerText ?? "",
+    intro_text: inv.introText ?? "",
+    footer_text: inv.footerText ?? "",
 
     vat_rate: Number(inv.vatRate ?? 0),
     is_small_business: Boolean(inv.isSmallBusiness ?? false),

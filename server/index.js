@@ -6,6 +6,8 @@ import nodemailer from "nodemailer";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
+import { buildCanonicalInvoice, canonicalInvoiceToRenderPayload } from "./einvoice/canonicalInvoice.js";
+import { serializeCanonicalInvoiceToCii } from "./einvoice/ciiSerializer.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
 import {
@@ -662,6 +664,16 @@ const normalizeDbError = (err) => {
         return { code: mappedCode, message: "Kundendaten fehlen für die Finalisierung.", httpStatus: 400 };
       case "POSITIONS_REQUIRED":
         return { code: mappedCode, message: "Bitte mindestens eine Position hinzufügen.", httpStatus: 400 };
+      case "SERVICE_DATE_REQUIRED":
+        return { code: mappedCode, message: "Bitte genau ein Leistungsdatum oder einen vollständigen Leistungszeitraum angeben.", httpStatus: 400 };
+      case "SERVICE_PERIOD_INVALID":
+        return { code: mappedCode, message: "Der Leistungszeitraum ist ungültig.", httpStatus: 400 };
+      case "UNSUPPORTED_MARKET_SCOPE":
+        return { code: mappedCode, message: "Unterstützt werden derzeit nur inländische B2B-Rechnungen deutscher Unternehmen in EUR.", httpStatus: 422 };
+      case "UNSUPPORTED_TAX_CASE":
+        return { code: mappedCode, message: "Dieser Steuerfall wird derzeit nicht unterstützt.", httpStatus: 422 };
+      case "SELLER_TAX_IDENTIFICATION_REQUIRED":
+        return { code: mappedCode, message: "Bitte Steuernummer oder USt-ID hinterlegen.", httpStatus: 400 };
       case "UNIQUE_VIOLATION":
         return { code: mappedCode, message: "Ein Eintrag mit diesen Daten existiert bereits.", httpStatus: 409 };
       case "FOREIGN_KEY_VIOLATION":
@@ -702,6 +714,9 @@ const normalizeDbError = (err) => {
       if (upperMessage.includes("CLIENT_REQUIRED")) return mapKnownCode("CLIENT_REQUIRED");
       if (upperMessage.includes("CLIENT_SNAPSHOT_MISSING")) return mapKnownCode("CLIENT_SNAPSHOT_MISSING");
       if (upperMessage.includes("POSITIONS_REQUIRED")) return mapKnownCode("POSITIONS_REQUIRED");
+      for (const known of ["SERVICE_DATE_REQUIRED", "SERVICE_PERIOD_INVALID", "UNSUPPORTED_MARKET_SCOPE", "UNSUPPORTED_TAX_CASE", "SELLER_TAX_IDENTIFICATION_REQUIRED"]) {
+        if (upperMessage.includes(known)) return mapKnownCode(known);
+      }
       return {
         code: "DB_ERROR",
         message: message || "Datenbankfehler.",
@@ -800,11 +815,14 @@ const mapInvoiceRow = (row = {}) => ({
   clientPhone: row.client_phone ?? "",
   clientVatId: row.client_vat_id ?? "",
   clientAddress: row.client_address ?? "",
+  clientStreet: row.client_street ?? "", clientHouseNumber: row.client_house_number ?? "", clientPostalCode: row.client_postal_code ?? "", clientCity: row.client_city ?? "", clientElectronicAddress: row.client_electronic_address ?? "", clientElectronicAddressScheme: row.client_electronic_address_scheme ?? "EM",
   projectId: row.project_id ?? undefined,
   date: row.invoice_date ?? row.date,
   serviceDate: row.service_date ?? "",
   servicePeriodStart: row.service_period_start ?? "",
   servicePeriodEnd: row.service_period_end ?? "",
+  buyerReference: row.buyer_reference ?? "",
+  currency: row.currency ?? "EUR",
   dueDate: row.due_date ?? "",
   paymentTermsDays: row.payment_terms_days ?? 14,
   positions: row.positions ?? [],
@@ -832,6 +850,9 @@ const mapSettingsRow = (row = {}) => ({
   companyName: row.company_name ?? "",
   address: row.address ?? "",
   taxId: row.tax_id ?? "",
+  sellerTaxNumber: row.seller_tax_number ?? row.tax_id ?? "",
+  sellerVatId: row.seller_vat_id ?? "",
+  sellerStreet: row.seller_street ?? "", sellerHouseNumber: row.seller_house_number ?? "", sellerPostalCode: row.seller_postal_code ?? "", sellerCity: row.seller_city ?? "", sellerElectronicAddress: row.seller_electronic_address ?? "", sellerElectronicAddressScheme: row.seller_electronic_address_scheme ?? "EM",
   iban: row.iban ?? "",
   bic: row.bic ?? "",
   bankName: row.bank_name ?? "",
@@ -909,7 +930,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, project_id, date, invoice_date, service_date, service_period_start, service_period_end, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot"
+    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db
@@ -937,7 +958,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 
   const { data: settingsRow } = await db
     .from("user_settings")
-    .select("company_name, address, tax_id, iban, bic, bank_name, footer_text, logo_url, primary_color, template_id, locale, currency")
+    .select("company_name, address, tax_id, seller_tax_number, seller_vat_id, seller_street, seller_house_number, seller_postal_code, seller_city, seller_electronic_address, seller_electronic_address_scheme, iban, bic, bank_name, footer_text, logo_url, primary_color, template_id, locale, currency")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -980,12 +1001,10 @@ const createPdfBufferFromPayload = async (type, payload, options = {}) => {
   const requestId = options.requestId ?? null;
   const source = options.source ?? "unknown";
   console.info("[pdf_generate_attempt]", { requestId, source, type });
-  const html = renderDocumentHtml({
-    type,
-    doc: payload?.doc ?? {},
-    settings: payload?.settings ?? {},
-    client: payload?.client ?? {},
-  });
+  const renderPayload = type === "invoice"
+    ? canonicalInvoiceToRenderPayload(buildCanonicalInvoice(payload ?? {}), payload ?? {})
+    : { doc: payload?.doc ?? {}, settings: payload?.settings ?? {}, client: payload?.client ?? {} };
+  const html = renderDocumentHtml({ type, ...renderPayload });
 
   if (process.env.PDF_TEST_MODE === "1") {
     return Buffer.from(html, "utf8");
@@ -1136,6 +1155,24 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
     const code = err?.code || "pdf_generation_failed";
     console.error("PDF generation failed", err);
     return sendError(res, status, code, "PDF generation failed.", req);
+  }
+});
+
+app.post("/api/einvoice/cii", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`einvoice_user_${req.user.id}`, 60);
+    const docId = req.body?.docId ?? null;
+    if (!docId) return sendError(res, 400, "VALIDATION_ERROR", "Missing required field: docId", req);
+    const payload = await loadDocumentPayloadFromDb({ type: "invoice", docId, userId: req.user.id });
+    const invoice = buildCanonicalInvoice(payload);
+    const cii = serializeCanonicalInvoiceToCii(invoice).replace("urn:factur-x.eu:1p0:en16931", "urn:cen.eu:en16931:2017");
+    const filename = `${sanitizeFilename(invoice.invoiceNumber || docId)}.xml`;
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.status(200).send(cii);
+  } catch (err) {
+    console.error("CII generation failed", err);
+    return sendError(res, err?.status || 500, err?.code || "CII_GENERATION_FAILED", err?.code === "CII_PREFLIGHT_FAILED" ? "Die Rechnung enthält noch unvollständige oder nicht unterstützte E-Rechnungsdaten." : "CII-XML konnte nicht erstellt werden.", req, { extra: !IS_PROD && err?.issues ? { issues: err.issues } : undefined });
   }
 });
 
@@ -2043,6 +2080,8 @@ export {
   app,
   loadDocumentPayloadFromDb,
   createPdfBufferFromPayload,
+  buildCanonicalInvoice,
+  serializeCanonicalInvoiceToCii,
   createPdfAttachment,
   hashPayload,
   buildPdfFilename,

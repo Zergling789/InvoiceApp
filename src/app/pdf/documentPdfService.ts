@@ -42,3 +42,16 @@ export async function downloadDocumentPdf(payload: PdfPayload) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+export async function downloadInvoiceCii(docId: string) {
+  const res = await apiFetch("/api/einvoice/cii", { method: "POST", body: JSON.stringify({ docId }) }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new ApiRequestError(err.message || "CII-XML konnte nicht erstellt werden.", res.status, err.code);
+  }
+  const blob = await res.blob();
+  const filename = filenameFromHeader(res.headers.get("content-disposition")) || `rechnung-${docId}.xml`;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+}

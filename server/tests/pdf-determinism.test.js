@@ -173,3 +173,15 @@ test("PDF renderer prints service period and mixed position taxes", () => {
   assert.match(html, /Steuer<\/th>/);
   assert.match(html, /226,00/);
 });
+
+test("PDF renderer prints buyer reference and separate seller tax identifiers", () => {
+  const html = renderDocumentHtml({
+    type: "invoice",
+    doc: { number: "RE-43", date: "2026-07-11", buyerReference: "PO-4711", positions: [] },
+    settings: { sellerTaxNumber: "12/345/67890", sellerVatId: "DE123456789" },
+    client: {},
+  });
+  assert.match(html, /PO-4711/);
+  assert.match(html, /12\/345\/67890/);
+  assert.match(html, /DE123456789/);
+});

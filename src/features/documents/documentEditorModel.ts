@@ -8,6 +8,11 @@ export type EditorSeed = {
   serviceDate?: string;
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
+  sellerCountry?: string;
+  customerCountry?: string;
+  customerType?: "BUSINESS" | "PRIVATE";
+  serviceCountry?: string;
+  buyerReference?: string;
   paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
@@ -26,6 +31,11 @@ export type DocumentFormData = {
   serviceDate?: string;
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
+  sellerCountry?: string;
+  customerCountry?: string;
+  customerType?: "BUSINESS" | "PRIVATE";
+  serviceCountry?: string;
+  buyerReference?: string;
   paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
@@ -37,6 +47,7 @@ export type DocumentFormData = {
   clientPhone?: string | null;
   clientVatId?: string | null;
   clientAddress?: string | null;
+  clientStreet?: string | null; clientHouseNumber?: string | null; clientPostalCode?: string | null; clientCity?: string | null; clientElectronicAddress?: string | null; clientElectronicAddressScheme?: string | null;
   positions: Position[];
   introText: string;
   footerText: string;
@@ -92,6 +103,7 @@ export function buildClientSnapshot(client?: Client | null) {
     clientPhone: null,
     clientVatId: null,
     clientAddress: client?.address ?? "",
+    clientStreet: client?.street ?? "", clientHouseNumber: client?.houseNumber ?? "", clientPostalCode: client?.postalCode ?? "", clientCity: client?.city ?? "", clientElectronicAddress: client?.invoiceEmail || client?.email || "", clientElectronicAddressScheme: "EM",
   };
 }
 
@@ -108,6 +120,7 @@ export function buildDocumentFormData(
     serviceDate: seed.serviceDate ?? seed.date,
     servicePeriodStart: seed.servicePeriodStart,
     servicePeriodEnd: seed.servicePeriodEnd,
+    sellerCountry: "DE", customerCountry: "DE", customerType: "BUSINESS", serviceCountry: "DE", buyerReference: "",
     paymentTermsDays: seed.paymentTermsDays ?? 14,
     dueDate: seed.dueDate,
     validUntil: seed.validUntil,
@@ -126,7 +139,7 @@ export function buildDocumentFormData(
     vatRate: seed.vatRate ?? 0,
     isSmallBusiness: seed.isSmallBusiness ?? false,
     smallBusinessNote: seed.smallBusinessNote ?? "",
-    currency: isInvoice ? undefined : defaultCurrency ?? "EUR",
+    currency: defaultCurrency ?? "EUR",
     sentCount: 0,
     isLocked: false,
     finalizedAt: null,
@@ -155,6 +168,6 @@ export function buildDocumentFormData(
     paymentTermsDays: Number(merged.paymentTermsDays ?? 14),
     isSmallBusiness: Boolean(merged.isSmallBusiness ?? false),
     smallBusinessNote: merged.smallBusinessNote ?? "",
-    currency: isInvoice ? undefined : merged.currency ?? defaultCurrency ?? "EUR",
+    currency: merged.currency ?? defaultCurrency ?? "EUR",
   };
 }
