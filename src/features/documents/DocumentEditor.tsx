@@ -18,13 +18,14 @@ import { formatErrorToast } from "@/utils/errorMapping";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
+import { calculateDocumentTotals, getTaxLabel } from "@/domain/rules/tax";
 import { downloadDocumentPdf } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
 import { ApiRequestError, getErrorMessage, logError } from "@/utils/errors";
 import {
   applyDocumentTemplate as applyTemplate,
+  applyDefaultTaxToPositions,
   buildClientSnapshot as buildSnapshotFromClient,
   buildDocumentFormData as buildFormData,
   createDocumentPositionId as newId,
@@ -55,6 +56,7 @@ export function DocumentEditor({
   disableOfferWizard = false,
   showHeader = true,
   useCreateComposer = false,
+  composerEditing = false,
   onDirtyChange,
 }: {
   type: "offer" | "invoice";
@@ -73,6 +75,7 @@ export function DocumentEditor({
   disableOfferWizard?: boolean;
   showHeader?: boolean;
   useCreateComposer?: boolean;
+  composerEditing?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const isInvoice = type === "invoice";
@@ -209,7 +212,7 @@ export function DocumentEditor({
       ...prev,
       positions: [
         ...(prev.positions ?? []),
-        { id: newId(), description: "", quantity: 1, unit: "Std", price: 0 },
+        { id: newId(), description: "", quantity: 1, unit: "Std", price: 0, taxCategory: prev.isSmallBusiness ? "SMALL_BUSINESS" : Number(prev.vatRate) === 7 ? "REDUCED" : Number(prev.vatRate) === 0 ? "ZERO" : "STANDARD", taxRate: prev.isSmallBusiness ? 0 : Number(prev.vatRate ?? 0) },
       ],
     }));
   };
@@ -237,7 +240,7 @@ export function DocumentEditor({
       ...current,
       positions: [
         ...(current.positions ?? []),
-        ...draft.positions.map((position) => ({ ...position, id: newId() })),
+        ...applyDefaultTaxToPositions(draft.positions.map((position) => ({ ...position, id: newId() })), Number(current.vatRate ?? 0), Boolean(current.isSmallBusiness)),
       ],
       introText: current.introText.trim() ? current.introText : draft.introText,
       footerText: current.footerText.trim() ? current.footerText : draft.footerText,
@@ -247,9 +250,12 @@ export function DocumentEditor({
   };
 
   const totals = useMemo(() => {
-    const subtotal = calcNet(formData.positions ?? []);
-    const tax = isSmallBusiness ? 0 : calcVat(subtotal, toNumberOrZero(formData.vatRate));
-    return { subtotal, tax, total: isSmallBusiness ? subtotal : calcGross(subtotal, tax) };
+    const result = calculateDocumentTotals(formData.positions ?? [], toNumberOrZero(formData.vatRate), isSmallBusiness);
+    return { subtotal: result.netTotal, tax: result.taxTotal, total: result.grossTotal };
+  }, [formData.positions, formData.vatRate, isSmallBusiness]);
+
+  const taxGroups = useMemo(() => {
+    return calculateDocumentTotals(formData.positions ?? [], toNumberOrZero(formData.vatRate), isSmallBusiness).taxGroups.map((group) => ({ category: group.taxCategory, rate: group.taxRate, net: group.netAmount, tax: group.taxAmount, reason: group.taxExemptionReason ?? "" }));
   }, [formData.positions, formData.vatRate, isSmallBusiness]);
 
   useEffect(() => {
@@ -464,6 +470,27 @@ export function DocumentEditor({
     if ((formData.positions ?? []).length === 0) {
       toast.error("Bitte mindestens eine Position hinzufügen");
       return false;
+    }
+    const hasServiceDate = Boolean(formData.serviceDate);
+    const hasServicePeriod = Boolean(formData.servicePeriodStart && formData.servicePeriodEnd);
+    if (hasServiceDate === hasServicePeriod) {
+      toast.error("Bitte genau ein Leistungsdatum oder einen Leistungszeitraum angeben");
+      return false;
+    }
+    if (hasServicePeriod && String(formData.servicePeriodEnd) < String(formData.servicePeriodStart)) {
+      toast.error("Das Ende des Leistungszeitraums darf nicht vor dem Beginn liegen");
+      return false;
+    }
+    for (const position of formData.positions ?? []) {
+      const category = position.taxCategory ?? (isSmallBusiness ? "SMALL_BUSINESS" : "STANDARD");
+      if (category === "EXEMPT" && !position.taxExemptionReason?.trim()) {
+        toast.error("Bitte den Rechtsgrund der Steuerbefreiung angeben");
+        return false;
+      }
+      if ((category === "SMALL_BUSINESS") !== isSmallBusiness) {
+        toast.error("Kleinunternehmerregelung und Positionssteuern widersprechen sich");
+        return false;
+      }
     }
     return true;
   };
@@ -709,6 +736,7 @@ export function DocumentEditor({
                       <th className="py-2 w-1/2">Beschreibung</th>
                       <th className="py-2 text-right">Menge</th>
                       <th className="py-2 text-right">Einzelpreis</th>
+                      <th className="py-2 text-right">Steuer</th>
                       <th className="py-2 text-right">Gesamt</th>
                     </tr>
                   </thead>
@@ -721,6 +749,7 @@ export function DocumentEditor({
                           {toNumberOrZero(pos.quantity)} {pos.unit}
                         </td>
                         <td className="py-3 text-right">{formatMoney(toNumberOrZero(pos.price), documentCurrency, locale)}</td>
+                        <td className="py-3 text-right text-gray-500">{getTaxLabel(pos, toNumberOrZero(formData.vatRate), isSmallBusiness)}</td>
                         <td className="py-3 text-right font-medium">
                           {formatMoney(
                             toNumberOrZero(pos.quantity) * toNumberOrZero(pos.price),
@@ -732,7 +761,7 @@ export function DocumentEditor({
                     ))}
                     {(formData.positions ?? []).length === 0 && (
                       <tr>
-                        <td colSpan={4} className="py-6 text-center text-gray-400">
+                        <td colSpan={5} className="py-6 text-center text-gray-400">
                           Keine Positionen
                         </td>
                       </tr>
@@ -742,7 +771,7 @@ export function DocumentEditor({
                   <tfoot className="border-t-2 border-gray-200">
                     {isSmallBusiness ? (
                       <tr>
-                        <td colSpan={3} className="pt-4 text-right font-bold text-lg">
+                        <td colSpan={4} className="pt-4 text-right font-bold text-lg">
                           Gesamtbetrag:
                         </td>
                         <td className="pt-4 text-right font-bold text-lg">
@@ -752,19 +781,21 @@ export function DocumentEditor({
                     ) : (
                       <>
                         <tr>
-                          <td colSpan={3} className="pt-4 text-right">
+                          <td colSpan={4} className="pt-4 text-right">
                             Zwischensumme:
                           </td>
                           <td className="pt-4 text-right">{formatMoney(totals.subtotal, documentCurrency, locale)}</td>
                         </tr>
+                        {taxGroups.filter((group) => !["SMALL_BUSINESS", "REVERSE_CHARGE"].includes(group.category)).map((group) => (
+                          <tr key={`${group.category}-${group.rate}-${group.reason}`}>
+                            <td colSpan={4} className="text-right text-gray-500">
+                              {group.category === "EXEMPT" ? "Steuerfreie Umsätze" : group.category === "ZERO" ? "Umsätze mit 0 %" : `Umsatzsteuer (${group.rate}%)`}:
+                            </td>
+                            <td className="text-right text-gray-500">{formatMoney(["EXEMPT", "ZERO"].includes(group.category) ? group.net : group.tax, documentCurrency, locale)}</td>
+                          </tr>
+                        ))}
                         <tr>
-                          <td colSpan={3} className="text-right text-gray-500">
-                            Umsatzsteuer ({toNumberOrZero(formData.vatRate)}%):
-                          </td>
-                          <td className="text-right text-gray-500">{formatMoney(totals.tax, documentCurrency, locale)}</td>
-                        </tr>
-                        <tr>
-                          <td colSpan={3} className="pt-2 text-right font-bold text-lg">
+                          <td colSpan={4} className="pt-2 text-right font-bold text-lg">
                             Gesamtsumme:
                           </td>
                           <td className="pt-2 text-right font-bold text-lg">{formatMoney(totals.total, documentCurrency, locale)}</td>
@@ -774,6 +805,23 @@ export function DocumentEditor({
                   </tfoot>
                 </table>
                 </div>
+                {taxGroups.length > 0 && (
+                  <section className="mt-6" aria-labelledby="tax-breakdown-title">
+                    <h4 id="tax-breakdown-title" className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-gray-500">Steueraufschlüsselung</h4>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {taxGroups.map((group) => (
+                        <div key={`breakdown-${group.category}-${group.rate}-${group.reason}`} className="rounded-xl border border-gray-200 p-4">
+                          <div className="font-semibold text-gray-900">{group.category === "SMALL_BUSINESS" ? "Kleinunternehmerregelung" : group.category === "REVERSE_CHARGE" ? "Reverse Charge" : group.category === "EXEMPT" ? "Steuerbefreite Umsätze" : group.category === "ZERO" ? "Umsätze mit 0 %" : group.category === "REDUCED" ? `Ermäßigter Steuersatz (${group.rate} %)` : `Regelsteuersatz (${group.rate} %)`}</div>
+                          <dl className="mt-3 space-y-1 text-sm">
+                            <div className="flex justify-between gap-4"><dt className="text-gray-500">Nettobetrag</dt><dd>{formatMoney(group.net, documentCurrency, locale)}</dd></div>
+                            {!['SMALL_BUSINESS', 'REVERSE_CHARGE', 'EXEMPT', 'ZERO'].includes(group.category) && <div className="flex justify-between gap-4"><dt className="text-gray-500">Steuerbetrag</dt><dd>{formatMoney(group.tax, documentCurrency, locale)}</dd></div>}
+                          </dl>
+                          {group.reason && <p className="mt-3 text-xs text-gray-500">Grund: {group.reason}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {isSmallBusiness && formData.smallBusinessNote && (
                   <p className="mt-4 text-xs text-gray-500">{formData.smallBusinessNote}</p>
                 )}
@@ -846,6 +894,7 @@ export function DocumentEditor({
           totals={totals}
           disabled={disabled}
           saving={saving}
+          isEditing={composerEditing}
           onChange={setFormData}
           onClientChange={handleClientChange}
           onAddPosition={addPosition}
@@ -1058,7 +1107,7 @@ export function DocumentEditor({
                   {(formData.positions ?? []).length > 0 && (
                     <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
                       {(formData.positions ?? []).map((pos, idx) => (
-                        <div key={pos.id ?? idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-center">
+                        <div key={pos.id ?? idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_1.4fr_auto] sm:items-center">
                           <input
                             className="w-full border rounded-lg p-2 text-sm"
                             placeholder="Beschreibung"
@@ -1100,6 +1149,25 @@ export function DocumentEditor({
                               {documentCurrency}
                             </span>
                           </div>
+                          <select
+                            aria-label={`Steuerart ${idx + 1}`}
+                            className="w-full border rounded-lg p-2 text-sm"
+                            value={pos.taxCategory ?? (isSmallBusiness ? "SMALL_BUSINESS" : Number(formData.vatRate) === 0 ? "ZERO" : "STANDARD")}
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const category = event.target.value;
+                              updatePosition(idx, "taxCategory", category);
+                              updatePosition(idx, "taxRate", category === "STANDARD" ? 19 : category === "REDUCED" ? 7 : 0);
+                            }}
+                          >
+                            <option value="STANDARD">Regelsteuer</option>
+                            <option value="REDUCED">Ermäßigt</option>
+                            <option value="ZERO">0 % steuerpflichtig</option>
+                            <option value="EXEMPT">Steuerbefreit</option>
+                            <option value="REVERSE_CHARGE">Reverse Charge</option>
+                            {isInvoice && <option value="SMALL_BUSINESS">Kleinunternehmer</option>}
+                          </select>
+                          {pos.taxCategory === "EXEMPT" && <input className="w-full border rounded-lg p-2 text-sm sm:col-span-6" placeholder="Rechtsgrund der Steuerbefreiung" value={pos.taxExemptionReason ?? ""} disabled={disabled} onChange={(event) => updatePosition(idx, "taxExemptionReason", event.target.value)} />}
                           {!readOnly && (
                             <button
                               onClick={() => removePosition(idx)}
@@ -1147,12 +1215,12 @@ export function DocumentEditor({
                         {formatMoney(totals.subtotal, documentCurrency, locale)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>zzgl. MwSt. ({toNumberOrZero(formData.vatRate)}%):</span>
-                      <span>
-                        {formatMoney(totals.tax, documentCurrency, locale)}
-                      </span>
-                    </div>
+                    {taxGroups.map((group) => (
+                      <div key={`summary-${group.category}-${group.rate}-${group.reason}`} className="flex justify-between text-gray-600">
+                        <span>{group.category === "EXEMPT" ? "Steuerbefreit" : group.category === "SMALL_BUSINESS" ? "Kleinunternehmer" : group.category === "ZERO" ? "0 % steuerpflichtig" : `MwSt. (${group.rate}%)`}:</span>
+                        <span>{formatMoney(group.tax, documentCurrency, locale)}</span>
+                      </div>
+                    ))}
                     <div className="flex justify-between text-base font-semibold text-blue-700 pt-2 border-t">
                       <span>Gesamtbetrag:</span>
                       <span>
@@ -1426,6 +1494,14 @@ export function DocumentEditor({
                       disabled={disabled}
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-mode">Leistungsangabe</label>
+                    <select id="document-service-mode" className="w-full border rounded p-2" value={formData.serviceDate ? "date" : "period"} disabled={invoiceMetaDisabled} onChange={(event) => setFormData(event.target.value === "date" ? { ...formData, serviceDate: formData.serviceDate || formData.date, servicePeriodStart: undefined, servicePeriodEnd: undefined } : { ...formData, serviceDate: undefined, servicePeriodStart: formData.date, servicePeriodEnd: formData.date })}>
+                      <option value="date">Leistungsdatum</option>
+                      <option value="period">Leistungszeitraum</option>
+                    </select>
+                  </div>
+                  {formData.serviceDate ? <div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-date">Leistungsdatum</label><input id="document-service-date" type="date" className="w-full border rounded p-2" value={formData.serviceDate} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, serviceDate: event.target.value })} /></div> : <><div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-start">Leistung von</label><input id="document-service-start" type="date" className="w-full border rounded p-2" value={formData.servicePeriodStart ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, servicePeriodStart: event.target.value })} /></div><div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-end">Leistung bis</label><input id="document-service-end" type="date" className="w-full border rounded p-2" value={formData.servicePeriodEnd ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, servicePeriodEnd: event.target.value })} /></div></>}
                   {!isSmallBusiness && (
                     <div>
                       <label
@@ -1459,6 +1535,11 @@ export function DocumentEditor({
                           setFormData((prev) => ({
                             ...prev,
                             isSmallBusiness: checked,
+                            positions: (prev.positions ?? []).map((position) => ({
+                              ...position,
+                              taxCategory: checked ? "SMALL_BUSINESS" : Number(prev.vatRate) === 7 ? "REDUCED" : Number(prev.vatRate) === 0 ? "ZERO" : "STANDARD",
+                              taxRate: checked ? 0 : Number(prev.vatRate ?? 0),
+                            })),
                             smallBusinessNote: checked
                               ? prev.smallBusinessNote?.trim() ||
                                 settings.smallBusinessNote ||

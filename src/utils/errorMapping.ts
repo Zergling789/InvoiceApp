@@ -33,6 +33,22 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Bitte Kunde auswählen.";
     case "POSITIONS_REQUIRED":
       return "Bitte mindestens eine Position hinzufügen.";
+    case "INVOICE_POSITIONS_REQUIRED":
+      return "Bitte mindestens eine Position hinzufügen.";
+    case "SERVICE_DATE_REQUIRED":
+      return "Bitte genau ein Leistungsdatum oder einen vollständigen Leistungszeitraum angeben.";
+    case "SERVICE_PERIOD_INVALID":
+      return "Der Leistungszeitraum ist ungültig.";
+    case "POSITION_TAX_INVALID":
+      return "Bitte die Steuerangaben aller Positionen prüfen.";
+    case "POSITION_CONTENT_INVALID":
+      return "Positionsbeschreibung, Menge und Preis müssen vollständig und dürfen nicht negativ sein.";
+    case "TAX_EXEMPTION_REASON_REQUIRED":
+      return "Für steuerbefreite Positionen ist ein Rechtsgrund erforderlich.";
+    case "SMALL_BUSINESS_TAX_MISMATCH":
+      return "Kleinunternehmerregelung und Positionssteuern widersprechen sich.";
+    case "UNSUPPORTED_TAX_CASE":
+      return "Dieser Steuerfall wird derzeit nicht unterstützt. Reverse Charge und Auslandssachverhalte bitte steuerlich prüfen.";
     case "UNIQUE_VIOLATION":
       return "Ein Eintrag mit diesen Daten existiert bereits.";
     case "FOREIGN_KEY_VIOLATION":

@@ -1,5 +1,6 @@
 import { Invoice, InvoiceStatus, Offer, OfferStatus, Position } from "@/types";
 import { formatMoney } from "@/utils/money";
+import { calculateDocumentTotals } from "@/domain/rules/tax";
 
 const DAY_MS = 86400000;
 
@@ -18,8 +19,7 @@ export const calculateDocumentTotal = (
   vatRate: number,
   isSmallBusiness = false
 ) => {
-  const net = calculatePositionsTotal(positions);
-  return isSmallBusiness ? net : net * (1 + (vatRate || 0) / 100);
+  return calculateDocumentTotals(positions, vatRate, isSmallBusiness).grossTotal;
 };
 
 export const getDaysSince = (dateStr?: string | null, today = new Date()) => {

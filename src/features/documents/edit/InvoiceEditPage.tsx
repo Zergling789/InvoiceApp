@@ -138,6 +138,8 @@ export default function InvoiceEditPage() {
       showTabs={false}
       actionMode="save-only"
       disableOfferWizard
+      useCreateComposer
+      composerEditing
     />
   );
 }

@@ -96,7 +96,18 @@ export interface Position {
   quantity: number;
   unit: string;
   price: number;
+  taxCategory?: TaxCategory;
+  taxRate?: number;
+  taxExemptionReason?: string;
 }
+
+export type TaxCategory =
+  | "STANDARD"
+  | "REDUCED"
+  | "ZERO"
+  | "EXEMPT"
+  | "SMALL_BUSINESS"
+  | "REVERSE_CHARGE";
 
 export enum OfferStatus {
   DRAFT = "DRAFT",
@@ -149,6 +160,9 @@ export interface Invoice {
   clientAddress?: string | null;
   projectId?: string;
   date: string;
+  serviceDate?: string;
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
   paymentTermsDays: number;
   dueDate?: string;
   positions: Position[];

@@ -28,14 +28,31 @@ const formatDate = (date, locale = "de-DE") => {
 const sanitizeMultiline = (text = "") => escapeHtml(String(text ?? "")).replace(/\r?\n/g, "<br />");
 
 const sumPosition = (pos) => Number(pos?.quantity ?? 0) * Number(pos?.price ?? 0);
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const taxLabel = (pos, fallbackRate = 0, smallBusiness = false) => {
+  const category = pos?.taxCategory ?? (smallBusiness ? "SMALL_BUSINESS" : Number(fallbackRate) === 7 ? "REDUCED" : Number(fallbackRate) === 0 ? "ZERO" : "STANDARD");
+  if (category === "EXEMPT") return "Steuerfrei";
+  if (category === "REVERSE_CHARGE") return "Reverse Charge";
+  if (category === "SMALL_BUSINESS") return "Kleinunternehmer";
+  return `${Number(pos?.taxRate ?? fallbackRate)} %`;
+};
 
 export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} }) {
   const isInvoice = type === "invoice";
   const isSmallBusiness = isInvoice && Boolean(doc.isSmallBusiness);
   const vatRate = Number(doc.vatRate ?? 0);
-  const net = Array.isArray(doc.positions) ? doc.positions.reduce((sum, p) => sum + sumPosition(p), 0) : 0;
-  const vat = isSmallBusiness ? 0 : net * (vatRate / 100);
-  const total = isSmallBusiness ? net : net + vat;
+  const net = Array.isArray(doc.positions) ? roundMoney(doc.positions.reduce((sum, p) => sum + roundMoney(sumPosition(p)), 0)) : 0;
+  const taxGroups = new Map();
+  for (const position of Array.isArray(doc.positions) ? doc.positions : []) {
+    const category = position.taxCategory ?? (isSmallBusiness ? "SMALL_BUSINESS" : vatRate === 0 ? "ZERO" : "STANDARD");
+    const rate = ["ZERO", "EXEMPT", "REVERSE_CHARGE", "SMALL_BUSINESS"].includes(category) ? 0 : Number(position.taxRate ?? vatRate);
+    const lineNet = roundMoney(sumPosition(position));
+    const key = `${category}:${rate}`;
+    taxGroups.set(key, { category, rate, net: roundMoney((taxGroups.get(key)?.net ?? 0) + lineNet), tax: 0, reason: position.taxExemptionReason ?? "" });
+  }
+  for (const group of taxGroups.values()) group.tax = roundMoney(group.net * (group.rate / 100));
+  const vat = roundMoney([...taxGroups.values()].reduce((sum, group) => sum + group.tax, 0));
+  const total = roundMoney(net + vat);
   const smallBusinessNote =
     doc.smallBusinessNote ??
     "Kein Steuerausweis aufgrund der Anwendung der Kleinunternehmerregelung (§ 19 UStG).";
@@ -132,6 +149,10 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
       }
       .totals-row { display: flex; justify-content: space-between; padding: 4px 0; }
       .totals-row.total { font-weight: 700; font-size: 14px; }
+      .tax-breakdown { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .tax-card { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 11px; }
+      .tax-card-title { font-weight: 700; margin-bottom: 7px; }
+      .tax-card-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
       .footer {
         margin-top: 32px;
         padding-top: 16px;
@@ -152,10 +173,11 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
       .bank strong { display: block; margin-bottom: 2px; }
       .intro { margin-bottom: 16px; font-size: 12px; line-height: 1.6; }
       .doc-heading { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-      .w-60 { width: 60%; }
+      .w-60 { width: 40%; }
       .w-12 { width: 12%; }
       .w-14 { width: 14%; }
       .w-14r { width: 14%; text-align: right; }
+      .w-18r { width: 18%; text-align: right; }
       .page-break { page-break-inside: avoid; }
       body.template-minimal .page { padding: 24mm 20mm; }
       body.template-minimal .top { margin-bottom: 44px; }
@@ -182,6 +204,8 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
           <div class="doc-title">${isInvoice ? "RECHNUNG" : "ANGEBOT"}</div>
           <div class="meta-line">Nr: ${escapeHtml(doc.number ?? "")}</div>
           <div class="meta-line">Datum: ${escapeHtml(formatDate(doc.date, settings.locale ?? "de-DE"))}</div>
+          ${isInvoice && doc.serviceDate ? `<div class="meta-line">Leistungsdatum: ${escapeHtml(formatDate(doc.serviceDate, settings.locale ?? "de-DE"))}</div>` : ""}
+          ${isInvoice && doc.servicePeriodStart && doc.servicePeriodEnd ? `<div class="meta-line">Leistungszeitraum: ${escapeHtml(formatDate(doc.servicePeriodStart, settings.locale ?? "de-DE"))} – ${escapeHtml(formatDate(doc.servicePeriodEnd, settings.locale ?? "de-DE"))}</div>` : ""}
           ${isInvoice && doc.dueDate ? `<div class="meta-line">Fällig: ${escapeHtml(formatDate(doc.dueDate, settings.locale ?? "de-DE"))}</div>` : ""}
           ${!isInvoice && doc.validUntil ? `<div class="meta-line">Gültig bis: ${escapeHtml(formatDate(doc.validUntil, settings.locale ?? "de-DE"))}</div>` : ""}
         </div>
@@ -206,7 +230,8 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
               <th class="w-60">Beschreibung</th>
               <th class="w-12 text-right">Menge</th>
               <th class="w-14 text-right">Einzelpreis</th>
-              <th class="w-14 text-right">Gesamt</th>
+              <th class="w-14 text-right">Steuer</th>
+              <th class="w-18r">Gesamt</th>
             </tr>
           </thead>
           <tbody>
@@ -219,11 +244,12 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
                         <td>${escapeHtml(pos.description ?? "")}</td>
                         <td class="text-right">${escapeHtml(pos.quantity ?? "")} ${escapeHtml(pos.unit ?? "")}</td>
                         <td class="text-right">${formatCurrency(pos.price, { locale: settings.locale, currency: settings.currency })}</td>
+                        <td class="text-right">${escapeHtml(taxLabel(pos, vatRate, isSmallBusiness))}</td>
                         <td class="text-right">${formatCurrency(totalPos, { locale: settings.locale, currency: settings.currency })}</td>
                       </tr>`;
                     })
                     .join("")
-                : `<tr><td colspan="4" class="muted">Keine Positionen</td></tr>`
+                : `<tr><td colspan="5" class="muted">Keine Positionen</td></tr>`
             }
           </tbody>
         </table>
@@ -239,21 +265,21 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
                   <span>Netto:</span>
                   <span>${formatCurrency(net, { locale: settings.locale, currency: settings.currency })}</span>
                 </div>
-                <div class="totals-row" style="color: var(--muted);">
-                  <span>MwSt (${vatRate}%):</span>
-                  <span>${formatCurrency(vat, { locale: settings.locale, currency: settings.currency })}</span>
-                </div>
+                ${[...taxGroups.values()].filter((group) => !["SMALL_BUSINESS", "REVERSE_CHARGE"].includes(group.category)).map((group) => `<div class="totals-row" style="color: var(--muted);"><span>${group.category === "EXEMPT" ? "Steuerfreie Umsätze" : group.category === "ZERO" ? "Umsätze mit 0 %" : `MwSt (${group.rate}%)`}:</span><span>${formatCurrency(group.category === "EXEMPT" || group.category === "ZERO" ? group.net : group.tax, { locale: settings.locale, currency: settings.currency })}</span></div>`).join("")}
                 <div class="totals-row total">
                   <span>Gesamt:</span>
                   <span>${formatCurrency(total, { locale: settings.locale, currency: settings.currency })}</span>
                 </div>`
           }
         </div>
+        ${taxGroups.size > 0 ? `<div class="tax-breakdown page-break">${[...taxGroups.values()].map((group) => `<div class="tax-card"><div class="tax-card-title">${group.category === "SMALL_BUSINESS" ? "Kleinunternehmerregelung" : group.category === "REVERSE_CHARGE" ? "Reverse Charge" : group.category === "EXEMPT" ? "Steuerbefreite Umsätze" : group.category === "ZERO" ? "Umsätze mit 0 %" : group.category === "REDUCED" ? `Ermäßigter Steuersatz (${group.rate} %)` : `Regelsteuersatz (${group.rate} %)`}</div><div class="tax-card-row"><span>Nettobetrag</span><span>${formatCurrency(group.net, { locale: settings.locale, currency: settings.currency })}</span></div>${!["SMALL_BUSINESS", "REVERSE_CHARGE", "EXEMPT", "ZERO"].includes(group.category) ? `<div class="tax-card-row"><span>Steuerbetrag</span><span>${formatCurrency(group.tax, { locale: settings.locale, currency: settings.currency })}</span></div>` : ""}${group.reason ? `<div class="muted" style="margin-top: 5px;">Grund: ${escapeHtml(group.reason)}</div>` : ""}</div>`).join("")}</div>` : ""}
         ${
           isSmallBusiness && smallBusinessNote
             ? `<div class="muted" style="margin-top: 6px;">${sanitizeMultiline(smallBusinessNote)}</div>`
             : ""
         }
+        ${[...taxGroups.values()].filter((group) => group.category === "EXEMPT" && group.reason).map((group) => `<div class="muted" style="margin-top: 6px;">Steuerbefreiung: ${escapeHtml(group.reason)}</div>`).join("")}
+        ${[...taxGroups.values()].some((group) => group.category === "REVERSE_CHARGE") ? `<div class="muted" style="margin-top: 6px;">Reverse Charge: Die Steuerschuldnerschaft geht auf den Leistungsempfänger über.</div>` : ""}
       </div>
 
       <div class="footer page-break">

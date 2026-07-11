@@ -10,7 +10,7 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActionSheet } from "@/components/ui/ActionSheet";
-import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
+import { calculateDocumentTotals } from "@/domain/rules/tax";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
@@ -136,9 +136,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
 
   const totals = useMemo(() => {
     if (!doc) return { net: 0, vat: 0, gross: 0 };
-    const net = calcNet(doc.positions ?? []);
-    const vat = isSmallBusiness ? 0 : calcVat(net, toNumberOrZero(doc.vatRate));
-    return { net, vat, gross: isSmallBusiness ? net : calcGross(net, vat) };
+    const result = calculateDocumentTotals(doc.positions ?? [], toNumberOrZero(doc.vatRate), isSmallBusiness);
+    return { net: result.netTotal, vat: result.taxTotal, gross: result.grossTotal };
   }, [doc, isSmallBusiness]);
 
   const timeline = useMemo(() => {
@@ -623,6 +622,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
             }}
             onSaved={handleSaved}
             initial={editorInitial ?? undefined}
+            useCreateComposer
+            composerEditing
           />
         )}
 
@@ -687,6 +688,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           }}
           onSaved={handleSaved}
           initial={editorInitial ?? undefined}
+          useCreateComposer
+          composerEditing
         />
       )}
 

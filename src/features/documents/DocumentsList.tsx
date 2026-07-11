@@ -19,7 +19,7 @@ import * as settingsService from "@/app/settings/settingsService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 
-import { calcGross, calcNet, calcVat } from "@/domain/rules/money";
+import { calcGross, calcNet, calcPositionVat } from "@/domain/rules/money";
 import { isOverdue as isInvoiceOverdue } from "@/domain/rules/invoiceRules";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import {
@@ -392,7 +392,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
         {items.map((item) => {
           const net = calcNet(item.positions ?? []);
           const isSmallBusiness = isInvoice ? (item as Invoice).isSmallBusiness : false;
-          const vat = isSmallBusiness ? 0 : calcVat(net, item.vatRate);
+          const vat = calcPositionVat(item.positions ?? [], item.vatRate);
           const total = isSmallBusiness ? net : calcGross(net, vat);
           const locale = settings?.locale ?? "de-DE";
           const invoiceCurrency = settings?.currency ?? "EUR";
@@ -551,7 +551,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             {items.map((item) => {
               const net = calcNet(item.positions ?? []);
               const isSmallBusiness = isInvoice ? (item as Invoice).isSmallBusiness : false;
-              const vat = isSmallBusiness ? 0 : calcVat(net, item.vatRate);
+              const vat = calcPositionVat(item.positions ?? [], item.vatRate);
               const total = isSmallBusiness ? net : calcGross(net, vat);
               const locale = settings?.locale ?? "de-DE";
               const invoiceCurrency = settings?.currency ?? "EUR";

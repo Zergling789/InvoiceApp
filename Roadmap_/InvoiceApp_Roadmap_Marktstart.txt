@@ -1,0 +1,282 @@
+ROADMAP ZUR MARKTREIFE – INVOICEAPP
+Stand: 10. Juli 2026
+
+GESAMTURTEIL
+
+Aktueller Reifegrad für den Marktstart: ca. 6,5 von 10
+
+- Geschlossene Beta mit ausgewählten deutschen Freelancern: grundsätzlich möglich
+- Öffentliche kostenlose Beta: nach einigen Pflichtkorrekturen vertretbar
+- Öffentlicher kostenpflichtiger Marktstart: derzeit noch nicht empfohlen
+- Aussagen wie „steuerkonform“, „GoBD-konform“ oder „E-Rechnung-konform“: derzeit vermeiden
+
+Die größten Lücken liegen im steuerlichen Datenmodell, der E-Rechnung, den rechtlichen Unterlagen, dem Datenschutz und der produktiven Abrechnung.
+
+
+PHASE 1 – MARKTUMFANG VERBINDLICH FESTLEGEN
+
+Ziel:
+Die erste Version unterstützt ausschließlich deutsche Unternehmer, inländische B2B-Standardleistungen, EUR, einfache Umsatzsteuerfälle und manuell geprüfte Rechnungen.
+
+Aufgaben:
+- Unterstützte und nicht unterstützte Rechnungsszenarien dokumentieren
+- Auswahl „Deutschland B2B“ im Onboarding einführen
+- B2C, Ausland, Reverse Charge und Sonderfälle aktiv blockieren
+- Keine Werbeaussage „automatisch steuerlich korrekt“
+- Keine automatische Steuerentscheidung durch KI
+- Pflicht-Hinweis vor der Finalisierung anzeigen
+
+Abnahmekriterium:
+Der Nutzer kann keinen nicht unterstützten Steuerfall versehentlich als normalen Standardfall ausstellen.
+
+
+PHASE 2 – STEUERLICHES RECHNUNGSMODELL VERVOLLSTÄNDIGEN
+
+Aufgaben:
+1. Leistungsdatum und Leistungszeitraum ergänzen
+2. Separate USt-ID des Rechnungsausstellers ergänzen
+3. Steuerkategorie und Steuersatz pro Position einführen
+4. Kleinunternehmer als eigene Steuerkategorie behandeln
+5. Steuerbefreiungsgrund unterstützen
+6. Bestellnummer beziehungsweise Buyer Reference ergänzen
+7. Leistungsland und Kundentyp erfassen
+8. Rundungsregeln je Steuerkategorie definieren
+9. Netto- und Steuerzusammenfassung pro Steuersatz berechnen
+10. Deterministische Finalisierungsvalidierung einführen
+
+Zusätzliche Dokumenttypen:
+- Gutschrift
+- Stornorechnung
+- Korrekturrechnung
+- Referenz auf ursprüngliche Rechnung
+- Abschlags- und Schlussrechnung entweder implementieren oder ausdrücklich ausschließen
+
+Empfohlenes Steuermodell:
+
+type TaxCategory =
+  | "STANDARD"
+  | "REDUCED"
+  | "ZERO"
+  | "EXEMPT"
+  | "REVERSE_CHARGE"
+  | "SMALL_BUSINESS";
+
+interface Position {
+  id: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  taxRate: number;
+  taxCategory: TaxCategory;
+  taxExemptionReason?: string;
+}
+
+Abnahmekriterium:
+Eine Rechnung kann nicht finalisiert werden, wenn steuerlich notwendige Felder fehlen oder widersprüchlich sind.
+
+
+PHASE 3 – E-RECHNUNG IMPLEMENTIEREN
+
+Empfohlene Reihenfolge:
+1. Internes EN-16931-kompatibles Rechnungsmodell
+2. ZUGFeRD-Export
+3. XRechnung-Export
+4. Automatisierte XML-Validierung
+5. Download von PDF und XML
+6. E-Rechnungsimport
+7. Visualisierung eingehender XRechnungen
+8. Unveränderte Archivierung des Originals
+
+Wichtige Regel:
+PDF und XML müssen aus exakt derselben Datenquelle generiert werden. Bei ZUGFeRD darf es keine Abweichung zwischen visueller PDF-Darstellung und strukturierten XML-Daten geben.
+
+Abnahmekriterium:
+Alle Testrechnungen bestehen einen unabhängigen EN-16931-/XRechnung-Validator ohne Fehler.
+
+
+PHASE 4 – DATENSCHUTZ UND KI-COMPLIANCE
+
+Aufgaben:
+- Datenschutzerklärung erstellen
+- Auftragsverarbeitungsvertrag erstellen
+- Unterauftragnehmerliste veröffentlichen
+- Technische und organisatorische Maßnahmen dokumentieren
+- Löschkonzept erstellen
+- Datenschutzvorfall-Prozess definieren
+- Export- und Auskunftsprozess umsetzen
+- Datenflüsse zu Supabase, Vercel, OpenAI und SMTP dokumentieren
+- Internationale Datenübermittlung prüfen
+- Hinweis beim Visitenkartenscan korrigieren
+- Alle KI-Funktionen klar kennzeichnen
+- Menschliche Freigabe beibehalten
+- KI vollständig deaktivierbar machen
+
+Empfohlener Hinweis beim Visitenkartenscan:
+„Das Bild wird zur Erkennung an unseren KI-Dienstleister übertragen und nicht dauerhaft in FreelanceFlow gespeichert. Weitere Informationen findest du in der Datenschutzerklärung.“
+
+Abnahmekriterium:
+Für jede externe Datenübermittlung ist dokumentiert:
+- Welche Daten übertragen werden
+- Zu welchem Zweck
+- An welchen Anbieter
+- Auf welcher Rechtsgrundlage
+- Wie lange die Daten verarbeitet werden
+- Wie der Nutzer informiert wird
+
+
+PHASE 5 – SICHERHEIT UND BETRIEB
+
+Aufgaben:
+- Redis-basiertes Rate-Limit für alle kostenrelevanten APIs
+- Negative RLS-Tests zwischen zwei verschiedenen Nutzern
+- Backup- und Restore-Test
+- Fehlerüberwachung ohne Rechnungsinhalte
+- Security Headers und Content Security Policy
+- API-Kostenalarme
+- Geheimnisrotation
+- Getrennte Entwicklungs-, Test- und Produktionssysteme
+- Incident-Response-Prozess
+- Schutz vor massenhaftem PDF- und E-Mail-Versand
+- Vollständiger Account- und Datenexport
+- Kontrollierte Accountlöschung
+- Globaler Not-Aus-Schalter für KI-Funktionen
+- Maximale Tages- und Monatskosten für KI definieren
+
+Abnahmekriterium:
+Ein Testnutzer kann niemals Daten, PDFs, Logos oder Kunden eines anderen Nutzers lesen oder verändern.
+
+
+PHASE 6 – RECHTLICHE PRODUKTOBERFLÄCHE
+
+Öffentliche Seiten:
+- /impressum
+- /datenschutz
+- /agb
+- /avv
+- /unterauftragnehmer
+- /ki-hinweise
+- /kontakt
+
+Innerhalb der App:
+- Zustimmung zu AGB und AVV mit Versionsnummer
+- Zustimmungszeitpunkt speichern
+- Datenschutzhinweis vor dem Visitenkartenscan
+- Auflistung der verarbeiteten KI-Daten
+- Exportfunktion
+- Löschanfrage
+- Support- und Beschwerdeweg
+- Statusseite für Störungen
+
+Externe Prüfung:
+- Rechnungslogik durch Steuerberater prüfen lassen
+- AGB, Datenschutz, AVV und Haftungsregeln durch IT-/Datenschutzanwalt prüfen lassen
+- Aussagen wie „GoBD-konform“ oder „rechtssicher“ nur nach ausdrücklicher Freigabe verwenden
+
+
+PHASE 7 – BILLING UND TARIFDURCHSETZUNG
+
+Aufgaben:
+- Stripe Checkout
+- Webhook-Signaturprüfung
+- Abonnementtabelle
+- Serverseitige Entitlements
+- Monatliche Verbrauchszähler
+- KI-Kostenkontingente
+- Rechnungs- und Kundenlimits
+- Kundenportal
+- Kündigungs- und Downgradeprozess
+- Behandlung fehlgeschlagener Zahlungen
+- Eigene Rechnungen für Abonnements
+- Prüfung der Unternehmereigenschaft
+- Steuerliche Behandlung der eigenen SaaS-Umsätze
+
+Empfehlung:
+Die kostenpflichtige Zielgruppe zunächst auf Unternehmen mit Sitz in Deutschland begrenzen.
+
+Abnahmekriterium:
+Ein Nutzer ohne berechtigten Tarif kann eine kostenpflichtige Funktion auch durch direkte API-Aufrufe nicht verwenden.
+
+
+PHASE 8 – GESCHLOSSENE MARKT-BETA
+
+Geeignete Teilnehmer:
+- Freelancer
+- Agenturen
+- IT-Dienstleister
+- Berater
+- Handwerker mit einfachen Rechnungsfällen
+
+Zu messende Kennzahlen:
+- Anteil erfolgreich finalisierter Rechnungen
+- Abgebrochene Rechnungserstellungen
+- Fehlende Pflichtangaben
+- PDF-Fehler
+- E-Mail-Zustellbarkeit
+- KI-Vorschläge übernommen oder verworfen
+- Durchschnittliche KI-Kosten pro Nutzer
+- Supportfälle je Rechnung
+- Fehlerhafte Steuerkonfigurationen
+- Daten- oder Berechtigungsfehler
+
+Abnahmekriterium:
+Die Beta läuft ohne kritischen Datenschutz-, Mandantentrennungs-, Rechnungs- oder Datenverlustfehler.
+
+
+PRIORITÄTEN VOR EINER ÖFFENTLICHEN BETA
+
+1. Leistungsdatum beziehungsweise Leistungszeitraum
+2. Korrekte Trennung von Kleinunternehmerregelung und 0 Prozent
+3. Klare Begrenzung unterstützter Steuerfälle
+4. Datenschutzerklärung und Impressum
+5. Korrigierter Hinweis beim KI-Visitenkartenscan
+6. Verteilter KI-Kostenschutz
+7. Vollständiger grüner CI-Lauf
+8. Backup- und Exportfunktion
+
+
+PRIORITÄTEN VOR DEM ERSTEN ZAHLENDEN KUNDEN
+
+1. AGB und AVV
+2. Stripe mit serverseitigen Tarifrechten
+3. Kündigung und Kundenportal
+4. Eigene steuerlich korrekte SaaS-Abrechnung
+5. Steuerberaterprüfung
+6. Datenschutz- und Vertragsprüfung
+7. Dokumentierter Support- und Incident-Prozess
+
+
+PRIORITÄTEN VOR EINER BREITEN VERMARKTUNG
+
+1. XRechnung oder ZUGFeRD
+2. E-Rechnungsvalidierung
+3. E-Rechnungsimport und Viewer
+4. Korrektur- und Gutschriftprozess
+5. Steuerkategorien pro Position
+6. Vollständige Archiv- und Exportstrategie
+
+
+EMPFOHLENE NÄCHSTE ENTWICKLUNGSAUFGABE
+
+Der nächste Entwicklungsschritt sollte keine weitere KI-Funktion sein.
+
+Empfohlener Auftrag:
+
+„Leistungsdatum und Leistungszeitraum einführen, das Steuermodell pro Position erweitern, Kleinunternehmer fachlich von 0 Prozent trennen und sämtliche neuen Angaben in Datenbank, Editor, PDF, Finalisierungs-RPC und Tests integrieren.“
+
+Danach sollte unmittelbar die gemeinsame Datenbasis für ZUGFeRD und XRechnung folgen.
+
+
+LAUNCH-GATE
+
+Ein öffentlicher kostenpflichtiger Marktstart sollte erst erfolgen, wenn:
+
+- Alle steuerlichen Pflichtfelder technisch erzwungen werden
+- Nicht unterstützte Steuerfälle blockiert werden
+- Mindestens ein valides E-Rechnungsformat vorhanden ist oder die Beta klar als PDF-Übergangslösung begrenzt wird
+- Datenschutzunterlagen, AGB und AVV geprüft vorliegen
+- Mandantentrennung und RLS negativ getestet wurden
+- Backup, Restore, Export und Accountlöschung getestet sind
+- Billing und Tariflimits serverseitig funktionieren
+- Der finale Release-Commit alle CI-, Sicherheits- und End-to-End-Tests besteht
+- Steuerberater und Datenschutz-/IT-Anwalt die relevanten Bereiche geprüft haben

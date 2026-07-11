@@ -26,6 +26,7 @@ import { fetchSettings } from "@/app/settings/settingsService";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
+const URL_STATUSES = new Set<CombinedStatus>(["draft", "issued", "sent", "overdue", "paid", "canceled", "accepted", "rejected", "invoiced"]);
 
 type DocumentRow = {
   id: string;
@@ -171,6 +172,14 @@ export default function DocumentsHubPage() {
     } else if (normalized === "all") {
       setMode("all");
     }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const requested = (searchParams.get("status") ?? "")
+      .split(",")
+      .map((status) => status.trim().toLowerCase())
+      .filter((status): status is CombinedStatus => URL_STATUSES.has(status as CombinedStatus));
+    setSelectedStatuses([...new Set(requested)]);
   }, [searchParams]);
 
   useEffect(() => {

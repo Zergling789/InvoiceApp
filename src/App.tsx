@@ -4,7 +4,6 @@ import { LayoutDashboard, Users, FileText, ListTodo, Menu } from "lucide-react";
 import Dashboard from "@/features/dashboard/Dashboard";
 import Clients from "@/features/clients/Clients";
 import Projects from "@/features/projects/Projects";
-import DocumentsPage from "@/features/documents/DocumentsPage";
 import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
 import DocumentDetailRoute from "@/features/documents/DocumentDetailRoute";
 import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
@@ -67,10 +66,10 @@ export default function App() {
           <Route path="documents" element={<DocumentsHubPage />} />
           <Route path="clients" element={<Clients />} />
           <Route path="projects" element={<Projects />} />
-          <Route path="offers" element={<DocumentsPage type="offer" />} />
+          <Route path="offers" element={<Navigate to="/app/documents?type=offer" replace />} />
           <Route path="offers/new" element={<OfferCreatePage />} />
           <Route path="offers/:id" element={<DocumentDetailRoute forcedType="offer" />} />
-          <Route path="invoices" element={<DocumentsPage type="invoice" />} />
+          <Route path="invoices" element={<Navigate to="/app/documents?type=invoice" replace />} />
           <Route path="invoices/new" element={<InvoiceCreatePage />} />
           <Route path="invoices/:id" element={<DocumentDetailRoute forcedType="invoice" />} />
           <Route path="customers/new" element={<CustomerCreatePage />} />

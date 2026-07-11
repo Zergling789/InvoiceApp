@@ -20,6 +20,18 @@ export function calcVat(net: number, vatRate: number): number {
   return roundMoney(net * rate);
 }
 
+export function getPositionTaxRate(position: Position, fallbackVatRate = 0): number {
+  if (position.taxCategory === "SMALL_BUSINESS" || position.taxCategory === "ZERO" || position.taxCategory === "EXEMPT") return 0;
+  return Number(position.taxRate ?? fallbackVatRate ?? 0);
+}
+
+export function calcPositionVat(positions: Position[], fallbackVatRate = 0): number {
+  return roundMoney((positions ?? []).reduce((sum, position) => {
+    const net = Number(position.quantity ?? 0) * Number(position.price ?? 0);
+    return sum + net * (getPositionTaxRate(position, fallbackVatRate) / 100);
+  }, 0));
+}
+
 export function calcGross(net: number, vat: number): number {
   return roundMoney(net + vat);
 }

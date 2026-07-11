@@ -5,6 +5,9 @@ export type EditorSeed = {
   id: string;
   number: string | null;
   date: string;
+  serviceDate?: string;
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
   paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
@@ -20,6 +23,9 @@ export type DocumentFormData = {
   id: string;
   number: string | null;
   date: string;
+  serviceDate?: string;
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
   paymentTermsDays?: number;
   dueDate?: string;
   validUntil?: string;
@@ -66,6 +72,11 @@ export function createDocumentPositionId(): string {
     : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+export function applyDefaultTaxToPositions(positions: Position[], vatRate: number, isSmallBusiness = false): Position[] {
+  const taxCategory = isSmallBusiness ? "SMALL_BUSINESS" : vatRate === 7 ? "REDUCED" : vatRate === 0 ? "ZERO" : "STANDARD";
+  return positions.map(({ taxCategory: _ignoredCategory, taxRate: _ignoredRate, ...position }) => ({ ...position, taxCategory, taxRate: isSmallBusiness ? 0 : vatRate }));
+}
+
 export function applyDocumentTemplate(template: string, data: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (match, key) => data[key] ?? match);
 }
@@ -94,6 +105,9 @@ export function buildDocumentFormData(
     id: seed.id,
     number: seed.number ?? null,
     date: seed.date,
+    serviceDate: seed.serviceDate ?? seed.date,
+    servicePeriodStart: seed.servicePeriodStart,
+    servicePeriodEnd: seed.servicePeriodEnd,
     paymentTermsDays: seed.paymentTermsDays ?? 14,
     dueDate: seed.dueDate,
     validUntil: seed.validUntil,

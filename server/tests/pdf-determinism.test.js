@@ -146,3 +146,30 @@ test("PDF renderer rejects unsafe branding values", () => {
   assert.match(html, /--accent: #4f46e5/);
   assert.doesNotMatch(html, /javascript:alert/);
 });
+
+test("PDF renderer prints service period and mixed position taxes", () => {
+  const html = renderDocumentHtml({
+    type: "invoice",
+    doc: {
+      number: "RE-42",
+      date: "2026-07-10",
+      servicePeriodStart: "2026-07-01",
+      servicePeriodEnd: "2026-07-09",
+      positions: [
+        { description: "Beratung", quantity: 1, unit: "Std", price: 100, taxCategory: "STANDARD", taxRate: 19 },
+        { description: "Publikation", quantity: 1, unit: "Stk", price: 100, taxCategory: "REDUCED", taxRate: 7 },
+      ],
+    },
+    settings: { locale: "de-DE", currency: "EUR" },
+    client: {},
+  });
+
+  assert.match(html, /Leistungszeitraum/);
+  assert.match(html, /MwSt \(19%\)/);
+  assert.match(html, /MwSt \(7%\)/);
+  assert.match(html, /Regelsteuersatz \(19 %\)/);
+  assert.match(html, /Ermäßigter Steuersatz \(7 %\)/);
+  assert.match(html, /Nettobetrag/);
+  assert.match(html, /Steuer<\/th>/);
+  assert.match(html, /226,00/);
+});

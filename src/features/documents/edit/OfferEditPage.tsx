@@ -131,6 +131,8 @@ export default function OfferEditPage() {
       showTabs={false}
       actionMode="save-only"
       disableOfferWizard
+      useCreateComposer
+      composerEditing
     />
   );
 }

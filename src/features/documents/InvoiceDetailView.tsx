@@ -6,6 +6,7 @@ import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { getTaxLabel } from "@/domain/rules/tax";
 
 type InvoiceDetailViewProps = {
   invoice: Invoice;
@@ -63,15 +64,15 @@ export function InvoiceDetailView({
           <AppCard className="overflow-hidden p-0">
             <div className="border-b border-[var(--app-border)] px-5 py-4 sm:px-7"><div className="flex items-center gap-2 text-sm font-semibold"><FileText size={17} /> Rechnungspositionen</div></div>
             {invoice.introText && <p className="px-5 pt-6 text-sm leading-6 text-[var(--app-muted)] sm:px-7">{invoice.introText}</p>}
-            <div className="px-5 py-5 sm:px-7">
-              <div className="hidden grid-cols-[minmax(0,1fr)_110px_130px_130px] gap-4 border-b border-[var(--app-border)] pb-3 text-xs font-semibold uppercase tracking-wide text-[var(--app-muted)] sm:grid">
-                <span>Beschreibung</span><span>Menge</span><span>Einzelpreis</span><span className="text-right">Gesamt</span>
+            <div className="overflow-x-auto px-5 py-5 sm:px-7">
+              <div className="hidden grid-cols-[minmax(0,1fr)_90px_110px_120px_120px] gap-4 border-b border-[var(--app-border)] pb-3 text-xs font-semibold uppercase tracking-wide text-[var(--app-muted)] sm:grid">
+                <span>Beschreibung</span><span>Menge</span><span>Einzelpreis</span><span>Steuer</span><span className="text-right">Gesamt</span>
               </div>
-              <div className="divide-y divide-[var(--app-border)]">
+              <div className="min-w-0 divide-y divide-[var(--app-border)] sm:min-w-[680px]">
                 {invoice.positions.length === 0 ? <div className="py-8 text-center text-sm text-[var(--app-muted)]">Keine Positionen vorhanden.</div> : invoice.positions.map((position) => {
                   const quantity = numeric(position.quantity);
                   const price = numeric(position.price);
-                  return <div key={position.id} className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_110px_130px_130px] sm:items-center sm:gap-4"><div className="font-medium">{position.description}</div><div className="text-sm text-[var(--app-muted)]">{quantity} {position.unit}</div><div className="text-sm text-[var(--app-muted)]">{formatMoney(price, currency, locale)}</div><div className="text-sm font-semibold sm:text-right">{formatMoney(quantity * price, currency, locale)}</div></div>;
+                  return <div key={position.id} className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_90px_110px_120px_120px] sm:items-center sm:gap-4"><div className="font-medium">{position.description}</div><div className="text-sm text-[var(--app-muted)]">{quantity} {position.unit}</div><div className="text-sm text-[var(--app-muted)]">{formatMoney(price, currency, locale)}</div><div className="text-sm text-[var(--app-muted)]">{getTaxLabel(position, invoice.vatRate, invoice.isSmallBusiness)}</div><div className="text-sm font-semibold sm:text-right">{formatMoney(quantity * price, currency, locale)}</div></div>;
                 })}
               </div>
             </div>

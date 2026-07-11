@@ -17,7 +17,7 @@ export interface ActionItem {
     label: string;
     to: string;
   };
-  secondaryCta: {
+  secondaryCta?: {
     label: string;
     to: string;
   };
@@ -79,9 +79,11 @@ export function ActionList({
                 <Link to={item.primaryCta.to} aria-label={item.primaryCta.label}>
                   <AppButton>{item.primaryCta.label}</AppButton>
                 </Link>
-                <Link to={item.secondaryCta.to} aria-label={item.secondaryCta.label}>
-                  <AppButton variant="secondary">{item.secondaryCta.label}</AppButton>
-                </Link>
+                {item.secondaryCta && (
+                  <Link to={item.secondaryCta.to} aria-label={item.secondaryCta.label}>
+                    <AppButton variant="secondary">{item.secondaryCta.label}</AppButton>
+                  </Link>
+                )}
               </div>
             </div>
           ))}

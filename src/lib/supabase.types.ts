@@ -260,6 +260,9 @@ export type Database = {
           sent_at: string | null
           sent_count: number
           sent_via: string | null
+          service_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
           small_business_note: string | null
           status: string
           updated_at: string
@@ -301,6 +304,9 @@ export type Database = {
           sent_at?: string | null
           sent_count?: number
           sent_via?: string | null
+          service_date?: string | null
+          service_period_end?: string | null
+          service_period_start?: string | null
           small_business_note?: string | null
           status?: string
           updated_at?: string
@@ -342,6 +348,9 @@ export type Database = {
           sent_at?: string | null
           sent_count?: number
           sent_via?: string | null
+          service_date?: string | null
+          service_period_end?: string | null
+          service_period_start?: string | null
           small_business_note?: string | null
           status?: string
           updated_at?: string
@@ -765,6 +774,9 @@ export type Database = {
           sent_at: string | null
           sent_count: number
           sent_via: string | null
+          service_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
           small_business_note: string | null
           status: string
           updated_at: string
@@ -815,6 +827,9 @@ export type Database = {
           sent_at: string | null
           sent_count: number
           sent_via: string | null
+          service_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
           small_business_note: string | null
           status: string
           updated_at: string
@@ -865,6 +880,9 @@ export type Database = {
           sent_at: string | null
           sent_count: number
           sent_via: string | null
+          service_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
           small_business_note: string | null
           status: string
           updated_at: string
@@ -915,6 +933,9 @@ export type Database = {
           sent_at: string | null
           sent_count: number
           sent_via: string | null
+          service_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
           small_business_note: string | null
           status: string
           updated_at: string

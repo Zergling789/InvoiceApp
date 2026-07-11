@@ -8,7 +8,7 @@ type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
 type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
 
 const INVOICE_FIELDS =
-  "id,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,project_id,date,invoice_date,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
+  "id,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,project_id,date,invoice_date,service_date,service_period_start,service_period_end,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
 
 const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -81,6 +81,9 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     clientAddress: r.client_address ?? null,
     projectId: r.project_id ?? undefined,
     date: r.invoice_date ?? r.date,
+    serviceDate: r.service_date ?? undefined,
+    servicePeriodStart: r.service_period_start ?? undefined,
+    servicePeriodEnd: r.service_period_end ?? undefined,
     paymentTermsDays: Number(r.payment_terms_days ?? 14),
     dueDate: r.due_date ?? "",
     paymentDate: r.payment_date ?? undefined,
@@ -131,6 +134,9 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
     clientAddress: data.client_address ?? null,
     projectId: data.project_id ?? undefined,
     date: data.invoice_date ?? data.date,
+    serviceDate: data.service_date ?? undefined,
+    servicePeriodStart: data.service_period_start ?? undefined,
+    servicePeriodEnd: data.service_period_end ?? undefined,
     paymentTermsDays: Number(data.payment_terms_days ?? 14),
     dueDate: data.due_date ?? "",
     paymentDate: data.payment_date ?? undefined,
@@ -177,6 +183,9 @@ export async function dbUpsertInvoice(inv: Invoice): Promise<void> {
 
     date: inv.date,
     invoice_date: inv.date,
+    service_date: inv.serviceDate || null,
+    service_period_start: inv.servicePeriodStart || null,
+    service_period_end: inv.servicePeriodEnd || null,
     payment_terms_days: Number(inv.paymentTermsDays ?? 14),
     due_date: inv.dueDate || calcDueDate(inv.date, Number(inv.paymentTermsDays ?? 14)),
     payment_date: inv.paymentDate ?? null,

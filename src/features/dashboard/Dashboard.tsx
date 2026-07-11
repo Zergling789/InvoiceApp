@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { ChevronDown, FilePlus2, Plus, ReceiptText, UserPlus } from "lucide-react";
 
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -119,8 +119,7 @@ export default function Dashboard() {
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Überfällig",
           tone: "critical",
-          primaryCta: { label: "Mahnung senden", to: `/app/invoices/${invoice.id}` },
-          secondaryCta: { label: "Details", to: `/app/invoices/${invoice.id}` },
+          primaryCta: { label: "Rechnung öffnen", to: `/app/invoices/${invoice.id}` },
         };
       });
 
@@ -146,8 +145,7 @@ export default function Dashboard() {
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Offen",
           tone: "warning",
-          primaryCta: { label: "Rechnung senden", to: `/app/invoices/${invoice.id}` },
-          secondaryCta: { label: "Details", to: `/app/invoices/${invoice.id}` },
+          primaryCta: { label: "Rechnung öffnen", to: `/app/invoices/${invoice.id}` },
         };
       });
 
@@ -170,8 +168,7 @@ export default function Dashboard() {
           ageLabel: `seit ${ageDays} Tagen`,
           statusLabel: "Follow-up fällig",
           tone: "neutral",
-          primaryCta: { label: "Nachfassen", to: `/app/offers/${offer.id}` },
-          secondaryCta: { label: "Details", to: `/app/offers/${offer.id}` },
+          primaryCta: { label: "Angebot öffnen", to: `/app/offers/${offer.id}` },
         };
       });
 
@@ -248,56 +245,67 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-12 pb-8">
+    <div className="space-y-10 pb-8">
       <div className="flex flex-col gap-5 pt-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <div className="app-eyebrow">Übersicht</div>
           <h1 className="text-3xl font-semibold tracking-[-0.045em] text-[var(--app-text)] sm:text-4xl">{company ? `Hallo ${company}` : "Hallo"}</h1>
           <p className="text-sm text-[var(--app-muted)]">{headerSubtitle}</p>
         </div>
-        <Link to="/app/invoices/new">
-          <AppButton><Plus size={17} /> Neue Rechnung</AppButton>
-        </Link>
-        {error && (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{error}</div>
-        )}
+        <details className="group relative z-20">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full bg-[var(--app-primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(0,113,227,0.2)] transition-colors hover:bg-[var(--app-primary-hover)]">
+            <Plus size={17} /> Neu <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] p-2 shadow-[var(--app-shadow)]">
+            <Link to="/app/offers/new" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/10"><FilePlus2 size={17} /> Angebot erstellen</Link>
+            <Link to="/app/invoices/new" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/10"><ReceiptText size={17} /> Rechnung erstellen</Link>
+            <Link to="/app/customers/new" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/10"><UserPlus size={17} /> Kunde anlegen</Link>
+          </div>
+        </details>
       </div>
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
       <section className="space-y-4">
         <SectionHeader title="Cashflow" subtitle="Dein Fokus: Geld reinholen." />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Link to="/app/documents?type=invoice&status=issued,sent,overdue" className="block rounded-[var(--app-radius-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-primary)]">
           <StatCard
             title="Offen"
             value={loading ? "" : renderCurrencyTotals(derived.openInvoiceTotals)}
             subtitle="Summe offener Rechnungen"
-            meta={`Rechnungen: ${derived.invoiceBucketCounts.open}`}
+            meta={`Rechnungen: ${derived.invoiceBucketCounts.open + derived.invoiceBucketCounts.overdue} →`}
             isLoading={loading}
           />
+          </Link>
+          <Link to="/app/documents?type=offer&status=draft,sent" className="block rounded-[var(--app-radius-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-primary)]">
           <StatCard
             title="Potenzial"
             value={loading ? "" : renderCurrencyTotals(derived.openOfferTotals)}
             subtitle="Summe offener Angebote"
-            meta={`Angebote offen: ${data.offers.filter(isOfferOpen).length}`}
+            meta={`Angebote offen: ${data.offers.filter(isOfferOpen).length} →`}
             isLoading={loading}
           />
+          </Link>
+          <Link to="/app/documents?type=invoice&status=overdue" className="block rounded-[var(--app-radius-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-primary)]">
           <StatCard
             title="Überfällig"
             value={loading ? "" : renderCurrencyTotals(derived.overdueInvoiceTotals)}
             subtitle="Summe überfälliger Rechnungen"
-            meta={`Überfällig: ${derived.invoiceBucketCounts.overdue}`}
+            meta={`Überfällig: ${derived.invoiceBucketCounts.overdue} →`}
             tone="critical"
             isLoading={loading}
           />
+          </Link>
         </div>
       </section>
 
       <section className="space-y-4">
         <SectionHeader
-          title="Jetzt erledigen"
+          title="Als Nächstes"
           subtitle="Top-Prioritäten für deinen nächsten Zahlungseingang."
           action={
-            <Link to="/app/invoices">
-              <AppButton variant="secondary">Alle Rechnungen</AppButton>
+            <Link to="/app/todos">
+              <AppButton variant="secondary">Alle To-dos</AppButton>
             </Link>
           }
         />
@@ -316,7 +324,7 @@ export default function Dashboard() {
       </section>
 
       <section className="space-y-4">
-        <SectionHeader title="Pipeline" subtitle="Wo gerade Momentum entsteht." />
+        <SectionHeader title="Pipeline" subtitle="Angebote nach Alter und Rechnungen nach Fälligkeit." />
         {loading ? (
           <AppCard className="animate-pulse">
             <div className="h-32 rounded bg-gray-100" />
@@ -331,24 +339,6 @@ export default function Dashboard() {
         )}
       </section>
 
-      <section className="space-y-3">
-        <SectionHeader title="Schnellaktionen" subtitle="Starte neue Umsätze in Sekunden." />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Link to="/app/offers/new">
-            <AppButton className="w-full justify-center">Angebot erstellen</AppButton>
-          </Link>
-          <Link to="/app/invoices/new">
-            <AppButton variant="secondary" className="w-full justify-center">
-              Rechnung erstellen
-            </AppButton>
-          </Link>
-          <Link to="/app/clients">
-            <AppButton variant="secondary" className="w-full justify-center">
-              Kunde anlegen
-            </AppButton>
-          </Link>
-        </div>
-      </section>
     </div>
   );
 }
