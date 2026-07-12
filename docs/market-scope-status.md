@@ -15,6 +15,7 @@
 - strukturierte Partei-Anschriften und elektronische Adressen in Einstellungen, Kunden- und Branding-Snapshot
 - gepinnte KoSIT-XSD-/Schematron-Validierung mit SHA-256-Prüfung und CI-Job
 - technisch valide PDF/A-3u-ZUGFeRD-Referenzpipeline mit Mustang und bytegenauer XML-Rückprüfung
+- gebrandete Chromium-zu-PDF/A-Konvertierung über Ghostscript als reproduzierbarer CI-Pfad
 
 ## Teilweise umgesetzt
 

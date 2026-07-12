@@ -21,6 +21,7 @@
     "validate:kosit": "npm run setup:kosit && node scripts/einvoice/validate-kosit.mjs",
     "setup:mustang": "node scripts/einvoice/setup-mustang.mjs",
     "validate:zugferd": "npm run setup:mustang && node scripts/einvoice/validate-zugferd.mjs",
+    "validate:zugferd:branded": "npm run setup:mustang && node scripts/einvoice/validate-branded-zugferd.mjs",
     "test:ui": "vitest run",
     "test:all": "npm run typecheck && npm run test:ui && npm run test:server && npm run build",
     "audit": "npm audit --audit-level=high"
