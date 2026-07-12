@@ -94,7 +94,7 @@ const invoice = buildCanonicalInvoice(source);
 const render = canonicalInvoiceToRenderPayload(invoice, source);
 const html = renderDocumentHtml({ type: "invoice", ...render });
 const visual = path.join(tmp, "branded.pdf");
-const pdfa = path.join(tmp, "branded-pdfa2.pdf");
+const pdfa = path.join(tmp, "branded-pdfa3.pdf");
 const xml = path.join(tmp, "factur-x.xml");
 const combined = path.join(
   output,
@@ -137,7 +137,7 @@ await writeFile(
 const convert = spawnSync(
   gs,
   [
-    "-dPDFA=2",
+    "-dPDFA=3",
     "-dBATCH",
     "-dNOPAUSE",
     "-dSAFER",
