@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
 import { buildCanonicalInvoice, canonicalInvoiceToRenderPayload } from "./einvoice/canonicalInvoice.js";
 import { serializeCanonicalInvoiceToCii } from "./einvoice/ciiSerializer.js";
+import { generateValidatedZugferd } from "./einvoice/zugferdGenerator.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
 import {
@@ -831,6 +832,8 @@ const mapInvoiceRow = (row = {}) => ({
   vatRate: Number(row.vat_rate ?? 0),
   isSmallBusiness: Boolean(row.is_small_business ?? false),
   smallBusinessNote: row.small_business_note ?? null,
+  status: row.status ?? "DRAFT",
+  finalizedAt: row.finalized_at ?? null,
 });
 
 const mapOfferRow = (row = {}) => ({
@@ -878,6 +881,14 @@ const loadLogoDataUrl = async (db, logoPath) => {
   } catch {
     return "";
   }
+};
+
+const assertInvoiceFinalizedForEinvoice = (doc) => {
+  if (doc?.finalizedAt) return;
+  const error = new Error("Only finalized invoices can be exported as electronic invoices");
+  error.status = 409;
+  error.code = "EINVOICE_NOT_FINALIZED";
+  throw error;
 };
 
 const mapInvoiceSnapshotClient = (row = {}) => ({
@@ -930,7 +941,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot"
+    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot, status, finalized_at"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
 
   const { data: docRow, error: docError } = await db
@@ -1164,15 +1175,80 @@ app.post("/api/einvoice/cii", requireAuth, async (req, res) => {
     const docId = req.body?.docId ?? null;
     if (!docId) return sendError(res, 400, "VALIDATION_ERROR", "Missing required field: docId", req);
     const payload = await loadDocumentPayloadFromDb({ type: "invoice", docId, userId: req.user.id });
+    assertInvoiceFinalizedForEinvoice(payload.doc);
     const invoice = buildCanonicalInvoice(payload);
     const cii = serializeCanonicalInvoiceToCii(invoice).replace("urn:factur-x.eu:1p0:en16931", "urn:cen.eu:en16931:2017");
-    const filename = `${sanitizeFilename(invoice.invoiceNumber || docId)}.xml`;
+    const contentHash = crypto.createHash("sha256").update(cii, "utf8").digest("hex");
+    const generatedAt = new Date().toISOString();
+    const { error: archiveError } = await requireSupabase().from("einvoice_exports").insert({
+      user_id: req.user.id,
+      invoice_id: docId,
+      format: "CII_XML",
+      profile: "EN16931",
+      version: "ZUGFeRD_2",
+      status: "GENERATED",
+      validation_result: { preflight: "passed" },
+      generated_at: generatedAt,
+      content_hash: contentHash,
+    });
+    if (archiveError) {
+      const archiveFailure = new Error("E-invoice export metadata could not be archived");
+      archiveFailure.code = "EINVOICE_GENERATION_FAILED";
+      archiveFailure.status = 500;
+      throw archiveFailure;
+    }
+    const filename = `Rechnung_${sanitizeFilename(invoice.invoiceNumber || docId)}.xml`;
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     return res.status(200).send(cii);
   } catch (err) {
     console.error("CII generation failed", err);
     return sendError(res, err?.status || 500, err?.code || "CII_GENERATION_FAILED", err?.code === "CII_PREFLIGHT_FAILED" ? "Die Rechnung enthält noch unvollständige oder nicht unterstützte E-Rechnungsdaten." : "CII-XML konnte nicht erstellt werden.", req, { extra: !IS_PROD && err?.issues ? { issues: err.issues } : undefined });
+  }
+});
+
+app.post("/api/einvoice/zugferd", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`einvoice_user_${req.user.id}`, 20);
+    const docId = req.body?.docId ?? null;
+    if (!docId) return sendError(res, 400, "VALIDATION_ERROR", "Missing required field: docId", req);
+
+    const payload = await loadDocumentPayloadFromDb({ type: "invoice", docId, userId: req.user.id });
+    assertInvoiceFinalizedForEinvoice(payload.doc);
+    const invoice = buildCanonicalInvoice(payload);
+    const cii = serializeCanonicalInvoiceToCii(invoice).replace("urn:factur-x.eu:1p0:en16931", "urn:cen.eu:en16931:2017");
+    const visualPdf = await createPdfBufferFromPayload("invoice", payload, { requestId: req.requestId, source: "einvoice" });
+    const generated = await generateValidatedZugferd({ visualPdf, ciiXml: cii });
+    const generatedAt = new Date().toISOString();
+
+    const { error: archiveError } = await requireSupabase().from("einvoice_exports").insert({
+      user_id: req.user.id,
+      invoice_id: docId,
+      format: "ZUGFERD_PDF",
+      profile: "EN16931",
+      version: "ZUGFeRD_2",
+      status: "GENERATED",
+      validation_result: generated.validationResult,
+      generated_at: generatedAt,
+      content_hash: generated.contentHash,
+    });
+    if (archiveError) {
+      const error = new Error("E-invoice export metadata could not be archived");
+      error.code = "EINVOICE_GENERATION_FAILED";
+      error.status = 500;
+      throw error;
+    }
+
+    const filename = `Rechnung_${sanitizeFilename(invoice.invoiceNumber || docId)}_ZUGFeRD.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("X-Content-SHA256", generated.contentHash);
+    return res.status(200).send(generated.pdf);
+  } catch (err) {
+    console.error("ZUGFeRD generation failed", { code: err?.code, requestId: req.requestId });
+    const code = err?.status === 404 ? "EINVOICE_FORBIDDEN" : err?.code === "CII_PREFLIGHT_FAILED" ? "EINVOICE_DATA_INCOMPLETE" : err?.code || "EINVOICE_GENERATION_FAILED";
+    const message = code === "EINVOICE_NOT_FINALIZED" ? "Nur finalisierte Rechnungen können als E-Rechnung exportiert werden." : code === "EINVOICE_DATA_INCOMPLETE" ? "Für diese Rechnung fehlen strukturierte E-Rechnungsdaten." : code === "EINVOICE_VALIDATION_FAILED" ? "Die Rechnung hat die E-Rechnungsvalidierung nicht bestanden." : code === "EINVOICE_GENERATOR_NOT_CONFIGURED" ? "Der E-Rechnungsdienst ist noch nicht konfiguriert." : code === "EINVOICE_FORBIDDEN" ? "Diese E-Rechnung ist nicht verfügbar." : "Die E-Rechnung konnte nicht erzeugt werden.";
+    return sendError(res, err?.status || 500, code, message, req, { extra: !IS_PROD && err?.issues ? { issues: err.issues } : undefined });
   }
 });
 
@@ -2085,6 +2161,7 @@ export {
   createPdfAttachment,
   hashPayload,
   buildPdfFilename,
+  assertInvoiceFinalizedForEinvoice,
 };
 const closeBrowser = async () => {
   if (browserPromise) {

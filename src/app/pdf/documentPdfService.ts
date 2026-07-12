@@ -55,3 +55,21 @@ export async function downloadInvoiceCii(docId: string) {
   const anchor = document.createElement("a");
   anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
 }
+
+export async function downloadInvoiceZugferd(docId: string) {
+  const res = await apiFetch("/api/einvoice/zugferd", { method: "POST", body: JSON.stringify({ docId }) }, { auth: true });
+  if (!res.ok) {
+    const err = await readApiError(res);
+    throw new ApiRequestError(err.message || "Die E-Rechnung konnte nicht erzeugt werden.", res.status, err.code);
+  }
+  const blob = await res.blob();
+  const filename = filenameFromHeader(res.headers.get("content-disposition")) || `Rechnung_${docId}_ZUGFeRD.pdf`;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}

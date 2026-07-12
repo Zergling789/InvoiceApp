@@ -6,9 +6,9 @@ Der PDF-Generator verwendet bereits ausschließlich einen Adapter dieses Modells
 
 Das Feld `specification: EN16931_CORE` beschreibt die Zielsemantik, ist aber keine Konformitätsaussage. Formale Konformität entsteht erst nach vollständigem Mapping, XML-Schema-/Schematron-Prüfung und einem unabhängigen Validatorlauf.
 
-## CII-Vorabexport
+## CII- und ZUGFeRD-Export
 
-Der authentifizierte Endpunkt `POST /api/einvoice/cii` serialisiert finalisierte Rechnungsdaten als UN/CEFACT Cross Industry Invoice. Die UI bezeichnet diesen Download ausdrücklich als Vorabversion. Der Export vermeidet leere optionale XML-Elemente und wird aus demselben kanonischen Objekt wie die PDF-Darstellung erzeugt. XSD-/Schematron-Validierung und PDF/A-3-Einbettung sind noch offen; daher wird der erzeugte Download derzeit nicht als ZUGFeRD-konform bezeichnet.
+Der authentifizierte Endpunkt `POST /api/einvoice/cii` serialisiert finalisierte Rechnungsdaten als UN/CEFACT Cross Industry Invoice. `POST /api/einvoice/zugferd` erzeugt daraus über den konfigurierten, authentifizierten Generator eine validierte PDF/A-3-Hybridrechnung im Profil EN 16931. Ohne Generator-Konfiguration wird kein ZUGFeRD-Dokument ausgeliefert. Beide Exporte verwenden dasselbe kanonische Objekt wie die PDF-Darstellung.
 
 Vor der Serialisierung erzwingt `ciiValidation.js` einen serverseitigen Preflight. Fehlende Parteien, Anschriften oder Steueridentifikation, ungültige Leistungsangaben, nicht unterstützte Steuern und inkonsistente Summen führen zu `CII_PREFLIGHT_FAILED`; in diesem Fall wird kein XML ausgeliefert. `npm run test:einvoice` führt die zugehörigen Modell-, Konsistenz-, Serializer- und Negativtests aus.
 
@@ -20,4 +20,4 @@ Verkäufer und Käufer besitzen zusätzlich strukturierte Felder für Straße, H
 
 `npm run validate:zugferd` lädt Mustang CLI 2.24.0 mit gepinnter SHA-256-Prüfsumme. Der Lauf erzeugt eine PDF/A-3u-Referenz, bettet das kanonische XML im Profil EN16931 ein, validiert PDF und XML gemeinsam und extrahiert das XML anschließend erneut. Die extrahierte Datei muss bytegenau mit der kanonischen Quelldatei übereinstimmen. Mustangs generische Sichtdarstellung ist nur eine technische Referenz und wird wegen ihres nicht gebrandeten Layouts nicht als Produktdownload angeboten.
 
-`npm run validate:zugferd:branded` erzeugt die bestehende FreelanceFlow-Sicht-PDF mit Chromium, konvertiert sie mit Ghostscript 10.x nach PDF/A-2, bettet anschließend dasselbe XML mit Mustang ein und wiederholt die vollständige Hybrid- und Bytegleichheitsprüfung. Ghostscript wird über `GHOSTSCRIPT_BIN` oder den Systempfad gefunden. CI installiert Ghostscript paketverwaltet; die Anwendung führt keine automatische Systeminstallation durch.
+`npm run validate:zugferd:branded` erzeugt die bestehende FreelanceFlow-Sicht-PDF mit Chromium, konvertiert sie mit Ghostscript 10.x nach PDF/A-3, bettet anschließend dasselbe XML mit Mustang ein und wiederholt die vollständige Hybrid- und Bytegleichheitsprüfung. Ghostscript wird über `GHOSTSCRIPT_BIN` oder den Systempfad gefunden. CI installiert Ghostscript paketverwaltet; die Anwendung führt keine automatische Systeminstallation durch.
