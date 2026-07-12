@@ -21,6 +21,7 @@ import { formatErrorToast } from "@/utils/errorMapping";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
+import { downloadDocumentPdf, downloadInvoiceCii, downloadInvoiceZugferd } from "@/app/pdf/documentPdfService";
 import { formatDocumentStatus, formatInvoiceDisplayStatus } from "@/features/documents/utils/formatStatus";
 import {
   getDocumentCapabilities,
@@ -332,6 +333,27 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     setShowSendModal(true);
   };
 
+  const handleDownloadInvoice = async (format: "pdf" | "zugferd" | "xml") => {
+    if (!doc || docType !== "invoice") return;
+    try {
+      if (format === "pdf") {
+        await downloadDocumentPdf({ type: "invoice", docId: doc.id });
+      } else if (format === "zugferd") {
+        await downloadInvoiceZugferd(doc.id);
+      } else {
+        await downloadInvoiceCii(doc.id);
+      }
+    } catch (error) {
+      const err = error as Error & { code?: string; requestId?: string };
+      toast.error(formatErrorToast({
+        code: err.code,
+        message: err.message,
+        requestId: err.requestId,
+        fallback: format === "xml" ? "Die E-Rechnung konnte nicht erzeugt werden." : "Das PDF konnte nicht erstellt werden.",
+      }));
+    }
+  };
+
   const handleFinalizeInvoice = async () => {
     if (!doc || docType !== "invoice") return;
     if (!capabilities?.canFinalize) return;
@@ -365,6 +387,22 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   const actions =
     docType === "invoice"
       ? [
+          ...((doc as Invoice).finalizedAt
+            ? [
+                {
+                  label: "PDF herunterladen",
+                  onSelect: () => void handleDownloadInvoice("pdf"),
+                },
+                {
+                  label: "E-Rechnung herunterladen",
+                  onSelect: () => void handleDownloadInvoice("zugferd"),
+                },
+                {
+                  label: "XML herunterladen (EN 16931)",
+                  onSelect: () => void handleDownloadInvoice("xml"),
+                },
+              ]
+            : []),
           ...(capabilities?.canFinalize
             ? [
                 {

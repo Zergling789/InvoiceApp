@@ -53,6 +53,19 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Unterstützt werden derzeit nur inländische B2B-Rechnungen deutscher Unternehmen in EUR.";
     case "SELLER_TAX_IDENTIFICATION_REQUIRED":
       return "Bitte hinterlege in den Einstellungen eine Steuernummer oder USt-ID.";
+    case "EINVOICE_NOT_FINALIZED":
+      return "Nur finalisierte Rechnungen können als E-Rechnung exportiert werden.";
+    case "EINVOICE_DATA_INCOMPLETE":
+      return "Für diese Rechnung fehlen strukturierte E-Rechnungsdaten.";
+    case "EINVOICE_VALIDATION_FAILED":
+      return "Die Rechnung hat die E-Rechnungsvalidierung nicht bestanden.";
+    case "EINVOICE_GENERATOR_NOT_CONFIGURED":
+      return "Der E-Rechnungsdienst ist noch nicht konfiguriert.";
+    case "EINVOICE_FORBIDDEN":
+      return "Diese E-Rechnung ist nicht verfügbar.";
+    case "EINVOICE_GENERATION_TIMEOUT":
+    case "EINVOICE_GENERATION_FAILED":
+      return "Die E-Rechnung konnte nicht erzeugt werden.";
     case "CII_PREFLIGHT_FAILED":
       return "Die Rechnung enthält noch unvollständige oder nicht unterstützte E-Rechnungsdaten.";
     case "UNIQUE_VIOLATION":

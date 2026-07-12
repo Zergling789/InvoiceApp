@@ -10,7 +10,7 @@
 - verpflichtender Hinweis im Finalisierungsdialog
 - formatneutrales kanonisches Rechnungsmodell als gemeinsame Quelle für PDF und spätere XML-Exporte
 - zentrale Ableitung von Rechnungspositionen, Steuergruppen und Geldsummen im Server
-- authentifizierter CII-XML-Vorabexport aus dem kanonischen Modell
+- authentifizierter CII-XML-Download und produktiver ZUGFeRD-Endpunkt aus dem kanonischen Modell
 - verpflichtende serverseitige CII-Preflight-Validierung mit stabilem Fehlercode
 - strukturierte Partei-Anschriften und elektronische Adressen in Einstellungen, Kunden- und Branding-Snapshot
 - gepinnte KoSIT-XSD-/Schematron-Validierung mit SHA-256-Prüfung und CI-Job
@@ -24,8 +24,8 @@
 
 ## Noch offen
 
-- CII-Serialisierung für ZUGFeRD und UBL-Serialisierung für XRechnung
-- unabhängige EN-16931-/XRechnung-Validierung und PDF/A-3-Einbettung
+- Bereitstellung und Betrieb des extern konfigurierten PDF/A-3-/EN-16931-Generator-Dienstes
+- UBL-Serialisierung und Produktfluss für XRechnung
 - zusätzliche internationale und besondere Umsatzsteuerfälle
 
 ## Bewusst nicht unterstützt

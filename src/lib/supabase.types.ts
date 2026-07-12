@@ -44,6 +44,56 @@ export type Database = {
         }
         Relationships: []
       }
+      einvoice_exports: {
+        Row: {
+          content_hash: string | null
+          created_at: string
+          format: string
+          generated_at: string | null
+          id: string
+          invoice_id: string
+          profile: string
+          status: string
+          user_id: string
+          validation_result: Json
+          version: string
+        }
+        Insert: {
+          content_hash?: string | null
+          created_at?: string
+          format: string
+          generated_at?: string | null
+          id?: string
+          invoice_id: string
+          profile: string
+          status: string
+          user_id: string
+          validation_result?: Json
+          version: string
+        }
+        Update: {
+          content_hash?: string | null
+          created_at?: string
+          format?: string
+          generated_at?: string | null
+          id?: string
+          invoice_id?: string
+          profile?: string
+          status?: string
+          user_id?: string
+          validation_result?: Json
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "einvoice_exports_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null
