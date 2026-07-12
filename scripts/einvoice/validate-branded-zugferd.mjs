@@ -3,17 +3,224 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { chromium } from "playwright";
-import { buildCanonicalInvoice, canonicalInvoiceToRenderPayload } from "../../server/einvoice/canonicalInvoice.js";
+import {
+  buildCanonicalInvoice,
+  canonicalInvoiceToRenderPayload,
+} from "../../server/einvoice/canonicalInvoice.js";
 import { serializeCanonicalInvoiceToCii } from "../../server/einvoice/ciiSerializer.js";
 import { renderDocumentHtml } from "../../server/renderDocumentHtml.js";
 
-const root=path.resolve(import.meta.dirname,"../..");const tmp=path.join(root,"tmp","pdfs","branded-zugferd");const output=path.join(root,"output","pdf");await rm(tmp,{recursive:true,force:true});await mkdir(tmp,{recursive:true});await mkdir(output,{recursive:true});
-const candidates=[process.env.GHOSTSCRIPT_BIN,"gs","gswin64c.exe","C:\\Program Files\\gs\\gs10.07.1\\bin\\gswin64c.exe","C:\\Program Files\\gs\\gs10.05.1\\bin\\gswin64c.exe","C:\\gs10071\\bin\\gswin64c.exe"].filter(Boolean);const gs=candidates.find(candidate=>existsSync(candidate)||spawnSync(candidate,["--version"],{stdio:"ignore"}).status===0);if(!gs)throw new Error("Ghostscript fehlt. Setze GHOSTSCRIPT_BIN oder installiere Ghostscript 10.x.");
-const gsRoot=path.resolve(path.dirname(gs),"..");const iccCandidates=[path.join(gsRoot,"iccprofiles","srgb.icc"),path.join(gsRoot,"Resource","ColorSpace","srgb.icc"),"/usr/share/color/icc/ghostscript/srgb.icc","/usr/share/ghostscript/iccprofiles/srgb.icc"];const icc=iccCandidates.find(existsSync);if(!icc)throw new Error("Ghostscript-sRGB-ICC-Profil wurde nicht gefunden.");
-const source={doc:{number:"RE-2026-0001",date:"2026-07-11",currency:"EUR",buyerReference:"BUYER-REF-1",serviceDate:"2026-07-10",dueDate:"2026-07-25",positions:[{id:"1",description:"Beratungsleistung",quantity:1,unit:"Std",price:100,taxCategory:"STANDARD",taxRate:19}]},settings:{companyName:"Muster GmbH",address:"Musterstraße 1\n10115 Berlin",sellerStreet:"Musterstraße",sellerHouseNumber:"1",sellerPostalCode:"10115",sellerCity:"Berlin",sellerElectronicAddress:"rechnung@muster.example",sellerTaxNumber:"12/345/67890",sellerVatId:"DE123456789",iban:"DE02120300000000202051",bic:"BYLADEM1001",bankName:"Musterbank",locale:"de-DE",currency:"EUR",templateId:"modern",primaryColor:"#4f46e5"},client:{companyName:"Kunde GmbH",address:"Kundenweg 2\n20095 Hamburg",street:"Kundenweg",houseNumber:"2",postalCode:"20095",city:"Hamburg",invoiceEmail:"rechnung@kunde.example"}};
-const invoice=buildCanonicalInvoice(source);const render=canonicalInvoiceToRenderPayload(invoice,source);const html=renderDocumentHtml({type:"invoice",...render});const visual=path.join(tmp,"branded.pdf");const pdfa=path.join(tmp,"branded-pdfa2.pdf");const xml=path.join(tmp,"factur-x.xml");const combined=path.join(output,"freelanceflow-zugferd-en16931-reference.pdf");await rm(combined,{force:true});await writeFile(xml,serializeCanonicalInvoiceToCii(invoice).replace("urn:factur-x.eu:1p0:en16931","urn:cen.eu:en16931:2017"),"utf8");
-const browser=await chromium.launch({headless:true});try{const page=await browser.newPage({viewport:{width:1200,height:2000}});await page.setContent(html,{waitUntil:"load"});await page.pdf({path:visual,format:"A4",printBackground:true,preferCSSPageSize:true});}finally{await browser.close();}
-const ps=path.join(tmp,"pdfa-def.ps");const iccPs=icc.replaceAll("\\","/").replaceAll("(","\\(").replaceAll(")","\\)");await writeFile(ps,`[/_objdef {icc_PDFA} /type /stream /OBJ pdfmark\n[{icc_PDFA} << /N 3 >> /PUT pdfmark\n[{icc_PDFA} (${iccPs}) /PUTFILE pdfmark\n[/_objdef {OutputIntent_PDFA} /type /dict /OBJ pdfmark\n[{OutputIntent_PDFA} << /Type /OutputIntent /S /GTS_PDFA1 /DestOutputProfile {icc_PDFA} /OutputConditionIdentifier (sRGB) >> /PUT pdfmark\n[{Catalog} << /OutputIntents [{OutputIntent_PDFA}] >> /PUT pdfmark\n`,`ascii`);
-const convert=spawnSync(gs,["-dPDFA=2","-dBATCH","-dNOPAUSE","-dSAFER","-sDEVICE=pdfwrite","-sColorConversionStrategy=RGB","-sProcessColorModel=DeviceRGB","-dPDFACompatibilityPolicy=1",`-sOutputFile=${pdfa}`,ps,visual],{encoding:"utf8"});if(convert.stdout)process.stdout.write(convert.stdout);if(convert.stderr)process.stderr.write(convert.stderr);if(convert.status!==0)throw new Error("Ghostscript-PDF/A-Konvertierung fehlgeschlagen.");
-const jar=path.join(root,".cache","mustang","Mustang-CLI-2.24.0.jar");const combine=spawnSync("java",["-jar",jar,"--action","combine","--source",pdfa,"--source-xml",xml,"--out",combined,"--format","zf","--version","2","--profile","E","--no-additional-attachments"],{encoding:"utf8"});if(combine.status!==0)throw new Error(combine.stderr||"Mustang-Einbettung fehlgeschlagen.");const validate=spawnSync("java",["-jar",jar,"--action","validate","--source",combined,"--no-notices","--disable-file-logging"],{encoding:"utf8"});process.stdout.write(validate.stdout??"");process.stderr.write(validate.stderr??"");if(validate.status!==0||!String(validate.stdout).includes('<summary status="valid"/>'))throw new Error("Gebrandetes ZUGFeRD-Dokument ist ungültig.");
-const extracted=path.join(tmp,"extracted.xml");const extract=spawnSync("java",["-jar",jar,"--action","extract","--source",combined,"--out",extracted],{encoding:"utf8"});if(extract.status!==0)throw new Error("XML-Extraktion fehlgeschlagen.");if(await readFile(xml,"utf8")!==await readFile(extracted,"utf8"))throw new Error("Eingebettetes XML ist nicht bytegleich.");console.log(`Gebrandete ZUGFeRD-Referenz validiert: ${combined}`);
+const root = path.resolve(import.meta.dirname, "../..");
+const tmp = path.join(root, "tmp", "pdfs", "branded-zugferd");
+const output = path.join(root, "output", "pdf");
+await rm(tmp, { recursive: true, force: true });
+await mkdir(tmp, { recursive: true });
+await mkdir(output, { recursive: true });
+const candidates = [
+  process.env.GHOSTSCRIPT_BIN,
+  "gs",
+  "gswin64c.exe",
+  "C:\\Program Files\\gs\\gs10.07.1\\bin\\gswin64c.exe",
+  "C:\\Program Files\\gs\\gs10.05.1\\bin\\gswin64c.exe",
+  "C:\\gs10071\\bin\\gswin64c.exe",
+].filter(Boolean);
+const gs = candidates.find(
+  (candidate) =>
+    existsSync(candidate) ||
+    spawnSync(candidate, ["--version"], { stdio: "ignore" }).status === 0,
+);
+if (!gs)
+  throw new Error(
+    "Ghostscript fehlt. Setze GHOSTSCRIPT_BIN oder installiere Ghostscript 10.x.",
+  );
+const gsRoot = path.resolve(path.dirname(gs), "..");
+const iccCandidates = [
+  path.join(gsRoot, "iccprofiles", "srgb.icc"),
+  path.join(gsRoot, "Resource", "ColorSpace", "srgb.icc"),
+  "/usr/share/color/icc/ghostscript/srgb.icc",
+  "/usr/share/ghostscript/iccprofiles/srgb.icc",
+];
+const icc = iccCandidates.find(existsSync);
+if (!icc) throw new Error("Ghostscript-sRGB-ICC-Profil wurde nicht gefunden.");
+const source = {
+  doc: {
+    number: "RE-2026-0001",
+    date: "2026-07-11",
+    currency: "EUR",
+    buyerReference: "BUYER-REF-1",
+    serviceDate: "2026-07-10",
+    dueDate: "2026-07-25",
+    positions: [
+      {
+        id: "1",
+        description: "Beratungsleistung",
+        quantity: 1,
+        unit: "Std",
+        price: 100,
+        taxCategory: "STANDARD",
+        taxRate: 19,
+      },
+    ],
+  },
+  settings: {
+    companyName: "Muster GmbH",
+    address: "Musterstraße 1\n10115 Berlin",
+    sellerStreet: "Musterstraße",
+    sellerHouseNumber: "1",
+    sellerPostalCode: "10115",
+    sellerCity: "Berlin",
+    sellerElectronicAddress: "rechnung@muster.example",
+    sellerTaxNumber: "12/345/67890",
+    sellerVatId: "DE123456789",
+    iban: "DE02120300000000202051",
+    bic: "BYLADEM1001",
+    bankName: "Musterbank",
+    locale: "de-DE",
+    currency: "EUR",
+    templateId: "modern",
+    primaryColor: "#4f46e5",
+  },
+  client: {
+    companyName: "Kunde GmbH",
+    address: "Kundenweg 2\n20095 Hamburg",
+    street: "Kundenweg",
+    houseNumber: "2",
+    postalCode: "20095",
+    city: "Hamburg",
+    invoiceEmail: "rechnung@kunde.example",
+  },
+};
+const invoice = buildCanonicalInvoice(source);
+const render = canonicalInvoiceToRenderPayload(invoice, source);
+const html = renderDocumentHtml({ type: "invoice", ...render });
+const visual = path.join(tmp, "branded.pdf");
+const pdfa = path.join(tmp, "branded-pdfa2.pdf");
+const xml = path.join(tmp, "factur-x.xml");
+const combined = path.join(
+  output,
+  "freelanceflow-zugferd-en16931-reference.pdf",
+);
+await rm(combined, { force: true });
+await writeFile(
+  xml,
+  serializeCanonicalInvoiceToCii(invoice).replace(
+    "urn:factur-x.eu:1p0:en16931",
+    "urn:cen.eu:en16931:2017",
+  ),
+  "utf8",
+);
+const browser = await chromium.launch({ headless: true });
+try {
+  const page = await browser.newPage({
+    viewport: { width: 1200, height: 2000 },
+  });
+  await page.setContent(html, { waitUntil: "load" });
+  await page.pdf({
+    path: visual,
+    format: "A4",
+    printBackground: true,
+    preferCSSPageSize: true,
+  });
+} finally {
+  await browser.close();
+}
+const ps = path.join(tmp, "pdfa-def.ps");
+const iccPs = icc
+  .replaceAll("\\", "/")
+  .replaceAll("(", "\\(")
+  .replaceAll(")", "\\)");
+await writeFile(
+  ps,
+  `[/_objdef {icc_PDFA} /type /stream /OBJ pdfmark\n[{icc_PDFA} << /N 3 >> /PUT pdfmark\n[{icc_PDFA} (${iccPs}) /PUTFILE pdfmark\n[/_objdef {OutputIntent_PDFA} /type /dict /OBJ pdfmark\n[{OutputIntent_PDFA} << /Type /OutputIntent /S /GTS_PDFA1 /DestOutputProfile {icc_PDFA} /OutputConditionIdentifier (sRGB) >> /PUT pdfmark\n[{Catalog} << /OutputIntents [{OutputIntent_PDFA}] >> /PUT pdfmark\n`,
+  `ascii`,
+);
+const convert = spawnSync(
+  gs,
+  [
+    "-dPDFA=2",
+    "-dBATCH",
+    "-dNOPAUSE",
+    "-dSAFER",
+    "-sDEVICE=pdfwrite",
+    "-sColorConversionStrategy=RGB",
+    "-sProcessColorModel=DeviceRGB",
+    "-dPDFACompatibilityPolicy=1",
+    `-sOutputFile=${pdfa}`,
+    ps,
+    visual,
+  ],
+  { encoding: "utf8" },
+);
+if (convert.stdout) process.stdout.write(convert.stdout);
+if (convert.stderr) process.stderr.write(convert.stderr);
+if (convert.status !== 0)
+  throw new Error("Ghostscript-PDF/A-Konvertierung fehlgeschlagen.");
+const jar = path.join(root, ".cache", "mustang", "Mustang-CLI-2.24.0.jar");
+const combine = spawnSync(
+  "java",
+  [
+    "-jar",
+    jar,
+    "--action",
+    "combine",
+    "--source",
+    pdfa,
+    "--source-xml",
+    xml,
+    "--out",
+    combined,
+    "--format",
+    "zf",
+    "--version",
+    "2",
+    "--profile",
+    "E",
+    "--ignorefileextension",
+    "--no-additional-attachments",
+  ],
+  { encoding: "utf8" },
+);
+process.stdout.write(combine.stdout ?? "");
+process.stderr.write(combine.stderr ?? "");
+if (combine.status !== 0 || !existsSync(combined))
+  throw new Error("Mustang-Einbettung fehlgeschlagen.");
+const validate = spawnSync(
+  "java",
+  [
+    "-jar",
+    jar,
+    "--action",
+    "validate",
+    "--source",
+    combined,
+    "--no-notices",
+    "--disable-file-logging",
+  ],
+  { encoding: "utf8" },
+);
+process.stdout.write(validate.stdout ?? "");
+process.stderr.write(validate.stderr ?? "");
+if (
+  validate.status !== 0 ||
+  !String(validate.stdout).includes('<summary status="valid"/>')
+)
+  throw new Error("Gebrandetes ZUGFeRD-Dokument ist ungültig.");
+const extracted = path.join(tmp, "extracted.xml");
+const extract = spawnSync(
+  "java",
+  [
+    "-jar",
+    jar,
+    "--action",
+    "extract",
+    "--source",
+    combined,
+    "--out",
+    extracted,
+  ],
+  { encoding: "utf8" },
+);
+if (extract.status !== 0) throw new Error("XML-Extraktion fehlgeschlagen.");
+if ((await readFile(xml, "utf8")) !== (await readFile(extracted, "utf8")))
+  throw new Error("Eingebettetes XML ist nicht bytegleich.");
+console.log(`Gebrandete ZUGFeRD-Referenz validiert: ${combined}`);
