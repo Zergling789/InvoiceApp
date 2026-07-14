@@ -91,6 +91,15 @@ const RAW_APP_BASE_URL =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${PORT}`);
 const APP_BASE_URL = String(RAW_APP_BASE_URL).trim().replace(/\/+$/, "");
 
+app.use((req, res, next) => {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+  const origin = req.get("origin");
+  const fetchSite = req.get("sec-fetch-site");
+  const requestOrigin = `${req.protocol}://${req.get("host")}`;
+  if ((origin && ![APP_BASE_URL, requestOrigin].includes(origin)) || fetchSite === "cross-site") return sendError(res, 403, "CROSS_SITE_REQUEST_BLOCKED", "Cross-site request blocked.", req);
+  return next();
+});
+
 const FROM_HEADER = process.env.SMTP_FROM || process.env.SMTP_USER;
 const FROM_ADDRESS = extractEmailAddress(FROM_HEADER);
 const SENDER_DOMAIN_NAME = process.env.SENDER_DOMAIN_NAME || "Lightning Bold";
