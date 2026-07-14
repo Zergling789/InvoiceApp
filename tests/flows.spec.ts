@@ -109,7 +109,8 @@ test.describe.serial("value stream: offer -> invoice", () => {
     const offerRow = page.getByRole("button").filter({ hasText: offerNumber });
     await expect(offerRow).toBeVisible();
     await offerRow.click();
-    await expect(page.getByText("ANGEBOT")).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/offers\//);
+    await expect(page.getByText(offerNumber, { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "E-Mail" }).click();
     await expect(page.getByRole("heading", { name: "Dokument senden" })).toBeVisible();
     await page.locator("label:has-text('Empfänger')").locator("xpath=following-sibling::input").fill(client.email);
