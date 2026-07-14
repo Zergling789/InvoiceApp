@@ -15,7 +15,9 @@ export const EXPORT_SOURCES = [
   "account_deletion_requests",
   "billing_customers",
   "billing_subscriptions",
+  "billing_usage",
   "document_recipient_links",
+  "legal_acceptances",
   ].map((table) => ({ table, ownerColumn: "user_id" })),
 ];
 
@@ -24,7 +26,8 @@ const json = (value) => JSON.stringify(value, null, 2);
 export function csvEscape(value) {
   if (value === null || value === undefined) return "";
   const text = typeof value === "object" ? JSON.stringify(value) : String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
 export function rowsToCsv(rows) {
@@ -40,9 +43,11 @@ export function buildAccountExportZip({ user, datasets, generatedAt = new Date()
       `Erstellt: ${generatedAt}`,
       "Alle enthaltenen Datensätze gehören zum authentifizierten Konto.",
       "JSON ist die vollständige maschinenlesbare Darstellung; CSV-Dateien dienen der tabellarischen Weiterverarbeitung.",
+      "CSV-Zellen mit Formelpräfix werden zum Schutz vor Tabellenkalkulations-Injection mit einem Apostroph versehen.",
+      "E-Rechnungs- und PDF-Binärdateien sind in diesem synchronen Export noch nicht enthalten; gespeicherte Exportmetadaten und Dokument-Snapshots sind enthalten.",
     ].join("\r\n")),
     "profile.json": strToU8(json({ id: user.id, email: user.email ?? null, createdAt: user.created_at ?? null })),
-    "manifest.json": strToU8(json({ version: 1, generatedAt, tables: Object.fromEntries(Object.entries(datasets).map(([name, rows]) => [name, rows.length])) })),
+    "manifest.json": strToU8(json({ version: 2, generatedAt, format: "FreelanceFlow account export", tables: Object.fromEntries(Object.entries(datasets).map(([name, rows]) => [name, rows.length])), binariesIncluded: false })),
   };
 
   for (const [name, rows] of Object.entries(datasets)) {

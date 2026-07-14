@@ -1,12 +1,12 @@
 import crypto from "crypto";
 
 export const LEGAL_DOCUMENTS = Object.freeze({
-  TERMS: Object.freeze({ version: "2026-07-13", contentId: "terms-2026-07-13" }),
-  PRIVACY: Object.freeze({ version: "2026-07-13", contentId: "privacy-2026-07-13" }),
+  TERMS: Object.freeze({ version: "2026-07-14", content: "FreelanceFlow Nutzungsbedingungen 2026-07-14: Marktumfang, Prüfpflicht, keine Steuer- oder Rechtsberatung, Webhook-basierte Tarifrechte." }),
+  PRIVACY: Object.freeze({ version: "2026-07-14", content: "FreelanceFlow Datenschutzerklärung 2026-07-14: Konto-, Unternehmens-, Kunden-, Dokument- und Betriebsdaten; Betroffenenrechte; Unterauftragnehmer; Aufbewahrung extern zu prüfen." }),
 });
 
-export const legalDocumentHash = ({ version, contentId }) =>
-  crypto.createHash("sha256").update(`${version}:${contentId}`, "utf8").digest("hex");
+export const legalDocumentHash = ({ version, content }) =>
+  crypto.createHash("sha256").update(`${version}\n${content}`, "utf8").digest("hex");
 
 export const requiredLegalVersions = () =>
   Object.fromEntries(Object.entries(LEGAL_DOCUMENTS).map(([type, document]) => [type, document.version]));

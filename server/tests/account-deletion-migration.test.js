@@ -15,3 +15,10 @@ test("account deletion claims are atomic and service-role only", async () => {
   assert.match(sql, /grant execute on function public\.claim_due_account_deletions\(integer, text\)\s+to service_role/);
   assert.match(sql, /on delete set null/);
 });
+
+test("account deletion policy migration supports cooling-off, cancel and review states", async () => {
+  const sql = (await readFile(new URL("../../supabase/migrations/20260714175244_account_deletion_policy_engine.sql", import.meta.url), "utf8")).toLowerCase();
+  for (const status of ["cooling_off", "claimed", "processing", "canceled", "blocked_pending_review"]) assert.match(sql, new RegExp(status));
+  assert.match(sql, /for update skip locked/);
+  assert.match(sql, /security invoker/);
+});

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateReadiness, redactLogValue } from "../observability.js";
+import { createErrorReporter, evaluateReadiness, NoopErrorReporter, redactLogValue } from "../observability.js";
 
 test("redacts nested credentials and reduces errors to safe metadata", () => {
   const error = new Error("contains private database details");
@@ -11,6 +11,14 @@ test("redacts nested credentials and reduces errors to safe metadata", () => {
   assert.equal(result.nested.password, "[REDACTED]");
   assert.deepEqual(result.nested.error, { name: "Error", code: "DB_DOWN" });
   assert.equal(JSON.stringify(result).includes("private database details"), false);
+});
+
+test("redaction removes business content and reporter defaults to no-op", () => {
+  const redacted = redactLogValue({ prompt: "secret prompt", invoiceData: { customer: "Muster GmbH" }, safeCode: "FAILED" });
+  assert.equal(redacted.prompt, "[REDACTED]");
+  assert.equal(redacted.invoiceData, "[REDACTED]");
+  delete process.env.ERROR_REPORTER_MODE;
+  assert.ok(createErrorReporter() instanceof NoopErrorReporter);
 });
 
 test("readiness succeeds only with complete configuration and database access", async () => {

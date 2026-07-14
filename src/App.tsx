@@ -26,6 +26,7 @@ import AngebotDetails from "@/pages/AngebotDetails";
 import PricingPage from "@/features/billing/PricingPage";
 import LegalPage from "@/pages/LegalPage";
 import RecipientDocumentPage from "@/pages/RecipientDocumentPage";
+import { PublicLegalFooter } from "@/components/PublicLegalFooter";
 
 function LegacyDocumentRedirect({ type }: { type: "offer" | "invoice" }) {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +58,10 @@ export default function App() {
         <Route path="/imprint" element={<LegalPage kind="imprint" />} />
         <Route path="/privacy" element={<LegalPage kind="privacy" />} />
         <Route path="/terms" element={<LegalPage kind="terms" />} />
+        <Route path="/dpa" element={<LegalPage kind="dpa" />} />
+        <Route path="/subprocessors" element={<LegalPage kind="subprocessors" />} />
+        <Route path="/ai-notice" element={<LegalPage kind="ai-notice" />} />
+        <Route path="/contact" element={<LegalPage kind="contact" />} />
         <Route path="/recipient/:token" element={<RecipientDocumentPage />} />
 
         <Route
@@ -93,6 +98,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {!location.pathname.startsWith("/app") && !location.pathname.startsWith("/recipient/") && <PublicLegalFooter />}
 
       {backgroundLocation && (
         <Routes>

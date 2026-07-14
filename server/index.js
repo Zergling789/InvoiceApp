@@ -14,13 +14,14 @@ import { buildAccountExportZip, loadOwnedAccountData } from "./accountDataExport
 import { processDueAccountDeletions, verifyWorkerSecret } from "./accountDeletionWorker.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
-import { evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
+import { createErrorReporter, evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
 import {
   buildLegalAcceptanceRows,
   hasCurrentLegalAcceptances,
   requiredLegalVersions,
 } from "./legalDocuments.js";
 import { getStripe, resolvePrice, safeReturnUrl, subscriptionRow } from "./billing/stripeBilling.js";
+import { incrementUsage, requireEntitlement } from "./billing/entitlements.js";
 import { createEpcQrDataUrl } from "./paymentQr.js";
 import {
   extractEmailAddress,
@@ -44,6 +45,7 @@ if (
 
 const PORT = process.env.PORT || 4000;
 const app = express();
+const errorReporter = createErrorReporter();
 app.disable("x-powered-by");
 
 const IS_PROD = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
@@ -61,6 +63,7 @@ app.use((req, res, next) => {
       durationMs: Math.round(performance.now() - startedAt),
       userIdHash: hashLogUserId(req.user?.id),
     });
+    if (res.statusCode >= 500) errorReporter.captureMessage("server_request_failed", { requestId: req.requestId, route: req.route?.path || req.path, statusCode: res.statusCode, durationMs: Math.round(performance.now() - startedAt) });
   });
   next();
 });
@@ -87,6 +90,24 @@ const RAW_APP_BASE_URL =
   process.env.APP_BASE_URL ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${PORT}`);
 const APP_BASE_URL = String(RAW_APP_BASE_URL).trim().replace(/\/+$/, "");
+
+app.use((req, res, next) => {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+  const origin = req.get("origin");
+  const fetchSite = req.get("sec-fetch-site");
+  const requestOrigin = `${req.protocol}://${req.get("host")}`;
+  const isLocalDevelopmentOrigin = (() => {
+    if (IS_PROD || !origin) return false;
+    try {
+      const hostname = new URL(origin).hostname;
+      return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+    } catch {
+      return false;
+    }
+  })();
+  if ((origin && ![APP_BASE_URL, requestOrigin].includes(origin) && !isLocalDevelopmentOrigin) || fetchSite === "cross-site") return sendError(res, 403, "CROSS_SITE_REQUEST_BLOCKED", "Cross-site request blocked.", req);
+  return next();
+});
 
 const FROM_HEADER = process.env.SMTP_FROM || process.env.SMTP_USER;
 const FROM_ADDRESS = extractEmailAddress(FROM_HEADER);
@@ -1121,6 +1142,9 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
     checkRateLimit(`ai_user_${req.user.id}`, 20);
     if (req.ip) checkRateLimit(`ai_ip_${req.ip}`, 60);
 
+    const db = requireSupabase();
+    const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
+    await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
     const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
     const documentType = req.body?.documentType;
     if (!description) return sendError(res, 400, "AI_INPUT_REQUIRED", "Bitte beschreibe die gewünschten Leistungen.", req);
@@ -1144,6 +1168,7 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
   } catch (error) {
     const requestId = req.requestId;
     logRequestError(req, error, error?.code || "AI_INVOICE_DRAFT_FAILED");
+    if (["PLAN_REQUIRED", "FEATURE_NOT_INCLUDED", "USAGE_LIMIT_REACHED"].includes(error?.code)) return sendError(res, error.status, error.code, error.code === "USAGE_LIMIT_REACHED" ? "Dein KI-Kontingent für diesen Monat ist aufgebraucht." : "Diese KI-Funktion ist in deinem Tarif nicht enthalten.", req);
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele KI-Anfragen. Bitte versuche es später erneut.", req);
     if (error?.code === "AI_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Funktion ist nicht konfiguriert.", req);
     if (error?.code === "AI_MODEL_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Modell ist nicht konfiguriert.", req);
@@ -1158,10 +1183,14 @@ app.post("/api/ai/business-card", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`ai_card_user_${req.user.id}`, 12);
     if (req.ip) checkRateLimit(`ai_card_ip_${req.ip}`, 30);
+    const db = requireSupabase();
+    const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
+    await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
     const contact = await extractBusinessCard({ imageDataUrl: req.body?.imageDataUrl, userId: req.user.id });
     return res.json({ contact });
   } catch (error) {
     logRequestError(req, error, error?.code || "AI_BUSINESS_CARD_FAILED");
+    if (["PLAN_REQUIRED", "FEATURE_NOT_INCLUDED", "USAGE_LIMIT_REACHED"].includes(error?.code)) return sendError(res, error.status, error.code, error.code === "USAGE_LIMIT_REACHED" ? "Dein KI-Kontingent für diesen Monat ist aufgebraucht." : "Diese KI-Funktion ist in deinem Tarif nicht enthalten.", req);
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele Scan-Anfragen. Bitte versuche es später erneut.", req);
     if (error?.code === "AI_CARD_INVALID_IMAGE") return sendError(res, 400, error.code, "Bitte verwende ein JPEG-, PNG- oder WebP-Bild.", req);
     if (error?.code === "AI_CARD_IMAGE_SIZE") return sendError(res, 413, error.code, "Das Bild ist zu groß oder ungültig.", req);
@@ -1249,6 +1278,7 @@ app.post("/api/einvoice/cii", requireAuth, async (req, res) => {
 app.post("/api/einvoice/zugferd", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`einvoice_user_${req.user.id}`, 20);
+    await requireEntitlement(requireSupabase(), req.user.id, "EINVOICE_EXPORT");
     const docId = req.body?.docId ?? null;
     if (!docId) return sendError(res, 400, "VALIDATION_ERROR", "Missing required field: docId", req);
 
@@ -1257,7 +1287,7 @@ app.post("/api/einvoice/zugferd", requireAuth, async (req, res) => {
     const invoice = buildCanonicalInvoice(payload);
     const cii = serializeCanonicalInvoiceToCii(invoice).replace("urn:factur-x.eu:1p0:en16931", "urn:cen.eu:en16931:2017");
     const visualPdf = await createPdfBufferFromPayload("invoice", payload, { requestId: req.requestId, source: "einvoice" });
-    const generated = await generateValidatedZugferd({ visualPdf, ciiXml: cii });
+    const generated = await generateValidatedZugferd({ requestId: req.requestId, visualPdf, ciiXml: cii });
     const generatedAt = new Date().toISOString();
 
     const { error: archiveError } = await requireSupabase().from("einvoice_exports").insert({
@@ -1326,11 +1356,11 @@ app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
     }
 
     const db = requireSupabase();
-    const { data: existing } = await db.from("account_deletion_requests").select("id,status,scheduled_for").eq("user_id", req.user.id).in("status", ["REQUESTED", "PROCESSING"]).maybeSingle();
+    const { data: existing } = await db.from("account_deletion_requests").select("id,status,scheduled_for").eq("user_id", req.user.id).in("status", ["REQUESTED", "COOLING_OFF", "CLAIMED", "PROCESSING", "BLOCKED_PENDING_REVIEW"]).maybeSingle();
     if (existing) {
       return res.status(200).json({ request: existing, alreadyRequested: true });
     }
-    const { data: request, error: insertError } = await db.from("account_deletion_requests").insert({ user_id: req.user.id }).select("id,status,requested_at,scheduled_for").single();
+    const { data: request, error: insertError } = await db.from("account_deletion_requests").insert({ user_id: req.user.id, status: "COOLING_OFF" }).select("id,status,requested_at,scheduled_for").single();
     if (insertError) throw Object.assign(new Error("Deletion request insert failed"), { code: "ACCOUNT_DELETION_FAILED", status: 500 });
 
     const token = getBearerToken(req);
@@ -1340,6 +1370,37 @@ app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
     logRequestError(req, err, err?.code || "ACCOUNT_DELETION_FAILED");
     return sendError(res, err?.status || 500, err?.code || "ACCOUNT_DELETION_FAILED", "Der Löschauftrag konnte nicht erstellt werden.", req);
   }
+});
+
+app.post("/api/beta/feedback", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`beta_feedback_${req.user.id}`, 10, 60 * 60 * 1000);
+    const category = String(req.body?.category ?? "");
+    const message = String(req.body?.message ?? "").trim();
+    const route = String(req.body?.route ?? "").slice(0, 300);
+    const relatedRequestId = req.body?.requestId ? String(req.body.requestId).slice(0, 100) : null;
+    if (!["BUG", "UNDERSTANDING", "FEATURE_REQUEST"].includes(category) || message.length < 3 || message.length > 4000 || !route.startsWith("/")) return sendError(res, 400, "BETA_FEEDBACK_INVALID", "Bitte fülle Kategorie und Beschreibung vollständig aus.", req);
+    const { error } = await requireSupabase().from("beta_feedback").insert({ user_id: req.user.id, category, message, route, request_id: relatedRequestId });
+    if (error) throw error;
+    return res.status(201).json({ ok: true });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "BETA_FEEDBACK_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "BETA_FEEDBACK_FAILED", "Feedback konnte nicht gesendet werden.", req);
+  }
+});
+
+app.get("/api/account/deletion-status", requireAuth, async (req, res) => {
+  const { data, error } = await requireSupabase().from("account_deletion_requests").select("id,status,requested_at,scheduled_for,completed_at,canceled_at,blocked_reason_code").eq("user_id", req.user.id).order("requested_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) return sendSupabaseError(res, error, req, { code: "ACCOUNT_DELETION_STATUS_FAILED", message: "Löschstatus konnte nicht geladen werden." });
+  return res.json({ request: data ?? null });
+});
+
+app.post("/api/account/deletion-cancel", requireAuth, async (req, res) => {
+  const now = new Date().toISOString();
+  const { data, error } = await requireSupabase().from("account_deletion_requests").update({ status: "CANCELED", canceled_at: now, updated_at: now }).eq("user_id", req.user.id).in("status", ["REQUESTED", "COOLING_OFF"]).select("id,status,canceled_at").maybeSingle();
+  if (error) return sendSupabaseError(res, error, req, { code: "ACCOUNT_DELETION_CANCEL_FAILED", message: "Löschauftrag konnte nicht widerrufen werden." });
+  if (!data) return sendError(res, 409, "ACCOUNT_DELETION_NOT_CANCELABLE", "Der Löschauftrag kann nicht mehr widerrufen werden.", req);
+  return res.json({ request: data });
 });
 
 app.get("/api/internal/account-deletions/process", async (req, res) => {
@@ -1477,9 +1538,9 @@ const getOrCreateStripeCustomer = async (db, stripe, user) => {
 
 app.get("/api/billing/status", requireAuth, async (req, res) => {
   try {
-    const { data, error } = await requireSupabase().from("billing_subscriptions").select("plan_key,status,current_period_end,cancel_at_period_end").eq("user_id", req.user.id).maybeSingle();
+    const { data, error } = await requireSupabase().from("billing_subscriptions").select("plan_key,status,current_period_end,cancel_at_period_end,payment_failed_at").eq("user_id", req.user.id).maybeSingle();
     if (error) return sendSupabaseError(res, error, req, { code: "BILLING_STATUS_FAILED", message: "Abrechnungsstatus konnte nicht geladen werden." });
-    return res.json({ subscription: data ?? { plan_key: "BASIS", status: "INACTIVE", current_period_end: null, cancel_at_period_end: false } });
+    return res.json({ subscription: data ?? { plan_key: "BASIS", status: "INACTIVE", current_period_end: null, cancel_at_period_end: false, payment_failed_at: null } });
   } catch (err) { return sendUnexpectedError(res, err, req); }
 });
 
@@ -1533,11 +1594,20 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "
   }
 
   const db = requireSupabase();
-  const { data: claimed, error: claimError } = await db.rpc("claim_stripe_webhook", { p_event_id: event.id, p_event_type: event.type });
+  const eventCreatedAt = new Date(event.created * 1000);
+  const { data: claimed, error: claimError } = await db.rpc("claim_stripe_webhook", { p_event_id: event.id, p_event_type: event.type, p_event_created_at: eventCreatedAt.toISOString() });
   if (claimError) return sendSupabaseError(res, claimError, req, { code: "STRIPE_WEBHOOK_CLAIM_FAILED", message: "Webhook konnte nicht verarbeitet werden." });
   if (!claimed) return res.json({ received: true, duplicate: true });
 
   try {
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      const userId = session.client_reference_id || session.metadata?.user_id;
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      if (!userId || !customerId) throw Object.assign(new Error("Checkout owner missing."), { code: "STRIPE_OWNER_MISSING" });
+      const { error } = await db.from("billing_customers").upsert({ user_id: userId, stripe_customer_id: customerId, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      if (error) throw error;
+    }
     if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
       const subscription = event.data.object;
       let userId = subscription.metadata?.user_id;
@@ -1547,8 +1617,22 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "
         userId = data?.user_id;
       }
       if (!userId) throw Object.assign(new Error("Subscription owner missing."), { code: "STRIPE_OWNER_MISSING" });
-      const { error } = await db.from("billing_subscriptions").upsert(subscriptionRow(subscription, userId), { onConflict: "user_id" });
+      const { data: current } = await db.from("billing_subscriptions").select("last_event_created_at").eq("user_id", userId).maybeSingle();
+      if (current?.last_event_created_at && new Date(current.last_event_created_at) > eventCreatedAt) {
+        await db.from("stripe_webhook_events").update({ status: "PROCESSED", processed_at: new Date().toISOString(), last_error_code: "STALE_EVENT_IGNORED" }).eq("event_id", event.id);
+        return res.json({ received: true, stale: true });
+      }
+      const { error } = await db.from("billing_subscriptions").upsert(subscriptionRow(subscription, userId, eventCreatedAt), { onConflict: "user_id" });
       if (error) throw error;
+    }
+    if (["invoice.paid", "invoice.payment_failed"].includes(event.type)) {
+      const invoice = event.data.object;
+      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+      if (subscriptionId) {
+        const failed = event.type === "invoice.payment_failed";
+        const { error } = await db.from("billing_subscriptions").update({ status: failed ? "PAST_DUE" : "ACTIVE", payment_failed_at: failed ? eventCreatedAt.toISOString() : null, last_event_created_at: eventCreatedAt.toISOString(), updated_at: new Date().toISOString() }).eq("stripe_subscription_id", subscriptionId).or(`last_event_created_at.is.null,last_event_created_at.lte.${eventCreatedAt.toISOString()}`);
+        if (error) throw error;
+      }
     }
     await db.from("stripe_webhook_events").update({ status: "PROCESSED", processed_at: new Date().toISOString() }).eq("event_id", event.id);
     return res.json({ received: true });
@@ -2277,6 +2361,7 @@ app.post(
       return sendError(res, 401, "unauthorized", "Unauthorized", req);
     }
       const userId = req.user.id;
+      await requireEntitlement(requireSupabase(), userId, "SEND_EMAIL");
 
       const {
         to,

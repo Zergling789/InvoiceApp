@@ -2,7 +2,7 @@ import { apiFetch } from "@/app/api/apiClient";
 import { readApiError } from "@/app/api/apiError";
 import { ApiRequestError } from "@/utils/errors";
 
-export type BillingStatus = { subscription: { plan_key: "BASIS" | "SOLO" | "PRO"; status: string; current_period_end: string | null; cancel_at_period_end: boolean } };
+export type BillingStatus = { subscription: { plan_key: "BASIS" | "SOLO" | "PRO"; status: string; current_period_end: string | null; cancel_at_period_end: boolean; payment_failed_at: string | null } };
 
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) { const error = await readApiError(response); throw new ApiRequestError(error.message || "Abrechnungsanfrage fehlgeschlagen.", response.status, error.code); }

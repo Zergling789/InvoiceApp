@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Check, ShieldCheck, Sparkles, Zap } from "lucide-react";
 
 import { AppBadge } from "@/ui/AppBadge";
@@ -8,6 +9,7 @@ import { useToast } from "@/ui/FeedbackProvider";
 import { createBillingPortal, createCheckout, getBillingStatus, type BillingStatus } from "@/app/billing/billingService";
 
 type BillingCycle = "monthly" | "yearly";
+const statusLabels: Record<string, string> = { ACTIVE: "Aktiv", TRIALING: "Testphase", PAST_DUE: "Zahlung überfällig", UNPAID: "Nicht bezahlt", PAUSED: "Pausiert", CANCELED: "Gekündigt", INCOMPLETE: "Unvollständig", INCOMPLETE_EXPIRED: "Abgelaufen", INACTIVE: "Inaktiv" };
 
 const plans = [
   {
@@ -42,7 +44,12 @@ export default function PricingPage() {
   const toast = useToast();
 
   useEffect(() => {
-    getBillingStatus().then(result => setBilling(result.subscription)).catch(error => toast.error(error instanceof Error ? error.message : "Abrechnungsstatus konnte nicht geladen werden."));
+    let canceled = false;
+    let attempts = new URLSearchParams(window.location.search).get("checkout") === "success" ? 5 : 1;
+    const refresh = () => getBillingStatus().then(result => { if (!canceled) setBilling(result.subscription); }).catch(error => toast.error(error instanceof Error ? error.message : "Abrechnungsstatus konnte nicht geladen werden."));
+    void refresh();
+    const timer = attempts > 1 ? window.setInterval(() => { attempts -= 1; void refresh(); if (attempts <= 1) window.clearInterval(timer); }, 2000) : undefined;
+    return () => { canceled = true; if (timer) window.clearInterval(timer); };
   }, [toast]);
 
   const handleUpgrade = async (plan: "SOLO" | "PRO") => {
@@ -90,7 +97,7 @@ export default function PricingPage() {
         })}
       </section>
 
-      {billing && billing.plan_key !== "BASIS" && <div className="text-center"><AppButton variant="secondary" disabled={loadingPlan !== null} onClick={() => void handlePortal()}>Abonnement verwalten</AppButton><p className="mt-2 text-xs text-[var(--app-muted)]">Status: {billing.status}{billing.cancel_at_period_end ? " · endet zum Periodenende" : ""}</p></div>}
+      {billing && billing.plan_key !== "BASIS" && <div className="text-center"><AppButton variant="secondary" disabled={loadingPlan !== null} onClick={() => void handlePortal()}>Abonnement verwalten</AppButton><p className="mt-2 text-xs text-[var(--app-muted)]">Status: {statusLabels[billing.status] ?? billing.status}{billing.current_period_end ? ` · Verlängerung/Ende: ${new Date(billing.current_period_end).toLocaleDateString("de-DE")}` : ""}{billing.cancel_at_period_end ? " · Kündigung zum Periodenende vorgemerkt" : ""}{billing.payment_failed_at ? " · Zahlung fehlgeschlagen" : ""}</p></div>}
 
       <section className="grid gap-4 md:grid-cols-3">
         <AppCard className="p-5"><ShieldCheck size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Sicher bezahlen</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Der Checkout wird über Stripe abgewickelt; Zahlungsdaten werden nicht in FreelanceFlow gespeichert.</p></AppCard>
@@ -99,6 +106,7 @@ export default function PricingPage() {
       </section>
 
       <p className="text-center text-xs leading-5 text-[var(--app-muted)]">Buchungen werden über Stripe Checkout abgeschlossen. Der angezeigte Abonnementstatus wird ausschließlich aus signierten Stripe-Webhooks übernommen.</p>
+      <p className="flex flex-wrap justify-center gap-4 text-xs text-[var(--app-muted)]"><Link to="/terms">Bedingungen</Link><Link to="/privacy">Datenschutz</Link><Link to="/dpa">AVV</Link><Link to="/subprocessors">Unterauftragnehmer</Link></p>
     </div>
   );
 }

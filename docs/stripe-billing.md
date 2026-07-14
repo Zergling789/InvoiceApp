@@ -25,8 +25,13 @@ Webhook-URL: `https://<domain>/api/stripe/webhook`
 
 Benötigte Events:
 
+- `checkout.session.completed`
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+Unbekannte Price-IDs werden mit `STRIPE_PRICE_UNKNOWN` blockiert und niemals als Basistarif interpretiert. Die Event-ID wird idempotent beansprucht; fehlgeschlagene Events erhöhen ihren Versuchszähler. Subscription-Events mit älterem Stripe-Zeitstempel werden als veraltet protokolliert und verändern den neueren lokalen Status nicht. Tarifrechte und transaktionale Monatslimits sind in `docs/plan-entitlements.md` dokumentiert.
 
 Das Customer Portal muss im Stripe-Dashboard aktiviert und mit den tatsächlich angebotenen Wechsel- und Kündigungsregeln konfiguriert werden. Preise, Umsatzsteuerbehandlung, Leistungsbeschreibung und Vertragsbedingungen müssen vor Live-Schaltung fachlich geprüft werden. Bis dahin ausschließlich Stripe-Testmodus verwenden.

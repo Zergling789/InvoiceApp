@@ -16,6 +16,8 @@ Der Worker ist standardmäßig blockiert. Er läuft nur mit:
 ACCOUNT_DELETION_RETENTION_POLICY=delete-all-v1
 ```
 
-Diese Policy löscht das gesamte Konto einschließlich finalisierter Rechnungen und Abrechnungsmetadaten. Sie darf erst gesetzt werden, nachdem gesetzliche Aufbewahrungspflichten extern geprüft und die vollständige Löschung ausdrücklich freigegeben wurde. Ohne die exakte Policy-Version antwortet der Worker mit `ACCOUNT_DELETION_POLICY_NOT_APPROVED` und verändert keine Nutzerdaten.
+Die Policy-Engine kennt `BLOCKED`, `DELETE_ALL` und `ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS`. Ohne Konfiguration gilt immer `BLOCKED`. Die historische Konfiguration `delete-all-v1` wird rückwärtskompatibel als `DELETE_ALL` gelesen. `ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS` bleibt technisch mit `ACCOUNT_DELETION_POLICY_REVIEW_REQUIRED` blockiert, bis die konkrete Feld- und Aufbewahrungsentscheidung extern freigegeben und implementiert ist.
+
+Der Statusfluss unterstützt `COOLING_OFF`, `CLAIMED`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELED` und `BLOCKED_PENDING_REVIEW`. Während der siebentägigen Cooling-off-Phase kann der Nutzer den Auftrag in den Einstellungen widerrufen. Claims bleiben atomar und parallele Worker werden durch `FOR UPDATE SKIP LOCKED` verhindert.
 
 Wenn finalisierte Rechnungen aufbewahrt werden müssen, darf `delete-all-v1` nicht aktiviert werden. Dann ist zuerst eine fachlich freigegebene Anonymisierungs- und Aufbewahrungspolicy zu implementieren.

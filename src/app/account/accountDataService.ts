@@ -32,3 +32,15 @@ export async function requestAccountDeletion(password: string, confirmation: str
   }
   return response.json() as Promise<{ request: { scheduled_for?: string; scheduledFor?: string }; alreadyRequested: boolean }>;
 }
+
+export type AccountDeletionRequest = { id: string; status: string; requested_at: string; scheduled_for: string; completed_at: string | null; canceled_at: string | null; blocked_reason_code: string | null };
+export async function getAccountDeletionStatus() {
+  const response = await apiFetch("/api/account/deletion-status", undefined, { auth: true });
+  if (!response.ok) throw new ApiRequestError("Löschstatus konnte nicht geladen werden.", response.status);
+  return response.json() as Promise<{ request: AccountDeletionRequest | null }>;
+}
+export async function cancelAccountDeletion() {
+  const response = await apiFetch("/api/account/deletion-cancel", { method: "POST" }, { auth: true });
+  if (!response.ok) { const error = await readApiError(response); throw new ApiRequestError(error.message || "Löschauftrag konnte nicht widerrufen werden.", response.status, error.code); }
+  return response.json() as Promise<{ request: AccountDeletionRequest }>;
+}

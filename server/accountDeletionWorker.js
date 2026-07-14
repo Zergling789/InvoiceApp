@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
 
-export const REQUIRED_DELETION_POLICY = "delete-all-v1";
+export const DELETION_POLICIES = Object.freeze({ BLOCKED: "BLOCKED", DELETE_ALL: "DELETE_ALL", ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS: "ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS" });
+
+export const resolveDeletionPolicy = (configured) => {
+  if (configured === "delete-all-v1" || configured === DELETION_POLICIES.DELETE_ALL) return DELETION_POLICIES.DELETE_ALL;
+  if (configured === DELETION_POLICIES.ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS) return DELETION_POLICIES.ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS;
+  return DELETION_POLICIES.BLOCKED;
+};
 
 const workerError = (code, message) => Object.assign(new Error(message), { code });
 
@@ -32,12 +38,9 @@ export async function processDueAccountDeletions({
   policyVersion,
   limit = 10,
 }) {
-  if (policyVersion !== REQUIRED_DELETION_POLICY) {
-    throw workerError(
-      "ACCOUNT_DELETION_POLICY_NOT_APPROVED",
-      `Account deletion requires policy ${REQUIRED_DELETION_POLICY}.`,
-    );
-  }
+  const policy = resolveDeletionPolicy(policyVersion);
+  if (policy === DELETION_POLICIES.BLOCKED) throw workerError("ACCOUNT_DELETION_POLICY_NOT_APPROVED", "Account deletion policy is blocked.");
+  if (policy === DELETION_POLICIES.ANONYMIZE_AND_RETAIN_FINANCIAL_DOCUMENTS) throw workerError("ACCOUNT_DELETION_POLICY_REVIEW_REQUIRED", "Anonymization policy requires external approval.");
 
   const { data: requests, error } = await supabase.rpc("claim_due_account_deletions", {
     p_limit: limit,
@@ -48,6 +51,7 @@ export async function processDueAccountDeletions({
   const results = [];
   for (const request of requests ?? []) {
     try {
+      await supabase.from("account_deletion_requests").update({ status: "PROCESSING", updated_at: new Date().toISOString() }).eq("id", request.id);
       await removeStorageObjects(supabase, request.user_id);
       const { error: deleteError } = await supabase.auth.admin.deleteUser(request.user_id);
       if (deleteError) throw workerError("ACCOUNT_AUTH_DELETE_FAILED", "Auth user deletion failed");

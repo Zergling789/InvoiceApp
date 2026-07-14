@@ -86,16 +86,17 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await page.goto("/app/documents");
 
     const legalConsent = page.getByRole("checkbox");
-    const createOffer = page.getByRole("button", { name: "Angebot erstellen" });
-    await expect(legalConsent.or(createOffer).first()).toBeVisible();
+    const documentsHeading = page.getByRole("heading", { name: "Dokumente", exact: true });
+    await expect(legalConsent.or(documentsHeading).first()).toBeVisible();
     if (await legalConsent.isVisible()) {
       await legalConsent.check();
       await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
     }
+    await expect(documentsHeading).toBeVisible();
 
-    await createOffer.click();
+    await page.getByRole("button", { name: "Angebot erstellen", exact: true }).first().click();
 
-    await expect(page.getByRole("heading", { name: "Angebot erstellen" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Neues Angebot" })).toBeVisible();
     await page.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
     await page.getByRole("button", { name: "Position hinzufügen" }).click();
     await page.getByLabel("Beschreibung 1").fill("Beratung");

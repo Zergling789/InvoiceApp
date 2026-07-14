@@ -7,6 +7,8 @@ test("CSV escaping handles quotes, commas and line breaks", () => {
   assert.equal(csvEscape('GmbH, "Nord"'), '"GmbH, ""Nord"""');
   assert.equal(csvEscape("Zeile 1\nZeile 2"), '"Zeile 1\nZeile 2"');
   assert.match(rowsToCsv([{ name: "A,B", count: 2 }]), /"A,B"/);
+  assert.equal(csvEscape("=HYPERLINK(\"https://example.test\")"), "\"'=HYPERLINK(\"\"https://example.test\"\")\"");
+  assert.equal(csvEscape("+SUM(1,1)"), "\"'+SUM(1,1)\"");
 });
 
 test("account ZIP contains valid manifest, JSON and CSV files", () => {
@@ -19,6 +21,7 @@ test("account ZIP contains valid manifest, JSON and CSV files", () => {
   assert.ok(files["README.txt"]);
   assert.deepEqual(JSON.parse(strFromU8(files["clients.json"])), [{ id: "client-a", user_id: "user-a", company_name: "A GmbH" }]);
   assert.equal(JSON.parse(strFromU8(files["manifest.json"])).tables.clients, 1);
+  assert.equal(JSON.parse(strFromU8(files["manifest.json"])).binariesIncluded, false);
   assert.match(strFromU8(files["clients.csv"]), /A GmbH/);
 });
 
@@ -29,4 +32,6 @@ test("account export queries every dataset with its ownership column", async () 
   assert.ok(filters.some(([table, column]) => table === "profiles" && column === "id"));
   assert.ok(filters.every(([, , value]) => value === "user-a"));
   assert.ok(filters.some(([table, column]) => table === "invoices" && column === "user_id"));
+  assert.ok(filters.some(([table]) => table === "legal_acceptances"));
+  assert.ok(filters.some(([table]) => table === "billing_usage"));
 });
