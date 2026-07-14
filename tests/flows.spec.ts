@@ -141,6 +141,6 @@ test.describe.serial("value stream: offer -> invoice", () => {
       .single();
 
     expect(invoiceData.status).toBe("DRAFT");
-    expect(invoiceData.number).toBeTruthy();
+    expect(invoiceData.number).toBeNull();
   });
 });
