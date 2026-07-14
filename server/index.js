@@ -844,6 +844,10 @@ const mapInvoiceRow = (row = {}) => ({
   serviceDate: row.service_date ?? "",
   servicePeriodStart: row.service_period_start ?? "",
   servicePeriodEnd: row.service_period_end ?? "",
+  sellerCountry: row.seller_country ?? "",
+  customerCountry: row.customer_country ?? "",
+  customerType: row.customer_type ?? "",
+  serviceCountry: row.service_country ?? "",
   buyerReference: row.buyer_reference ?? "",
   currency: row.currency ?? "EUR",
   dueDate: row.due_date ?? "",
@@ -879,6 +883,7 @@ const mapSettingsRow = (row = {}) => ({
   taxId: row.tax_id ?? "",
   sellerTaxNumber: row.seller_tax_number ?? row.tax_id ?? "",
   sellerVatId: row.seller_vat_id ?? "",
+  sellerCountry: row.seller_country ?? "",
   sellerStreet: row.seller_street ?? "", sellerHouseNumber: row.seller_house_number ?? "", sellerPostalCode: row.seller_postal_code ?? "", sellerCity: row.seller_city ?? "", sellerElectronicAddress: row.seller_electronic_address ?? "", sellerElectronicAddressScheme: row.seller_electronic_address_scheme ?? "EM",
   iban: row.iban ?? "",
   bic: row.bic ?? "",
@@ -965,7 +970,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   }
 
   const selectFields = resolvedType === "invoice"
-    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot, status, finalized_at"
+    ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, seller_country, customer_country, customer_type, service_country, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot, status, finalized_at"
     : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate, status, rejection_reason, updated_at";
 
   const { data: docRow, error: docError } = await db
@@ -993,7 +998,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 
   const { data: settingsRow } = await db
     .from("user_settings")
-    .select("company_name, address, tax_id, seller_tax_number, seller_vat_id, seller_street, seller_house_number, seller_postal_code, seller_city, seller_electronic_address, seller_electronic_address_scheme, iban, bic, bank_name, footer_text, logo_url, primary_color, template_id, locale, currency")
+    .select("company_name, address, tax_id, seller_tax_number, seller_vat_id, seller_country, seller_street, seller_house_number, seller_postal_code, seller_city, seller_electronic_address, seller_electronic_address_scheme, iban, bic, bank_name, footer_text, logo_url, primary_color, template_id, locale, currency")
     .eq("user_id", userId)
     .maybeSingle();
 

@@ -4,7 +4,37 @@ import { buildCanonicalInvoice } from "../einvoice/canonicalInvoice.js";
 import { CiiValidationError, validateCanonicalInvoiceForCii } from "../einvoice/ciiValidation.js";
 import { serializeCanonicalInvoiceToCii } from "../einvoice/ciiSerializer.js";
 
-const valid=()=>buildCanonicalInvoice({doc:{number:"RE-1",date:"2026-07-11",currency:"EUR",serviceDate:"2026-07-10",positions:[{id:"1",description:"Leistung",quantity:1,unit:"Stk",price:100,taxCategory:"STANDARD",taxRate:19}]},settings:{companyName:"Seller GmbH",address:"Straße 1",sellerStreet:"Straße",sellerPostalCode:"10115",sellerCity:"Berlin",sellerElectronicAddress:"seller@example.de",sellerTaxNumber:"12/345"},client:{companyName:"Buyer GmbH",address:"Weg 2",street:"Weg",postalCode:"20095",city:"Hamburg",invoiceEmail:"buyer@example.de"}});
-test("CII preflight accepts the supported invoice scope",()=>assert.deepEqual(validateCanonicalInvoiceForCii(valid()),[]));
-test("CII serializer blocks missing seller identity and buyer address",()=>{const invoice=buildCanonicalInvoice({doc:{number:"RE-1",date:"2026-07-11",currency:"EUR",serviceDate:"2026-07-10",positions:[{id:"1",description:"x",quantity:1,unit:"Stk",price:1,taxCategory:"STANDARD",taxRate:19}]},settings:{companyName:"Seller",address:"Street"},client:{companyName:"Buyer"}});assert.throws(()=>serializeCanonicalInvoiceToCii(invoice),(error)=>error instanceof CiiValidationError&&error.issues.includes("SELLER_TAX_ID_REQUIRED")&&error.issues.includes("BUYER_ADDRESS_REQUIRED"));});
-test("CII preflight reports unsupported taxes and invalid service periods",()=>{const invoice=buildCanonicalInvoice({doc:{number:"RE-1",date:"2026-07-11",currency:"EUR",servicePeriodStart:"2026-07-12",servicePeriodEnd:"2026-07-10",positions:[{id:"1",description:"x",quantity:1,unit:"Stk",price:1,taxCategory:"ZERO",taxRate:0}]},settings:{companyName:"Seller",address:"Street",sellerStreet:"Street",sellerPostalCode:"1",sellerCity:"Berlin",sellerElectronicAddress:"s@example.de",sellerTaxNumber:"1"},client:{companyName:"Buyer",address:"Street",street:"Street",postalCode:"1",city:"Berlin",invoiceEmail:"b@example.de"}});assert.deepEqual(validateCanonicalInvoiceForCii(invoice),["SERVICE_DATE_INVALID","LINE_1_TAX_UNSUPPORTED"]);});
+const valid = () => buildCanonicalInvoice({
+  doc: {
+    number: "RE-1", date: "2026-07-11", currency: "EUR", serviceDate: "2026-07-10",
+    sellerCountry: "DE", customerCountry: "DE", customerType: "BUSINESS", serviceCountry: "DE",
+    positions: [{ id: "1", description: "Leistung", quantity: 1, unit: "Stk", price: 100, taxCategory: "STANDARD", taxRate: 19 }],
+  },
+  settings: { companyName: "Seller GmbH", address: "Straße 1", sellerCountry: "DE", sellerStreet: "Straße", sellerPostalCode: "10115", sellerCity: "Berlin", sellerElectronicAddress: "seller@example.de", sellerTaxNumber: "12/345" },
+  client: { companyName: "Buyer GmbH", address: "Weg 2", street: "Weg", postalCode: "20095", city: "Hamburg", invoiceEmail: "buyer@example.de" },
+});
+
+test("CII preflight accepts the supported invoice scope", () => assert.deepEqual(validateCanonicalInvoiceForCii(valid()), []));
+
+test("CII serializer blocks missing seller identity and buyer address", () => {
+  const invoice = buildCanonicalInvoice({
+    doc: { number: "RE-1", date: "2026-07-11", currency: "EUR", serviceDate: "2026-07-10", positions: [{ id: "1", description: "x", quantity: 1, unit: "Stk", price: 1, taxCategory: "STANDARD", taxRate: 19 }] },
+    settings: { companyName: "Seller", address: "Street" }, client: { companyName: "Buyer" },
+  });
+  assert.throws(() => serializeCanonicalInvoiceToCii(invoice), (error) => error instanceof CiiValidationError && error.issues.includes("SELLER_TAX_ID_REQUIRED") && error.issues.includes("BUYER_ADDRESS_REQUIRED"));
+});
+
+test("CII preflight reports unsupported taxes and invalid service periods", () => {
+  const invoice = buildCanonicalInvoice({
+    doc: { number: "RE-1", date: "2026-07-11", currency: "EUR", servicePeriodStart: "2026-07-12", servicePeriodEnd: "2026-07-10", sellerCountry: "DE", customerCountry: "DE", customerType: "BUSINESS", serviceCountry: "DE", positions: [{ id: "1", description: "x", quantity: 1, unit: "Stk", price: 1, taxCategory: "ZERO", taxRate: 0 }] },
+    settings: { companyName: "Seller", address: "Street", sellerCountry: "DE", sellerStreet: "Street", sellerPostalCode: "1", sellerCity: "Berlin", sellerElectronicAddress: "s@example.de", sellerTaxNumber: "1" },
+    client: { companyName: "Buyer", address: "Street", street: "Street", postalCode: "1", city: "Berlin", invoiceEmail: "b@example.de" },
+  });
+  assert.deepEqual(validateCanonicalInvoiceForCii(invoice), ["SERVICE_DATE_INVALID", "LINE_1_TAX_UNSUPPORTED"]);
+});
+
+test("CII preflight never defaults missing market-scope data", () => {
+  const invoice = valid();
+  const incomplete = { ...invoice, service: { ...invoice.service, country: "" }, buyer: { ...invoice.buyer, type: "" } };
+  assert.deepEqual(validateCanonicalInvoiceForCii(incomplete), ["BUYER_SCOPE_UNSUPPORTED", "SERVICE_COUNTRY_UNSUPPORTED"]);
+});

@@ -10,9 +10,13 @@ Das Feld `specification: EN16931_CORE` beschreibt die Zielsemantik, ist aber kei
 
 Der authentifizierte Endpunkt `POST /api/einvoice/cii` serialisiert finalisierte Rechnungsdaten als UN/CEFACT Cross Industry Invoice. `POST /api/einvoice/zugferd` erzeugt daraus über den konfigurierten, authentifizierten Generator eine validierte PDF/A-3-Hybridrechnung im Profil EN 16931. Ohne Generator-Konfiguration wird kein ZUGFeRD-Dokument ausgeliefert. Beide Exporte verwenden dasselbe kanonische Objekt wie die PDF-Darstellung.
 
-Vor der Serialisierung erzwingt `ciiValidation.js` einen serverseitigen Preflight. Fehlende Parteien, Anschriften oder Steueridentifikation, ungültige Leistungsangaben, nicht unterstützte Steuern und inkonsistente Summen führen zu `CII_PREFLIGHT_FAILED`; in diesem Fall wird kein XML ausgeliefert. `npm run test:einvoice` führt die zugehörigen Modell-, Konsistenz-, Serializer- und Negativtests aus.
+Vor der Serialisierung erzwingt `canonicalValidation.js` die formatneutralen fachlichen Regeln. `ciiValidation.js` übersetzt deren Ergebnis in den CII-spezifischen Fehler `CII_PREFLIGHT_FAILED`. Fehlende Parteien, Anschriften oder Steueridentifikation, ungültige Leistungsangaben, nicht unterstützte Steuern und inkonsistente Summen verhindern damit den Export. `npm run test:einvoice` führt die zugehörigen Modell-, Konsistenz-, Serializer- und Negativtests aus.
 
 Verkäufer und Käufer besitzen zusätzlich strukturierte Felder für Straße, Hausnummer, Postleitzahl, Ort und elektronische Adresse samt Scheme-ID. Käuferwerte werden beim Speichern aus dem Kundenstamm in die Rechnung kopiert; Verkäuferwerte werden bei der Finalisierung gemeinsam mit dem Branding eingefroren.
+
+Marktumfangsdaten werden nicht still vorbelegt. Verkäuferland, Kundenland, Kundentyp und Leistungsland müssen aus dem eingefrorenen Rechnungsdatensatz beziehungsweise Branding-Snapshot stammen. Fehlen sie, blockiert der serverseitige Preflight den strukturierten Export. Das kanonische Modell führt außerdem Rechnungsart, Zahlungsziel und Fälligkeit formatneutral, damit spätere CII- und UBL-Serializer dieselben Werte verwenden.
+
+Ein Neuaufbau der Supabase-Datenbank erhält mit `20260710073509_bootstrap_set_updated_at.sql` die von späteren Sicherheitsmigrationen erwartete Triggerfunktion, ohne bereits angewendete Migrationen nachträglich zu verändern.
 
 ## Externe Validierung
 
