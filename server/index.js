@@ -96,7 +96,16 @@ app.use((req, res, next) => {
   const origin = req.get("origin");
   const fetchSite = req.get("sec-fetch-site");
   const requestOrigin = `${req.protocol}://${req.get("host")}`;
-  if ((origin && ![APP_BASE_URL, requestOrigin].includes(origin)) || fetchSite === "cross-site") return sendError(res, 403, "CROSS_SITE_REQUEST_BLOCKED", "Cross-site request blocked.", req);
+  const isLocalDevelopmentOrigin = (() => {
+    if (IS_PROD || !origin) return false;
+    try {
+      const hostname = new URL(origin).hostname;
+      return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+    } catch {
+      return false;
+    }
+  })();
+  if ((origin && ![APP_BASE_URL, requestOrigin].includes(origin) && !isLocalDevelopmentOrigin) || fetchSite === "cross-site") return sendError(res, 403, "CROSS_SITE_REQUEST_BLOCKED", "Cross-site request blocked.", req);
   return next();
 });
 

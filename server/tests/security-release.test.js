@@ -16,4 +16,6 @@ test("server blocks explicit cross-site state-changing requests", async () => {
   assert.match(source, /CROSS_SITE_REQUEST_BLOCKED/);
   assert.match(source, /fetchSite === "cross-site"/);
   assert.doesNotMatch(source, /VITE_SUPABASE_SERVICE_ROLE/);
+  assert.match(source, /IS_PROD \|\| !origin/);
+  assert.match(source, /hostname === "localhost"/);
 });
