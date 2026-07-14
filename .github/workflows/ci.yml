@@ -2,63 +2,112 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  JAVA_VERSION: "17"
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    name: Quality, unit tests and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run test:ui
-      - run: npm run test:server
-      - run: npm run build
-      - run: npm run audit
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run UI unit tests
+        run: npm run test:ui
+      - name: Run server tests
+        run: npm run test:server
+      - name: Build production bundle
+        run: npm run build
+      - name: Audit production dependencies
+        run: npm run audit
 
   browser-smoke:
-    runs-on: ubuntu-latest
+    name: Browser smoke and recipient portal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/basic.spec.ts tests/recipient-portal.spec.ts
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Chromium and pinned Playwright system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Run basic browser flow
+        run: npx playwright test tests/basic.spec.ts
+      - name: Run recipient portal flow
+        run: npx playwright test tests/recipient-portal.spec.ts
 
   einvoice-validation:
-    runs-on: ubuntu-latest
+    name: EN16931 and PDF/A-3 validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
-      - uses: actions/setup-java@v4
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Set up Temurin Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
-          java-version: "17"
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:einvoice
-      - run: npm run validate:kosit
-      - run: npm run validate:zugferd
-      - run: sudo apt-get update && sudo apt-get install -y ghostscript icc-profiles-free
-      - run: npm run validate:zugferd:branded
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Chromium and pinned Playwright system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Install PDF/A system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ghostscript icc-profiles-free
+          dpkg-query --show --showformat='${Package}=${Version}\n' ghostscript icc-profiles-free
+      - name: Run canonical e-invoice tests
+        run: npm run test:einvoice
+      - name: Validate CII with KoSIT
+        run: npm run validate:kosit
+      - name: Validate ZUGFeRD with Mustang
+        run: npm run validate:zugferd
+      - name: Validate branded ZUGFeRD PDF/A-3
+        run: npm run validate:zugferd:branded
 
   e2e-config:
-    runs-on: ubuntu-latest
+    name: Supabase E2E availability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
     outputs:
       configured: ${{ steps.check.outputs.configured }}
     steps:
-      - id: check
+      - name: Check dedicated E2E secrets
+        id: check
         env:
           E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
           E2E_SUPABASE_SERVICE_ROLE: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE }}
@@ -66,31 +115,73 @@ jobs:
         run: |
           if [ -n "$E2E_SUPABASE_URL" ] && [ -n "$E2E_SUPABASE_SERVICE_ROLE" ] && [ -n "$E2E_SUPABASE_ANON_KEY" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Dedicated Supabase E2E project configured; integration tests will run." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Dedicated Supabase E2E secrets are not configured." >> "$GITHUB_STEP_SUMMARY"
+            echo "Supabase E2E is **SKIPPED** because one or more dedicated E2E secrets are missing." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   supabase-e2e:
+    name: Supabase integration and RLS isolation
     needs: e2e-config
     if: ${{ needs.e2e-config.outputs.configured == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
       E2E_SUPABASE_SERVICE_ROLE: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE }}
+      E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
       SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE }}
       SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
       VITE_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
-      E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Run Supabase integration flows
-        run: npx playwright test tests/flows.spec.ts tests/invoice-status.spec.ts tests/rls-isolation.spec.ts
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Chromium and pinned Playwright system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Run document flows
+        run: npx playwright test tests/flows.spec.ts
+      - name: Run invoice status flows
+        run: npx playwright test tests/invoice-status.spec.ts
+      - name: Run two-user RLS isolation
+        run: npx playwright test tests/rls-isolation.spec.ts
+
+  ci-summary:
+    name: CI status report
+    if: ${{ always() }}
+    needs: [quality, browser-smoke, einvoice-validation, e2e-config, supabase-e2e]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Publish job summary
+        env:
+          QUALITY: ${{ needs.quality.result }}
+          BROWSER: ${{ needs.browser-smoke.result }}
+          EINVOICE: ${{ needs.einvoice-validation.result }}
+          E2E_CONFIG: ${{ needs.e2e-config.result }}
+          SUPABASE_E2E: ${{ needs.supabase-e2e.result }}
+        run: |
+          {
+            echo "## CI status"
+            echo ""
+            echo "| Job | Result | Dependency |"
+            echo "| --- | --- | --- |"
+            echo "| Quality, unit tests and build | $QUALITY | independent |"
+            echo "| Browser smoke and recipient portal | $BROWSER | independent |"
+            echo "| EN16931 and PDF/A-3 validation | $EINVOICE | independent |"
+            echo "| Supabase E2E availability | $E2E_CONFIG | independent |"
+            echo "| Supabase integration and RLS isolation | $SUPABASE_E2E | requires dedicated E2E secrets |"
+            echo ""
+            if [ "$SUPABASE_E2E" = "skipped" ]; then
+              echo "> Supabase E2E was **SKIPPED**, not passed. Configure all three documented E2E secrets to execute it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
