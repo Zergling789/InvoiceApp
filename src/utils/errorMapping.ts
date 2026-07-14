@@ -70,6 +70,16 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Der E-Rechnungsdienst hat keine vertrauenswürdige Antwort geliefert.";
     case "EINVOICE_FORBIDDEN":
       return "Diese E-Rechnung ist nicht verfügbar.";
+    case "PLAN_REQUIRED":
+      return "Für diese Funktion benötigst du einen passenden Tarif.";
+    case "FEATURE_NOT_INCLUDED":
+      return "Diese Funktion ist in deinem aktuellen Tarif nicht enthalten.";
+    case "USAGE_LIMIT_REACHED":
+      return "Dein Kontingent für diesen Monat ist aufgebraucht.";
+    case "SUBSCRIPTION_INACTIVE":
+      return "Dein Abonnement ist derzeit nicht aktiv.";
+    case "BILLING_NOT_CONFIGURED":
+      return "Die Tarifverwaltung ist noch nicht konfiguriert.";
     case "EINVOICE_GENERATION_TIMEOUT":
     case "EINVOICE_GENERATION_FAILED":
       return "Die E-Rechnung konnte nicht erzeugt werden.";

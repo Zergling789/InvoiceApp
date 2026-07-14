@@ -21,6 +21,7 @@ import {
   requiredLegalVersions,
 } from "./legalDocuments.js";
 import { getStripe, resolvePrice, safeReturnUrl, subscriptionRow } from "./billing/stripeBilling.js";
+import { incrementUsage, requireEntitlement } from "./billing/entitlements.js";
 import { createEpcQrDataUrl } from "./paymentQr.js";
 import {
   extractEmailAddress,
@@ -1121,6 +1122,9 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
     checkRateLimit(`ai_user_${req.user.id}`, 20);
     if (req.ip) checkRateLimit(`ai_ip_${req.ip}`, 60);
 
+    const db = requireSupabase();
+    const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
+    await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
     const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
     const documentType = req.body?.documentType;
     if (!description) return sendError(res, 400, "AI_INPUT_REQUIRED", "Bitte beschreibe die gewünschten Leistungen.", req);
@@ -1144,6 +1148,7 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
   } catch (error) {
     const requestId = req.requestId;
     logRequestError(req, error, error?.code || "AI_INVOICE_DRAFT_FAILED");
+    if (["PLAN_REQUIRED", "FEATURE_NOT_INCLUDED", "USAGE_LIMIT_REACHED"].includes(error?.code)) return sendError(res, error.status, error.code, error.code === "USAGE_LIMIT_REACHED" ? "Dein KI-Kontingent für diesen Monat ist aufgebraucht." : "Diese KI-Funktion ist in deinem Tarif nicht enthalten.", req);
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele KI-Anfragen. Bitte versuche es später erneut.", req);
     if (error?.code === "AI_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Funktion ist nicht konfiguriert.", req);
     if (error?.code === "AI_MODEL_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Modell ist nicht konfiguriert.", req);
@@ -1158,10 +1163,14 @@ app.post("/api/ai/business-card", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`ai_card_user_${req.user.id}`, 12);
     if (req.ip) checkRateLimit(`ai_card_ip_${req.ip}`, 30);
+    const db = requireSupabase();
+    const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
+    await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
     const contact = await extractBusinessCard({ imageDataUrl: req.body?.imageDataUrl, userId: req.user.id });
     return res.json({ contact });
   } catch (error) {
     logRequestError(req, error, error?.code || "AI_BUSINESS_CARD_FAILED");
+    if (["PLAN_REQUIRED", "FEATURE_NOT_INCLUDED", "USAGE_LIMIT_REACHED"].includes(error?.code)) return sendError(res, error.status, error.code, error.code === "USAGE_LIMIT_REACHED" ? "Dein KI-Kontingent für diesen Monat ist aufgebraucht." : "Diese KI-Funktion ist in deinem Tarif nicht enthalten.", req);
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele Scan-Anfragen. Bitte versuche es später erneut.", req);
     if (error?.code === "AI_CARD_INVALID_IMAGE") return sendError(res, 400, error.code, "Bitte verwende ein JPEG-, PNG- oder WebP-Bild.", req);
     if (error?.code === "AI_CARD_IMAGE_SIZE") return sendError(res, 413, error.code, "Das Bild ist zu groß oder ungültig.", req);
@@ -1249,6 +1258,7 @@ app.post("/api/einvoice/cii", requireAuth, async (req, res) => {
 app.post("/api/einvoice/zugferd", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`einvoice_user_${req.user.id}`, 20);
+    await requireEntitlement(requireSupabase(), req.user.id, "EINVOICE_EXPORT");
     const docId = req.body?.docId ?? null;
     if (!docId) return sendError(res, 400, "VALIDATION_ERROR", "Missing required field: docId", req);
 
@@ -1477,9 +1487,9 @@ const getOrCreateStripeCustomer = async (db, stripe, user) => {
 
 app.get("/api/billing/status", requireAuth, async (req, res) => {
   try {
-    const { data, error } = await requireSupabase().from("billing_subscriptions").select("plan_key,status,current_period_end,cancel_at_period_end").eq("user_id", req.user.id).maybeSingle();
+    const { data, error } = await requireSupabase().from("billing_subscriptions").select("plan_key,status,current_period_end,cancel_at_period_end,payment_failed_at").eq("user_id", req.user.id).maybeSingle();
     if (error) return sendSupabaseError(res, error, req, { code: "BILLING_STATUS_FAILED", message: "Abrechnungsstatus konnte nicht geladen werden." });
-    return res.json({ subscription: data ?? { plan_key: "BASIS", status: "INACTIVE", current_period_end: null, cancel_at_period_end: false } });
+    return res.json({ subscription: data ?? { plan_key: "BASIS", status: "INACTIVE", current_period_end: null, cancel_at_period_end: false, payment_failed_at: null } });
   } catch (err) { return sendUnexpectedError(res, err, req); }
 });
 
@@ -1533,11 +1543,20 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "
   }
 
   const db = requireSupabase();
-  const { data: claimed, error: claimError } = await db.rpc("claim_stripe_webhook", { p_event_id: event.id, p_event_type: event.type });
+  const eventCreatedAt = new Date(event.created * 1000);
+  const { data: claimed, error: claimError } = await db.rpc("claim_stripe_webhook", { p_event_id: event.id, p_event_type: event.type, p_event_created_at: eventCreatedAt.toISOString() });
   if (claimError) return sendSupabaseError(res, claimError, req, { code: "STRIPE_WEBHOOK_CLAIM_FAILED", message: "Webhook konnte nicht verarbeitet werden." });
   if (!claimed) return res.json({ received: true, duplicate: true });
 
   try {
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      const userId = session.client_reference_id || session.metadata?.user_id;
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      if (!userId || !customerId) throw Object.assign(new Error("Checkout owner missing."), { code: "STRIPE_OWNER_MISSING" });
+      const { error } = await db.from("billing_customers").upsert({ user_id: userId, stripe_customer_id: customerId, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      if (error) throw error;
+    }
     if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
       const subscription = event.data.object;
       let userId = subscription.metadata?.user_id;
@@ -1547,8 +1566,22 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "
         userId = data?.user_id;
       }
       if (!userId) throw Object.assign(new Error("Subscription owner missing."), { code: "STRIPE_OWNER_MISSING" });
-      const { error } = await db.from("billing_subscriptions").upsert(subscriptionRow(subscription, userId), { onConflict: "user_id" });
+      const { data: current } = await db.from("billing_subscriptions").select("last_event_created_at").eq("user_id", userId).maybeSingle();
+      if (current?.last_event_created_at && new Date(current.last_event_created_at) > eventCreatedAt) {
+        await db.from("stripe_webhook_events").update({ status: "PROCESSED", processed_at: new Date().toISOString(), last_error_code: "STALE_EVENT_IGNORED" }).eq("event_id", event.id);
+        return res.json({ received: true, stale: true });
+      }
+      const { error } = await db.from("billing_subscriptions").upsert(subscriptionRow(subscription, userId, eventCreatedAt), { onConflict: "user_id" });
       if (error) throw error;
+    }
+    if (["invoice.paid", "invoice.payment_failed"].includes(event.type)) {
+      const invoice = event.data.object;
+      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+      if (subscriptionId) {
+        const failed = event.type === "invoice.payment_failed";
+        const { error } = await db.from("billing_subscriptions").update({ status: failed ? "PAST_DUE" : "ACTIVE", payment_failed_at: failed ? eventCreatedAt.toISOString() : null, last_event_created_at: eventCreatedAt.toISOString(), updated_at: new Date().toISOString() }).eq("stripe_subscription_id", subscriptionId).or(`last_event_created_at.is.null,last_event_created_at.lte.${eventCreatedAt.toISOString()}`);
+        if (error) throw error;
+      }
     }
     await db.from("stripe_webhook_events").update({ status: "PROCESSED", processed_at: new Date().toISOString() }).eq("event_id", event.id);
     return res.json({ received: true });
@@ -2277,6 +2310,7 @@ app.post(
       return sendError(res, 401, "unauthorized", "Unauthorized", req);
     }
       const userId = req.user.id;
+      await requireEntitlement(requireSupabase(), userId, "SEND_EMAIL");
 
       const {
         to,

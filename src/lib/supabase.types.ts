@@ -105,15 +105,21 @@ export type Database = {
         Relationships: []
       }
       billing_subscriptions: {
-        Row: { cancel_at_period_end: boolean; created_at: string; current_period_end: string | null; plan_key: string; status: string; stripe_customer_id: string; stripe_price_id: string | null; stripe_subscription_id: string | null; updated_at: string; user_id: string }
-        Insert: { cancel_at_period_end?: boolean; created_at?: string; current_period_end?: string | null; plan_key?: string; status?: string; stripe_customer_id: string; stripe_price_id?: string | null; stripe_subscription_id?: string | null; updated_at?: string; user_id: string }
-        Update: { cancel_at_period_end?: boolean; created_at?: string; current_period_end?: string | null; plan_key?: string; status?: string; stripe_customer_id?: string; stripe_price_id?: string | null; stripe_subscription_id?: string | null; updated_at?: string; user_id?: string }
+        Row: { cancel_at_period_end: boolean; created_at: string; current_period_end: string | null; last_event_created_at: string | null; payment_failed_at: string | null; plan_key: string; status: string; stripe_customer_id: string; stripe_price_id: string | null; stripe_subscription_id: string | null; updated_at: string; user_id: string }
+        Insert: { cancel_at_period_end?: boolean; created_at?: string; current_period_end?: string | null; last_event_created_at?: string | null; payment_failed_at?: string | null; plan_key?: string; status?: string; stripe_customer_id: string; stripe_price_id?: string | null; stripe_subscription_id?: string | null; updated_at?: string; user_id: string }
+        Update: { cancel_at_period_end?: boolean; created_at?: string; current_period_end?: string | null; last_event_created_at?: string | null; payment_failed_at?: string | null; plan_key?: string; status?: string; stripe_customer_id?: string; stripe_price_id?: string | null; stripe_subscription_id?: string | null; updated_at?: string; user_id?: string }
+        Relationships: []
+      }
+      billing_usage: {
+        Row: { metric: string; period_end: string; period_start: string; quantity: number; updated_at: string; user_id: string }
+        Insert: { metric: string; period_end: string; period_start: string; quantity?: number; updated_at?: string; user_id: string }
+        Update: { metric?: string; period_end?: string; period_start?: string; quantity?: number; updated_at?: string; user_id?: string }
         Relationships: []
       }
       stripe_webhook_events: {
-        Row: { attempts: number; event_id: string; event_type: string; last_error_code: string | null; processed_at: string | null; received_at: string; status: string }
-        Insert: { attempts?: number; event_id: string; event_type: string; last_error_code?: string | null; processed_at?: string | null; received_at?: string; status?: string }
-        Update: { attempts?: number; event_id?: string; event_type?: string; last_error_code?: string | null; processed_at?: string | null; received_at?: string; status?: string }
+        Row: { attempts: number; event_created_at: string | null; event_id: string; event_type: string; last_error_code: string | null; processed_at: string | null; received_at: string; status: string; updated_at: string }
+        Insert: { attempts?: number; event_created_at?: string | null; event_id: string; event_type: string; last_error_code?: string | null; processed_at?: string | null; received_at?: string; status?: string; updated_at?: string }
+        Update: { attempts?: number; event_created_at?: string | null; event_id?: string; event_type?: string; last_error_code?: string | null; processed_at?: string | null; received_at?: string; status?: string; updated_at?: string }
         Relationships: []
       }
       document_recipient_links: {

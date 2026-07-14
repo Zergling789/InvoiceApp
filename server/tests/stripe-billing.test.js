@@ -7,6 +7,7 @@ test("price selection only accepts configured server-side plan keys", () => {
   process.env.STRIPE_PRICE_SOLO_MONTHLY = "price_solo";
   assert.deepEqual(resolvePrice("solo", "monthly"), { plan: "SOLO", cycle: "monthly", priceId: "price_solo" });
   assert.throws(() => resolvePrice("enterprise", "monthly"), error => error.code === "BILLING_PLAN_INVALID");
+  assert.throws(() => subscriptionRow({ id: "sub_bad", customer: "cus_1", status: "active", items: { data: [{ price: { id: "price_manipulated" } }] } }, "user-1"), error => error.code === "STRIPE_PRICE_UNKNOWN");
 });
 
 test("Stripe subscription is normalized to the local billing model", () => {

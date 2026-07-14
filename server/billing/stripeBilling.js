@@ -25,7 +25,8 @@ export const resolvePrice = (plan, cycle) => {
 
 export const planForPrice = (priceId) => {
   const match = Object.entries(PLAN_ENV).find(([, envName]) => process.env[envName] === priceId);
-  return match?.[0].split(":")[0] ?? "BASIS";
+  if (!match) throw Object.assign(new Error("Stripe price is not mapped to a plan."), { code: "STRIPE_PRICE_UNKNOWN", status: 422 });
+  return match[0].split(":")[0];
 };
 
 export const normalizeStripeStatus = (status) => ({
@@ -34,7 +35,7 @@ export const normalizeStripeStatus = (status) => ({
   incomplete_expired: "INCOMPLETE_EXPIRED",
 }[status] ?? "INACTIVE");
 
-export const subscriptionRow = (subscription, userId) => {
+export const subscriptionRow = (subscription, userId, eventCreatedAt = new Date()) => {
   const item = subscription.items?.data?.[0];
   const priceId = item?.price?.id ?? null;
   const periodEnd = subscription.current_period_end ?? item?.current_period_end;
@@ -47,6 +48,8 @@ export const subscriptionRow = (subscription, userId) => {
     status: normalizeStripeStatus(subscription.status),
     current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
     cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    last_event_created_at: eventCreatedAt.toISOString(),
+    payment_failed_at: null,
     updated_at: new Date().toISOString(),
   };
 };
