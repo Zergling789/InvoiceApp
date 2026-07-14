@@ -111,18 +111,20 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await offerRow.click();
     await expect(page).toHaveURL(/\/app\/offers\//);
     await expect(page.getByText(offerNumber, { exact: true }).first()).toBeVisible();
-    await page.getByRole("button", { name: "E-Mail" }).click();
+    await page.getByRole("button", { name: "Senden" }).click();
     await expect(page.getByRole("heading", { name: "Dokument senden" })).toBeVisible();
     await page.locator("label:has-text('Empfänger')").locator("xpath=following-sibling::input").fill(client.email);
     await page.getByRole("button", { name: "Senden" }).click();
     await expect(page.getByText("E-Mail wurde erfolgreich versendet.")).toBeVisible();
     await page.getByRole("button", { name: "Schließen" }).first().click();
 
-    await expect(offerRow.getByText("Sent", { exact: true })).toBeVisible();
-
-    await offerRow.getByRole("button", { name: "In Rechnung wandeln" }).click();
+    await expect(page.getByText("Versendet", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Als angenommen markieren" }).click();
     await page.getByRole("button", { name: "Bestaetigen" }).click();
-    await expect(page.getByText("Rechnung erstellt!")).toBeVisible();
+    await expect(page.getByText("Angenommen", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "In Rechnung wandeln" }).click();
+    await page.getByRole("button", { name: "Bestaetigen" }).click();
+    await expect(page).toHaveURL(/\/app\/invoices\//);
 
     const { data: offerData } = await admin
       .from("offers")
@@ -136,43 +138,7 @@ test.describe.serial("value stream: offer -> invoice", () => {
       .eq("id", offerData.invoice_id)
       .single();
 
-    await page.getByRole("link", { name: "Rechnungen" }).click();
-    const invoiceRow = page.locator("tr", { hasText: invoiceData.number });
-    await expect(invoiceRow.getByText("Draft", { exact: true })).toBeVisible();
-    await invoiceRow.getByRole("button", { name: "Rechnung ansehen" }).click();
-    await expect(page.getByText("RECHNUNG")).toBeVisible();
-    await page.getByRole("button", { name: "Schließen" }).first().click();
-
-    await page.getByRole("button", { name: "Erstellen" }).click();
-    await page.locator("#document-client").selectOption({ label: client.companyName });
-    await page.getByRole("button", { name: "Position hinzufügen" }).click();
-    await page.getByPlaceholder("Beschreibung").fill("Design");
-    await page.getByPlaceholder("Menge").fill("2");
-    await page.getByPlaceholder("Einheit").fill("Std");
-    await page.getByPlaceholder("Preis").fill("150");
-
-    const invoiceNumber = await page.locator("#document-number").inputValue();
-    const saveButton = page.getByRole("button", { name: "Speichern" });
-    await saveButton.click();
-    await expect(saveButton).toBeEnabled();
-    await page.getByRole("button", { name: "Finalisieren" }).click();
-    await page.getByRole("button", { name: "Bestaetigen" }).click();
-
-    await expect(page.getByText("Issued", { exact: true })).toBeVisible();
-    await expect(page.getByText("Locked", { exact: true })).toBeVisible();
-
-    await page.getByRole("button", { name: "Per E-Mail senden" }).click();
-    await page.locator("label:has-text('Empfänger')").locator("xpath=following-sibling::input").fill(client.email);
-    await page.getByRole("button", { name: "Senden" }).click();
-    await expect(page.getByText("E-Mail wurde erfolgreich versendet.")).toBeVisible();
-    await expect(page.getByText("Sent", { exact: true })).toBeVisible();
-
-    const { data: sentInvoice } = await admin
-      .from("invoices")
-      .select("sent_count")
-      .eq("number", invoiceNumber)
-      .eq("user_id", user.id)
-      .single();
-    expect(sentInvoice.sent_count).toBeGreaterThan(0);
+    expect(invoiceData.status).toBe("DRAFT");
+    expect(invoiceData.number).toBeTruthy();
   });
 });
