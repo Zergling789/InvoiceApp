@@ -91,6 +91,7 @@ test.describe.serial("value stream: offer -> invoice", () => {
     if (await legalConsent.isVisible()) {
       await legalConsent.check();
       await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
+      await expect(documentsHeading).toBeVisible();
     }
 
     await page.goto("/app/offers/new");
