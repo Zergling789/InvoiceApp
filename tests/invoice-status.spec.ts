@@ -3,9 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import {
   admin,
   createClientRecord,
+  createSenderIdentity,
   createTestUser,
   deleteTestUser,
   hasE2eSupabaseEnv,
+  seedUserSettings,
 } from "./helpers/supabaseAdmin";
 
 const SUPABASE_URL =
@@ -33,6 +35,8 @@ test.describe.serial("invoice status transitions", () => {
 
   test.beforeAll(async () => {
     user = await createTestUser();
+    const senderIdentityId = await createSenderIdentity(user.id);
+    await seedUserSettings({ userId: user.id, senderIdentityId });
     client = await createClientRecord({
       userId: user.id,
       companyName: "Status Kunde GmbH",
@@ -66,10 +70,24 @@ test.describe.serial("invoice status transitions", () => {
         client_id: client.id,
         date: new Date().toISOString().slice(0, 10),
         due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-        positions: [],
+        service_date: new Date().toISOString().slice(0, 10),
+        seller_country: "DE",
+        customer_country: "DE",
+        customer_type: "BUSINESS",
+        service_country: "DE",
+        currency: "EUR",
+        positions: [{
+          id: crypto.randomUUID(),
+          description: "Beratung",
+          quantity: 1,
+          unit: "Std",
+          price: 100,
+          taxCategory: "STANDARD",
+          taxRate: 19,
+        }],
         intro_text: "",
         footer_text: "",
-        vat_rate: 0,
+        vat_rate: 19,
         status: "DRAFT",
         is_locked: false,
         updated_at: new Date().toISOString(),

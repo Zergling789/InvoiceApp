@@ -78,7 +78,7 @@ test.describe.serial("value stream: offer -> invoice", () => {
     });
 
     await page.goto("/login");
-    await page.getByLabel("Email").fill(user.email);
+    await page.getByLabel("E-Mail").fill(user.email);
     await page.getByLabel("Passwort").fill(user.password);
     await page.getByRole("button", { name: "Anmelden" }).click();
     await expect(page).toHaveURL(/\/app/);
