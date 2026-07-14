@@ -1,49 +1,21 @@
 import { Link } from "react-router-dom";
+import { legalOperator, legalOperatorConfigured } from "@/config/legalOperator";
 
-type Kind = "imprint" | "privacy" | "terms";
+export type LegalPageKind = "imprint" | "privacy" | "terms" | "dpa" | "subprocessors" | "ai-notice" | "contact";
+type Page = { title: string; version?: string; printable?: boolean; sections: Array<[string, string]> };
 
-const content: Record<Kind, { title: string; version?: string; sections: Array<[string, string]> }> = {
-  imprint: {
-    title: "Impressum",
-    sections: [
-      ["Betreiberangaben", "Vor Veröffentlichung müssen hier vollständiger Name beziehungsweise Firma, ladungsfähige Anschrift, Vertretungsberechtigte und Kontaktangaben des Betreibers ergänzt werden."],
-      ["Register und Umsatzsteuer", "Sofern einschlägig, sind Register, Registernummer, zuständige Aufsicht und Umsatzsteuer-Identifikationsnummer zu ergänzen."],
-      ["Hinweis zum Status", "Diese Seite ist ein technischer Platzhalter und noch kein veröffentlichungsfähiges Impressum."],
-    ],
-  },
-  privacy: {
-    title: "Datenschutzerklärung",
-    version: "Version 2026-07-13",
-    sections: [
-      ["Verantwortlicher", "Vor Veröffentlichung sind Name, Anschrift und Kontakt des datenschutzrechtlich Verantwortlichen einzutragen."],
-      ["Verarbeitete Daten", "FreelanceFlow verarbeitet Konto-, Unternehmens-, Kunden-, Projekt-, Rechnungs- und technische Betriebsdaten, soweit dies für Registrierung, Bereitstellung, Sicherheit, Versand und Support erforderlich ist."],
-      ["Auftragsverarbeiter", "Hosting-, Datenbank-, E-Mail- und gegebenenfalls Monitoring-Anbieter sind vor Veröffentlichung mit Anbieter, Zweck, Standort und Rechtsgrundlage vollständig aufzuführen."],
-      ["Speicherdauer und Rechte", "Aufbewahrungs- und Löschfristen müssen anhand der tatsächlichen Betriebs- und gesetzlichen Anforderungen festgelegt werden. Betroffene können insbesondere Auskunft, Berichtigung, Löschung, Einschränkung und Datenübertragbarkeit verlangen, soweit die jeweiligen Voraussetzungen vorliegen."],
-      ["Entwurfsstatus", "Dieser Text dokumentiert den technischen Produktumfang, ersetzt aber keine rechtliche Prüfung und ist vor einem öffentlichen Start durch den Betreiber zu vervollständigen."],
-    ],
-  },
-  terms: {
-    title: "Nutzungsbedingungen",
-    version: "Version 2026-07-13",
-    sections: [
-      ["Leistungsumfang", "FreelanceFlow unterstützt die Erstellung und Verwaltung einfacher inländischer B2B-Rechnungen für deutsche Unternehmen. Nicht unterstützte Steuer- und Auslandssachverhalte werden technisch begrenzt, soweit im Produkt beschrieben."],
-      ["Prüfpflicht des Nutzers", "Nutzer müssen Rechnungen und Stammdaten vor dem Ausstellen prüfen. FreelanceFlow erbringt keine steuerliche oder rechtliche Beratung."],
-      ["Verfügbarkeit und Datensicherung", "Konkrete Verfügbarkeitszusagen, Supportzeiten, Haftungsregeln und Datensicherungsbedingungen sind vor Veröffentlichung durch den Betreiber festzulegen."],
-      ["Entwurfsstatus", "Diese Nutzungsbedingungen sind ein Produktentwurf. Betreiberangaben und abschließende rechtliche Regelungen fehlen noch und müssen vor dem öffentlichen Start ergänzt und geprüft werden."],
-    ],
-  },
+const operator = legalOperatorConfigured ? `${legalOperator.legalName}, vertreten durch ${legalOperator.ownerOrRepresentative}, ${legalOperator.street}, ${legalOperator.postalCode} ${legalOperator.city}, ${legalOperator.country}. Kontakt: ${legalOperator.email}.` : "Betreiberangaben sind im Entwurfsbetrieb nicht konfiguriert. Diese Instanz darf nicht öffentlich produktiv angeboten werden.";
+const pages: Record<LegalPageKind, Page> = {
+  imprint: { title: "Impressum", sections: [["Betreiber", operator], ["Register und Umsatzsteuer", [legalOperator.registrationCourt, legalOperator.registrationNumber, legalOperator.vatId].filter(Boolean).join(" · ") || "Nicht einschlägig oder im Entwurfsbetrieb noch extern zu prüfen."], ["Entwurfsstatus", "Die Angaben müssen vor Marktstart extern geprüft werden."]] },
+  privacy: { title: "Datenschutzerklärung", version: "Version 2026-07-14 · Entwurf", sections: [["Verantwortlicher", operator], ["Verarbeitete Daten", "Konto-, Unternehmens-, Kunden-, Projekt-, Rechnungs- und technische Betriebsdaten werden zur Bereitstellung, Sicherheit, Kommunikation und Abrechnung verarbeitet."], ["Empfänger und Speicherdauer", "Tatsächlich eingesetzte Anbieter stehen auf der Unterauftragnehmerseite. Aufbewahrungsfristen müssen vor Aktivierung der finalen Löschpolicy extern freigegeben werden."], ["Betroffenenrechte", `Anfragen können an ${legalOperator.privacyEmail || "die noch zu konfigurierende Datenschutzadresse"} gerichtet werden.`]] },
+  terms: { title: "Nutzungsbedingungen", version: "Version 2026-07-14 · Entwurf", sections: [["Leistungsumfang", "Unterstützt werden einfache inländische B2B-Rechnungen deutscher Unternehmen im dokumentierten Marktumfang."], ["Prüfpflicht", "Nutzer prüfen Dokumente vor dem Ausstellen. FreelanceFlow erbringt keine steuerliche oder rechtliche Beratung."], ["Abonnement", "Kostenpflichtige Funktionen werden erst nach bestätigtem Stripe-Webhook freigeschaltet. Preise, Laufzeiten und steuerliche Behandlung des SaaS-Angebots sind extern zu prüfen."]] },
+  dpa: { title: "Vereinbarung zur Auftragsverarbeitung (AVV)", version: "Technischer Entwurf · nicht rechtsgeprüft", printable: true, sections: [["Gegenstand", "Dieser Entwurf beschreibt die Verarbeitung personenbezogener Daten im Auftrag des Nutzers bei der Bereitstellung von FreelanceFlow."], ["Weisungen und Vertraulichkeit", "Verarbeitung erfolgt nur zur Produkterbringung und auf dokumentierte Weisung. Zugriffsberechtigte Personen sind auf Vertraulichkeit zu verpflichten."], ["Technische Maßnahmen", "Mandantentrennung, RLS, verschlüsselte Übertragung, Zugriffsbeschränkung, Protokollierung sowie dokumentierte Lösch-, Export- und Wiederherstellungsprozesse sind vorgesehen."], ["Unterauftragnehmer", "Die aktuelle technische Liste ist unter /subprocessors veröffentlicht. Verträge, Regionen und Transfermechanismen müssen vor Abschluss extern geprüft werden."], ["Freigabe", "Dieser Entwurf wird erst nach juristischer Prüfung und vollständiger Betreiberkonfiguration Vertragsbestandteil."]] },
+  subprocessors: { title: "Unterauftragnehmer", version: "Technischer Stand 2026-07-14 · extern zu prüfen", sections: [["Vercel", "Hosting und Ausführung der Webanwendung; Regionen und Vertragsgrundlagen sind projektbezogen zu dokumentieren."], ["Supabase", "Datenbank, Authentifizierung und Storage; Projektregion und AVV sind vor Produktionsbetrieb festzulegen."], ["Stripe", "Zahlungs- und Abonnementabwicklung; Zahlungsdaten werden direkt durch Stripe verarbeitet."], ["OpenAI", "Optionale KI-Entwürfe und Visitenkartenverarbeitung; nur bei aktivierter Funktion."], ["E-Mail, Redis, Monitoring und Generator-Hosting", "Die tatsächlich gewählten Anbieter sind vor Produktion mit Zweck, Datenkategorien, Regionen, AVV und Transfermechanismus einzutragen. Generische Platzhalteranbieter werden nicht als eingesetzt behauptet."]] },
+  "ai-notice": { title: "Hinweise zu KI-Funktionen", sections: [["Funktionen", "KI wird ausschließlich für bearbeitbare Dokumententwürfe und die optionale Erkennung von Visitenkartendaten eingesetzt."], ["Übertragene Daten", "Nur aktiv eingegebene Beschreibungen beziehungsweise aktiv ausgewählte Bilder werden an den konfigurierten Anbieter übertragen. Rechnungen werden nicht automatisch finalisiert."], ["Prüfung", "Ergebnisse können falsch sein und müssen geprüft werden. Es erfolgt keine Steuer- oder Rechtsberatung."], ["Speicherung und Deaktivierung", "Prompts werden nicht in Standardlogs geschrieben. Speicherdauer beim Anbieter und eine nutzerseitige Deaktivierung müssen vor der öffentlichen Beta abschließend konfiguriert werden."]] },
+  contact: { title: "Kontakt", sections: [["Support", legalOperator.supportEmail ? `Support: ${legalOperator.supportEmail}` : "Die Supportadresse ist im Entwurfsbetrieb noch nicht konfiguriert."], ["Datenschutz", legalOperator.privacyEmail ? `Datenschutzanfragen: ${legalOperator.privacyEmail}` : "Die Datenschutzadresse ist im Entwurfsbetrieb noch nicht konfiguriert."], ["Allgemeiner Kontakt", legalOperator.email ? `E-Mail: ${legalOperator.email}${legalOperator.phone ? ` · Telefon: ${legalOperator.phone}` : ""}` : "Allgemeine Betreiberangaben sind noch nicht konfiguriert."]] },
 };
 
-export default function LegalPage({ kind }: { kind: Kind }) {
-  const page = content[kind];
-  return (
-    <main className="min-h-screen bg-[var(--app-bg)] px-6 py-12 text-[var(--app-text)]">
-      <article className="app-card mx-auto max-w-3xl p-6 sm:p-10">
-        <Link to="/" className="text-sm text-[var(--app-primary)]">← Zurück zu FreelanceFlow</Link>
-        <h1 className="mt-6 text-3xl font-semibold">{page.title}</h1>
-        {page.version && <p className="mt-2 text-sm text-[var(--app-muted)]">{page.version}</p>}
-        <div className="mt-8 space-y-7">{page.sections.map(([heading, text]) => <section key={heading}><h2 className="text-lg font-semibold">{heading}</h2><p className="mt-2 text-sm leading-7 text-[var(--app-muted)]">{text}</p></section>)}</div>
-      </article>
-    </main>
-  );
+export default function LegalPage({ kind }: { kind: LegalPageKind }) {
+  const page = pages[kind];
+  return <main className="min-h-screen bg-[var(--app-bg)] px-6 py-12 text-[var(--app-text)]"><article className="app-card mx-auto max-w-3xl p-6 sm:p-10"><Link to="/" className="text-sm text-[var(--app-primary)] print:hidden">← Zurück zu FreelanceFlow</Link><h1 className="mt-6 text-3xl font-semibold">{page.title}</h1>{page.version && <p className="mt-2 text-sm text-[var(--app-muted)]">{page.version}</p>}{page.printable && <button type="button" onClick={() => window.print()} className="mt-4 text-sm text-[var(--app-primary)] print:hidden">Druckansicht öffnen</button>}<div className="mt-8 space-y-7">{page.sections.map(([heading, text]) => <section key={heading}><h2 className="text-lg font-semibold">{heading}</h2><p className="mt-2 whitespace-pre-line text-sm leading-7 text-[var(--app-muted)]">{text}</p></section>)}</div></article></main>;
 }

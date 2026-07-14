@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { SenderIdentity, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -814,6 +814,8 @@ export default function SettingsView() {
           </AppButton>
         </div>
       </AppCard>
+
+      <AppCard className="space-y-3"><h2 className="text-sm font-semibold">Rechtliches und Datenschutz</h2><div className="flex flex-wrap gap-4 text-sm text-[var(--app-primary)]"><Link to="/terms">Bedingungen</Link><Link to="/privacy">Datenschutz</Link><Link to="/dpa">AVV</Link><Link to="/subprocessors">Unterauftragnehmer</Link><Link to="/ai-notice">KI-Hinweise</Link><Link to="/contact">Kontakt</Link></div></AppCard>
 
       <div className="bottom-action-bar safe-area-container">
         <div className="app-container">

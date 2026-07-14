@@ -3,11 +3,11 @@ import test from "node:test";
 import { buildLegalAcceptanceRows, hasCurrentLegalAcceptances, requiredLegalVersions } from "../legalDocuments.js";
 
 test("current terms and privacy versions are both required", () => {
-  assert.deepEqual(requiredLegalVersions(), { TERMS: "2026-07-13", PRIVACY: "2026-07-13" });
-  assert.equal(hasCurrentLegalAcceptances([{ document_type: "TERMS", document_version: "2026-07-13" }]), false);
+  assert.deepEqual(requiredLegalVersions(), { TERMS: "2026-07-14", PRIVACY: "2026-07-14" });
+  assert.equal(hasCurrentLegalAcceptances([{ document_type: "TERMS", document_version: "2026-07-13" }, { document_type: "PRIVACY", document_version: "2026-07-13" }]), false);
   assert.equal(hasCurrentLegalAcceptances([
-    { document_type: "TERMS", document_version: "2026-07-13" },
-    { document_type: "PRIVACY", document_version: "2026-07-13" },
+    { document_type: "TERMS", document_version: "2026-07-14" },
+    { document_type: "PRIVACY", document_version: "2026-07-14" },
   ]), true);
 });
 

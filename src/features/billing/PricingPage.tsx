@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Check, ShieldCheck, Sparkles, Zap } from "lucide-react";
 
 import { AppBadge } from "@/ui/AppBadge";
@@ -105,6 +106,7 @@ export default function PricingPage() {
       </section>
 
       <p className="text-center text-xs leading-5 text-[var(--app-muted)]">Buchungen werden über Stripe Checkout abgeschlossen. Der angezeigte Abonnementstatus wird ausschließlich aus signierten Stripe-Webhooks übernommen.</p>
+      <p className="flex flex-wrap justify-center gap-4 text-xs text-[var(--app-muted)]"><Link to="/terms">Bedingungen</Link><Link to="/privacy">Datenschutz</Link><Link to="/dpa">AVV</Link><Link to="/subprocessors">Unterauftragnehmer</Link></p>
     </div>
   );
 }
