@@ -94,10 +94,13 @@ test.describe.serial("value stream: offer -> invoice", () => {
     }
     await expect(documentsHeading).toBeVisible();
 
-    await page.evaluate(() => {
-      window.history.pushState({}, "", "/app/offers/new");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
+    const mobileCreateButton = page.getByRole("button", { name: "Neues Dokument erstellen" });
+    if (await mobileCreateButton.isVisible()) {
+      await mobileCreateButton.click();
+      await page.getByRole("button", { name: "Neues Angebot" }).click();
+    } else {
+      await page.getByRole("button", { name: "Angebot erstellen" }).first().click();
+    }
 
     await expect(page.getByRole("heading", { name: "Neues Angebot" })).toBeVisible();
     await page.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
