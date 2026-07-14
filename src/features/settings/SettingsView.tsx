@@ -19,6 +19,7 @@ import {
 import { trackEvent } from "@/lib/track";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 import { BrandingSettingsSection } from "@/features/settings/BrandingSettingsSection";
+import { downloadAccountData, requestAccountDeletion } from "@/app/account/accountDataService";
 
 const defaultSettings: UserSettings = {
   name: "",
@@ -76,6 +77,9 @@ export default function SettingsView() {
   const [senderDisplayName, setSenderDisplayName] = useState("");
   const [senderBusyId, setSenderBusyId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [accountAction, setAccountAction] = useState<"export" | "delete" | null>(null);
+  const [deletionPassword, setDeletionPassword] = useState("");
+  const [deletionConfirmation, setDeletionConfirmation] = useState("");
 
   const warnings = useMemo(() => {
     const w: string[] = [];
@@ -255,6 +259,42 @@ export default function SettingsView() {
       toast.error(e instanceof Error ? e.message : "Fehler beim Speichern der Einstellungen.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDataExport = async () => {
+    setAccountAction("export");
+    try {
+      await downloadAccountData();
+      toast.success("Datenexport wurde erstellt.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Der Datenexport konnte nicht erstellt werden.");
+    } finally {
+      setAccountAction(null);
+    }
+  };
+
+  const handleDeletionRequest = async () => {
+    if (deletionConfirmation !== "LÖSCHEN" || !deletionPassword) {
+      toast.error("Bitte Passwort und den Bestätigungstext LÖSCHEN eingeben.");
+      return;
+    }
+    const accepted = await confirm({
+      title: "Accountlöschung beantragen",
+      message: "Dein Zugang wird abgemeldet. Laufende Abonnements und gesetzlich aufzubewahrende Rechnungs- oder Abrechnungsdaten müssen vor der endgültigen Löschung gesondert behandelt werden.",
+    });
+    if (!accepted) return;
+    setAccountAction("delete");
+    try {
+      const result = await requestAccountDeletion(deletionPassword, deletionConfirmation);
+      const scheduled = result.request.scheduled_for ?? result.request.scheduledFor;
+      toast.success(result.alreadyRequested ? "Ein Löschauftrag ist bereits aktiv." : `Löschauftrag erstellt${scheduled ? ` (geplant: ${new Date(scheduled).toLocaleDateString("de-DE")})` : ""}.`);
+      await supabase.auth.signOut({ scope: "local" });
+      navigate("/login", { replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Der Löschauftrag konnte nicht erstellt werden.");
+    } finally {
+      setAccountAction(null);
     }
   };
 
@@ -724,6 +764,41 @@ export default function SettingsView() {
               </div>
             );
           })}
+        </div>
+      </AppCard>
+
+      <AppCard className="space-y-5">
+        <div className="border-b pb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Account und Daten</h2>
+          <p className="text-sm text-gray-500">Exportiere deine gespeicherten Daten oder beantrage eine kontrollierte Accountlöschung.</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-medium">Vollständiger Datenexport</div>
+            <div className="text-xs text-gray-500">ZIP-Datei mit JSON- und CSV-Daten. Der Export wird nicht öffentlich gespeichert.</div>
+          </div>
+          <AppButton variant="secondary" onClick={() => void handleDataExport()} disabled={accountAction !== null}>
+            {accountAction === "export" ? "Export wird erstellt..." : "Daten exportieren"}
+          </AppButton>
+        </div>
+        <div className="space-y-3 border-t border-red-200 pt-4">
+          <div>
+            <div className="text-sm font-medium text-red-700">Account löschen</div>
+            <div className="text-xs text-gray-500">Der Auftrag wird mit einer siebentägigen Prüf- und Bearbeitungsfrist angelegt. Aufbewahrungspflichtige Rechnungs- und Abrechnungsdaten werden nicht unkontrolliert gelöscht.</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium">Aktuelles Passwort</label>
+              <input type="password" autoComplete="current-password" className="w-full rounded border p-2" value={deletionPassword} onChange={(event) => setDeletionPassword(event.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium">Zur Bestätigung LÖSCHEN eingeben</label>
+              <input className="w-full rounded border p-2" value={deletionConfirmation} onChange={(event) => setDeletionConfirmation(event.target.value)} />
+            </div>
+          </div>
+          <AppButton variant="danger" onClick={() => void handleDeletionRequest()} disabled={accountAction !== null || !deletionPassword || deletionConfirmation !== "LÖSCHEN"}>
+            {accountAction === "delete" ? "Löschauftrag wird erstellt..." : "Accountlöschung beantragen"}
+          </AppButton>
         </div>
       </AppCard>
 

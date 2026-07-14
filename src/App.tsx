@@ -24,6 +24,8 @@ import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import RequireAuth from "@/components/Auth/RequireAuth";
 import AngebotDetails from "@/pages/AngebotDetails";
 import PricingPage from "@/features/billing/PricingPage";
+import LegalPage from "@/pages/LegalPage";
+import RecipientDocumentPage from "@/pages/RecipientDocumentPage";
 
 function LegacyDocumentRedirect({ type }: { type: "offer" | "invoice" }) {
   const { id } = useParams<{ id: string }>();
@@ -52,6 +54,10 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/imprint" element={<LegalPage kind="imprint" />} />
+        <Route path="/privacy" element={<LegalPage kind="privacy" />} />
+        <Route path="/terms" element={<LegalPage kind="terms" />} />
+        <Route path="/recipient/:token" element={<RecipientDocumentPage />} />
 
         <Route
           path="/app"

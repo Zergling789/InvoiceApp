@@ -185,3 +185,12 @@ test("PDF renderer prints buyer reference and separate seller tax identifiers", 
   assert.match(html, /12\/345\/67890/);
   assert.match(html, /DE123456789/);
 });
+
+test("PDF renderer embeds the EPC payment QR only for invoices", () => {
+  const qr = "data:image/png;base64,cXItY29kZQ==";
+  const invoiceHtml = renderDocumentHtml({ type: "invoice", doc: { positions: [] }, settings: { paymentQrDataUrl: qr }, client: {} });
+  const offerHtml = renderDocumentHtml({ type: "offer", doc: { positions: [] }, settings: { paymentQrDataUrl: qr }, client: {} });
+  assert.match(invoiceHtml, /Mit Banking-App bezahlen/);
+  assert.match(invoiceHtml, /data:image\/png;base64,cXItY29kZQ==/);
+  assert.doesNotMatch(offerHtml, /Mit Banking-App bezahlen/);
+});

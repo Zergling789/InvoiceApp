@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          cancellation_reason: string | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          requested_at: string
+          scheduled_for: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancellation_reason?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          requested_at?: string
+          scheduled_for?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancellation_reason?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          requested_at?: string
+          scheduled_for?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      legal_acceptances: {
+        Row: {
+          accepted_at: string
+          created_at: string
+          document_sha256: string
+          document_type: string
+          document_version: string
+          id: string
+          ip_hash: string | null
+          request_id: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          created_at?: string
+          document_sha256: string
+          document_type: string
+          document_version: string
+          id?: string
+          ip_hash?: string | null
+          request_id?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string
+          created_at?: string
+          document_sha256?: string
+          document_type?: string
+          document_version?: string
+          id?: string
+          ip_hash?: string | null
+          request_id?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      billing_customers: {
+        Row: { created_at: string; stripe_customer_id: string; updated_at: string; user_id: string }
+        Insert: { created_at?: string; stripe_customer_id: string; updated_at?: string; user_id: string }
+        Update: { created_at?: string; stripe_customer_id?: string; updated_at?: string; user_id?: string }
+        Relationships: []
+      }
+      billing_subscriptions: {
+        Row: { cancel_at_period_end: boolean; created_at: string; current_period_end: string | null; plan_key: string; status: string; stripe_customer_id: string; stripe_price_id: string | null; stripe_subscription_id: string | null; updated_at: string; user_id: string }
+        Insert: { cancel_at_period_end?: boolean; created_at?: string; current_period_end?: string | null; plan_key?: string; status?: string; stripe_customer_id: string; stripe_price_id?: string | null; stripe_subscription_id?: string | null; updated_at?: string; user_id: string }
+        Update: { cancel_at_period_end?: boolean; created_at?: string; current_period_end?: string | null; plan_key?: string; status?: string; stripe_customer_id?: string; stripe_price_id?: string | null; stripe_subscription_id?: string | null; updated_at?: string; user_id?: string }
+        Relationships: []
+      }
+      stripe_webhook_events: {
+        Row: { attempts: number; event_id: string; event_type: string; last_error_code: string | null; processed_at: string | null; received_at: string; status: string }
+        Insert: { attempts?: number; event_id: string; event_type: string; last_error_code?: string | null; processed_at?: string | null; received_at?: string; status?: string }
+        Update: { attempts?: number; event_id?: string; event_type?: string; last_error_code?: string | null; processed_at?: string | null; received_at?: string; status?: string }
+        Relationships: []
+      }
+      document_recipient_links: {
+        Row: { created_at: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id: string; responded_at: string | null; response: string | null; revoked_at: string | null; token_hash: string; user_id: string }
+        Insert: { created_at?: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id?: string; responded_at?: string | null; response?: string | null; revoked_at?: string | null; token_hash: string; user_id: string }
+        Update: { created_at?: string; document_id?: string; document_type?: string; document_updated_at?: string; expires_at?: string; id?: string; responded_at?: string | null; response?: string | null; revoked_at?: string | null; token_hash?: string; user_id?: string }
+        Relationships: []
+      }
       audit_events: {
         Row: {
           action: string
