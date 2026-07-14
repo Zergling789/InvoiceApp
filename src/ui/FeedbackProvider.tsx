@@ -56,10 +56,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="fixed inset-x-4 safe-bottom-offset z-50 flex flex-col gap-2 sm:inset-x-auto sm:right-4">
+      <div className="fixed inset-x-4 safe-bottom-offset z-[100] flex flex-col gap-2 sm:inset-x-auto sm:right-4">
         {toasts.map((toast) => (
           <div
             key={toast.id}
+            role={toast.kind === "error" ? "alert" : "status"}
             className={[
               "rounded-lg px-4 py-3 text-sm shadow-lg border",
               toast.kind === "success"
