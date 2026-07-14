@@ -8,7 +8,7 @@ type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
 type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
 
 const INVOICE_FIELDS =
-  "id,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,client_street,client_house_number,client_postal_code,client_city,client_electronic_address,client_electronic_address_scheme,project_id,date,invoice_date,service_date,service_period_start,service_period_end,seller_country,customer_country,customer_type,service_country,currency,buyer_reference,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
+  "id,created_at,invoice_number,number,offer_id,client_id,client_name,client_company_name,client_contact_person,client_email,client_phone,client_vat_id,client_address,client_street,client_house_number,client_postal_code,client_city,client_electronic_address,client_electronic_address_scheme,project_id,date,invoice_date,service_date,service_period_start,service_period_end,seller_country,customer_country,customer_type,service_country,currency,buyer_reference,payment_terms_days,due_date,payment_date,paid_at,canceled_at,positions,intro_text,footer_text,vat_rate,is_small_business,small_business_note,status,is_locked,finalized_at,sent_at,last_sent_at,last_sent_to,sent_count,sent_via" as const;
 
 const normalizeInvoiceStatus = (status: string | null | undefined): InvoiceStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -63,12 +63,13 @@ export async function dbListInvoices(): Promise<Invoice[]> {
     .from("invoices")
     .select(INVOICE_FIELDS)
     .eq("user_id", uid)
-    .order("invoice_date", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
   return (data ?? []).map((r) => ({
     id: r.id,
+    createdAt: r.created_at,
     number: r.invoice_number ?? r.number ?? null,
     offerId: r.offer_id ?? undefined,
     clientId: r.client_id,
@@ -124,6 +125,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 
   return {
     id: data.id,
+    createdAt: data.created_at,
     number: data.invoice_number ?? data.number ?? null,
     offerId: data.offer_id ?? undefined,
     clientId: data.client_id,

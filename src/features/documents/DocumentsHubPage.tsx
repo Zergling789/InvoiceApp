@@ -23,6 +23,7 @@ import {
   formatOfferPhaseLabel,
 } from "@/features/documents/state/formatPhaseLabel";
 import { fetchSettings } from "@/app/settings/settingsService";
+import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
@@ -75,15 +76,6 @@ const invoiceStatusTone = (phase: InvoicePhase): DocumentRow["statusTone"] => {
       return "gray";
   }
 };
-
-const getTimestamp = (value?: string) => {
-  if (!value) return null;
-  const time = new Date(value).getTime();
-  return Number.isNaN(time) ? null : time;
-};
-
-const getRowDocumentTimestamp = (row: DocumentRow) =>
-  getTimestamp(row.date) ?? getTimestamp(row.createdAt) ?? 0;
 
 export default function DocumentsHubPage() {
   const navigate = useNavigate();
@@ -269,7 +261,7 @@ export default function DocumentsHubPage() {
                 clientNameById.get(invoice.clientId) ||
                 "Unbekannter Kunde",
               date: invoice.date,
-              createdAt: (invoice as { createdAt?: string }).createdAt,
+              createdAt: invoice.createdAt,
               amountLabel: formatMoney(
                 calculateDocumentTotal(
                   invoice.positions ?? [],
@@ -299,7 +291,7 @@ export default function DocumentsHubPage() {
               number: offer.number,
               clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
               date: offer.date,
-              createdAt: (offer as { createdAt?: string }).createdAt,
+              createdAt: offer.createdAt,
               amountLabel: formatMoney(
                 calculateDocumentTotal(offer.positions ?? [], Number(offer.vatRate ?? 0)),
                 currency,
@@ -316,41 +308,7 @@ export default function DocumentsHubPage() {
   }, [clientNameById, invoices, offers, mode, settings]);
 
   const sortedRows = useMemo(() => {
-    return [...rows].sort((a, b) => {
-      const aOverdue = a.type === "invoice" && a.isOverdue;
-      const bOverdue = b.type === "invoice" && b.isOverdue;
-
-      if (aOverdue !== bOverdue) {
-        return aOverdue ? -1 : 1;
-      }
-
-      const aInvoiceWithDue = a.type === "invoice" && a.dueDate;
-      const bInvoiceWithDue = b.type === "invoice" && b.dueDate;
-
-      if (aInvoiceWithDue && bInvoiceWithDue) {
-        const dueDiff =
-          (getTimestamp(a.dueDate) ?? 0) - (getTimestamp(b.dueDate) ?? 0);
-        if (dueDiff !== 0) return dueDiff;
-      } else if (aInvoiceWithDue !== bInvoiceWithDue) {
-        return aInvoiceWithDue ? -1 : 1;
-      }
-
-      const aOfferWithValidUntil = a.type === "offer" && a.validUntil;
-      const bOfferWithValidUntil = b.type === "offer" && b.validUntil;
-
-      if (aOfferWithValidUntil && bOfferWithValidUntil) {
-        const validDiff =
-          (getTimestamp(a.validUntil) ?? 0) - (getTimestamp(b.validUntil) ?? 0);
-        if (validDiff !== 0) return validDiff;
-      } else if (aOfferWithValidUntil !== bOfferWithValidUntil) {
-        return aOfferWithValidUntil ? -1 : 1;
-      }
-
-      const dateDiff = getRowDocumentTimestamp(b) - getRowDocumentTimestamp(a);
-      if (dateDiff !== 0) return dateDiff;
-
-      return a.id.localeCompare(b.id);
-    });
+    return sortDocumentsNewestFirst(rows);
   }, [rows]);
 
   const filteredRows = useMemo(() => {

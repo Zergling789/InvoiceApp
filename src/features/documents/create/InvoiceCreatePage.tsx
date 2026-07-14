@@ -32,13 +32,16 @@ export default function InvoiceCreatePage() {
       };
     };
 
-    if (backgroundLocation) {
-      navigate(-1);
+    if (returnTo) {
+      navigate(returnTo, { replace: true, state: buildState(undefined) });
       return;
     }
 
-    if (returnTo) {
-      navigate(returnTo, { replace: true, state: buildState(undefined) });
+    if (backgroundLocation) {
+      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, {
+        replace: true,
+        state: buildState(backgroundLocation.state),
+      });
       return;
     }
 
