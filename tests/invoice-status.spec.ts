@@ -210,6 +210,10 @@ test.describe.serial("invoice status transitions", () => {
       },
     });
 
-    expect(cancelRes.status()).toBe(409);
+    expect(cancelRes.status()).toBe(400);
+    const cancelBody = await cancelRes.json();
+    expect(cancelBody).toMatchObject({
+      error: { code: "STATUS_TRANSITION_NOT_ALLOWED" },
+    });
   });
 });
