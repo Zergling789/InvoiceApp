@@ -94,7 +94,8 @@ test.describe.serial("value stream: offer -> invoice", () => {
     }
     await expect(documentsHeading).toBeVisible();
 
-    await page.getByRole("button", { name: "Angebot erstellen" }).first().click();
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await page.getByRole("link", { name: "Angebot erstellen", exact: true }).click();
 
     await expect(page.getByRole("heading", { name: "Neues Angebot" })).toBeVisible();
     await page.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
