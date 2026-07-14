@@ -114,7 +114,7 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await page.getByRole("button", { name: "Senden" }).click();
     const sendDialog = page.locator("div.fixed.inset-0").filter({
       has: page.getByRole("heading", { name: "Dokument senden" }),
-    });
+    }).last();
     await expect(sendDialog).toBeVisible();
     await sendDialog.getByPlaceholder("to@example.com").fill(client.email);
     await sendDialog.getByRole("button", { name: "Senden" }).click();
