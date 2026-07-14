@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar, type NavItem } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { MobileNav } from "./MobileNav";
+import { BetaFeedback } from "@/components/BetaFeedback";
 
 export function AppShell({ navItems }: { navItems: NavItem[] }) {
   const location = useLocation();
@@ -27,6 +28,7 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
         Zum Inhalt springen
       </a>
       <Topbar />
+      <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">Geschlossene Beta · Nur einfache deutsche B2B-Fälle · Dokumente vor Versand prüfen · Keine Steuer- oder Rechtsberatung · Support über die Kontaktseite</div>
 
       <div className="app-container">
         <div className="grid grid-cols-1 gap-5 md:grid-cols-[232px_minmax(0,1fr)] md:gap-8 lg:gap-10">
@@ -41,6 +43,7 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
       </div>
 
       <MobileNav items={navItems} hidden={hideMobileNav} />
+      <BetaFeedback />
     </div>
   );
 }

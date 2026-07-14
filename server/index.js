@@ -1354,6 +1354,23 @@ app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/api/beta/feedback", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`beta_feedback_${req.user.id}`, 10, 60 * 60 * 1000);
+    const category = String(req.body?.category ?? "");
+    const message = String(req.body?.message ?? "").trim();
+    const route = String(req.body?.route ?? "").slice(0, 300);
+    const relatedRequestId = req.body?.requestId ? String(req.body.requestId).slice(0, 100) : null;
+    if (!["BUG", "UNDERSTANDING", "FEATURE_REQUEST"].includes(category) || message.length < 3 || message.length > 4000 || !route.startsWith("/")) return sendError(res, 400, "BETA_FEEDBACK_INVALID", "Bitte fülle Kategorie und Beschreibung vollständig aus.", req);
+    const { error } = await requireSupabase().from("beta_feedback").insert({ user_id: req.user.id, category, message, route, request_id: relatedRequestId });
+    if (error) throw error;
+    return res.status(201).json({ ok: true });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "BETA_FEEDBACK_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "BETA_FEEDBACK_FAILED", "Feedback konnte nicht gesendet werden.", req);
+  }
+});
+
 app.get("/api/account/deletion-status", requireAuth, async (req, res) => {
   const { data, error } = await requireSupabase().from("account_deletion_requests").select("id,status,requested_at,scheduled_for,completed_at,canceled_at,blocked_reason_code").eq("user_id", req.user.id).order("requested_at", { ascending: false }).limit(1).maybeSingle();
   if (error) return sendSupabaseError(res, error, req, { code: "ACCOUNT_DELETION_STATUS_FAILED", message: "Löschstatus konnte nicht geladen werden." });
