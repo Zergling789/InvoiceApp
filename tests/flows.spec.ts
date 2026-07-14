@@ -119,7 +119,6 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await sendDialog.getByPlaceholder("to@example.com").fill(client.email);
     await sendDialog.getByRole("button", { name: "Senden" }).click();
     await expect(page.getByText("E-Mail wurde erfolgreich versendet.")).toBeVisible();
-    await sendDialog.getByRole("button", { name: "Schließen" }).click();
 
     await expect(page.getByText("Versendet", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Als angenommen markieren" }).click();
