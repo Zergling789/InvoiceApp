@@ -7,8 +7,14 @@ const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE =
   process.env.E2E_SUPABASE_SERVICE_ROLE ?? process.env.SUPABASE_SERVICE_ROLE;
+const SUPABASE_ANON_KEY =
+  process.env.E2E_SUPABASE_ANON_KEY ??
+  process.env.VITE_SUPABASE_ANON_KEY ??
+  process.env.SUPABASE_ANON_KEY;
 
-export const hasE2eSupabaseEnv = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE);
+export const hasE2eSupabaseEnv = Boolean(
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE && SUPABASE_ANON_KEY,
+);
 
 export const admin = createClient(
   SUPABASE_URL ?? "https://example.supabase.co",
@@ -39,6 +45,20 @@ export async function createTestUser(): Promise<TestUser> {
     throw error ?? new Error("Failed to create test user.");
   }
   return { id: data.user.id, email, password };
+}
+
+export async function createAuthenticatedClient(user: TestUser) {
+  const client = createClient(
+    SUPABASE_URL ?? "https://example.supabase.co",
+    SUPABASE_ANON_KEY ?? "missing-e2e-anon-key",
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (error) throw error;
+  return client;
 }
 
 export async function deleteTestUser(userId: string): Promise<void> {

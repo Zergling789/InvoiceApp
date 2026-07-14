@@ -17,6 +17,7 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 # Test-Runner (Node)
 E2E_SUPABASE_URL=https://<project>.supabase.co
 E2E_SUPABASE_SERVICE_ROLE=<service-role-key>
+E2E_SUPABASE_ANON_KEY=<anon-key>
 ```
 
 Optional können stattdessen `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE` gesetzt werden.
@@ -33,5 +34,7 @@ Optional können stattdessen `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE` gesetzt we
 ```
 npm run test:e2e
 ```
+
+Die Suite prüft zusätzlich mit zwei getrennten Benutzern, dass RLS fremdes Lesen, Schreiben und Löschen blockiert. Sie erzeugt und löscht Benutzer und darf deshalb niemals gegen das Produktionsprojekt laufen. Die drei `E2E_SUPABASE_*` Secrets müssen in GitHub auf ein eigenes Testprojekt zeigen. Ohne sie wird der komplette `supabase-e2e`-Job sichtbar übersprungen.
 
 Hinweis: Für die E-Mail-Flows ist kein SMTP-Setup nötig, da `/api/email` im Test gemockt wird.

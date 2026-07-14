@@ -19,34 +19,43 @@ export type Database = {
           cancellation_reason: string | null
           completed_at: string | null
           created_at: string
+          failure_code: string | null
           id: string
+          policy_version: string | null
+          processing_started_at: string | null
           requested_at: string
           scheduled_for: string
           status: string
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           cancellation_reason?: string | null
           completed_at?: string | null
           created_at?: string
+          failure_code?: string | null
           id?: string
+          policy_version?: string | null
+          processing_started_at?: string | null
           requested_at?: string
           scheduled_for?: string
           status?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           cancellation_reason?: string | null
           completed_at?: string | null
           created_at?: string
+          failure_code?: string | null
           id?: string
+          policy_version?: string | null
+          processing_started_at?: string | null
           requested_at?: string
           scheduled_for?: string
           status?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }

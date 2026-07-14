@@ -11,6 +11,7 @@ import { buildCanonicalInvoice, canonicalInvoiceToRenderPayload } from "./einvoi
 import { serializeCanonicalInvoiceToCii } from "./einvoice/ciiSerializer.js";
 import { generateValidatedZugferd } from "./einvoice/zugferdGenerator.js";
 import { buildAccountExportZip, loadOwnedAccountData } from "./accountDataExport.js";
+import { processDueAccountDeletions, verifyWorkerSecret } from "./accountDeletionWorker.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
 import { evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
@@ -1333,6 +1334,30 @@ app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
   } catch (err) {
     logRequestError(req, err, err?.code || "ACCOUNT_DELETION_FAILED");
     return sendError(res, err?.status || 500, err?.code || "ACCOUNT_DELETION_FAILED", "Der Löschauftrag konnte nicht erstellt werden.", req);
+  }
+});
+
+app.get("/api/internal/account-deletions/process", async (req, res) => {
+  try {
+    const providedSecret = String(req.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    if (!verifyWorkerSecret(providedSecret, process.env.CRON_SECRET)) {
+      return sendError(res, 401, "WORKER_UNAUTHORIZED", "Nicht autorisiert.", req);
+    }
+    const result = await processDueAccountDeletions({
+      supabase: requireSupabase(),
+      policyVersion: process.env.ACCOUNT_DELETION_RETENTION_POLICY,
+      limit: 10,
+    });
+    return res.status(200).json(result);
+  } catch (err) {
+    logRequestError(req, err, err?.code || "ACCOUNT_DELETION_WORKER_FAILED");
+    return sendError(
+      res,
+      err?.code === "ACCOUNT_DELETION_POLICY_NOT_APPROVED" ? 503 : 500,
+      err?.code || "ACCOUNT_DELETION_WORKER_FAILED",
+      "Löschaufträge konnten nicht verarbeitet werden.",
+      req,
+    );
   }
 });
 

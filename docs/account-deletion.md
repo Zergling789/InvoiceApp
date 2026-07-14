@@ -1,19 +1,21 @@
 # Accountlöschung
 
-Die Accountlöschung ist als kontrollierter Statusprozess modelliert. Nutzer müssen ihr aktuelles Passwort erneut eingeben und zusätzlich `LÖSCHEN` bestätigen. Der Server prüft das Passwort über Supabase Auth, verhindert parallele aktive Löschaufträge und legt anschließend einen Auftrag mit siebentägiger Bearbeitungsfrist an. Bestehende Sessions werden global widerrufen; bereits ausgestellte Access Tokens können bis zu ihrem Ablauf gültig bleiben.
+Nutzer müssen ihr aktuelles Passwort erneut eingeben und zusätzlich `LÖSCHEN` bestätigen. Der Server verhindert parallele Aufträge, plant die Verarbeitung mit sieben Tagen Vorlauf und widerruft bestehende Sessions global.
 
-Die Tabelle `account_deletion_requests` ist für direkte Schreibzugriffe gesperrt. Nutzer dürfen über RLS ausschließlich den Status ihres eigenen Auftrags lesen. Erstellung und spätere Verarbeitung erfolgen serverseitig.
+## Worker
 
-## Noch offene Verarbeitung
+Vercel ruft täglich `GET /api/internal/account-deletions/process` auf. Der Endpunkt verlangt `Authorization: Bearer <CRON_SECRET>`. Fällige Aufträge werden atomar mit `FOR UPDATE SKIP LOCKED` beansprucht. Der Browser hat keine Schreib- oder Ausführungsrechte auf diesen Ablauf.
 
-Ein Löschauftrag führt bewusst noch keinen unkontrollierten Cascade-Delete aus. Vor Aktivierung in Production müssen folgende Kategorien mit juristischer Prüfung verbindlich festgelegt und in einem Worker umgesetzt werden:
+Der Worker entfernt benutzereigene Firmenassets, löscht den Supabase-Auth-Nutzer über die Service Role und markiert den anonymisierten Auftrag als abgeschlossen. Bei Fehlern wird nur ein stabiler Fehlercode gespeichert.
 
-- sofort löschbare Profil-, Kunden-, Projekt- und Entwurfsdaten
-- zu anonymisierende Datensätze
-- aufzubewahrende finalisierte Rechnungen und E-Rechnungsmetadaten
-- Stripe- und sonstige Abrechnungsdaten
-- Audit- und Sicherheitsereignisse
-- Logos und sonstige Storage-Objekte unter dem Nutzerpfad
-- Widerruf verbleibender Sessions und endgültige Sperrung beziehungsweise Löschung des Auth-Nutzers
+## Sicherheitsfreigabe
 
-Bis dieser Worker und die Aufbewahrungsregeln freigegeben sind, ist der Status technisch als Löschauftrag und nicht als abgeschlossene Löschung zu bezeichnen.
+Der Worker ist standardmäßig blockiert. Er läuft nur mit:
+
+```text
+ACCOUNT_DELETION_RETENTION_POLICY=delete-all-v1
+```
+
+Diese Policy löscht das gesamte Konto einschließlich finalisierter Rechnungen und Abrechnungsmetadaten. Sie darf erst gesetzt werden, nachdem gesetzliche Aufbewahrungspflichten extern geprüft und die vollständige Löschung ausdrücklich freigegeben wurde. Ohne die exakte Policy-Version antwortet der Worker mit `ACCOUNT_DELETION_POLICY_NOT_APPROVED` und verändert keine Nutzerdaten.
+
+Wenn finalisierte Rechnungen aufbewahrt werden müssen, darf `delete-all-v1` nicht aktiviert werden. Dann ist zuerst eine fachlich freigegebene Anonymisierungs- und Aufbewahrungspolicy zu implementieren.
