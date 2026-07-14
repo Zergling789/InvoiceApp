@@ -120,10 +120,10 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await sendDialog.getByRole("button", { name: "Senden" }).click();
     await expect(page.getByText("E-Mail wurde erfolgreich versendet.")).toBeVisible();
 
-    await expect(page.getByText("Gesendet", { exact: true })).toBeVisible();
+    await expect(page.getByText("Gesendet", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "Als angenommen markieren" }).click();
     await page.getByRole("button", { name: "Bestaetigen" }).click();
-    await expect(page.getByText("Angenommen", { exact: true })).toBeVisible();
+    await expect(page.getByText("Angenommen", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "In Rechnung wandeln" }).click();
     await page.getByRole("button", { name: "Bestaetigen" }).click();
     await expect(page).toHaveURL(/\/app\/invoices\//);
