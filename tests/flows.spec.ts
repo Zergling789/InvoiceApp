@@ -91,10 +91,10 @@ test.describe.serial("value stream: offer -> invoice", () => {
     if (await legalConsent.isVisible()) {
       await legalConsent.check();
       await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
-      await expect(documentsHeading).toBeVisible();
     }
+    await expect(documentsHeading).toBeVisible();
 
-    await page.goto("/app/offers/new");
+    await page.getByRole("button", { name: "Angebot erstellen" }).first().click();
 
     await expect(page.getByRole("heading", { name: "Neues Angebot" })).toBeVisible();
     await page.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
