@@ -44,9 +44,12 @@ describe("RecipientDocumentPage", () => {
       { route: "/recipient/test-token" }
     );
 
+    expect(await screen.findByRole("button", { name: "Angebot ablehnen" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Optionale Begründung bei Ablehnung/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Angebot ablehnen" }));
     const reason = await screen.findByLabelText(/Optionale Begründung bei Ablehnung/);
     await user.type(reason, "Der Zeitrahmen passt leider nicht.");
-    await user.click(screen.getByRole("button", { name: "Angebot ablehnen" }));
+    await user.click(screen.getByRole("button", { name: "Ablehnung bestätigen" }));
 
     await waitFor(() => expect(respondToOffer).toHaveBeenCalledWith("test-token", "REJECTED", "Der Zeitrahmen passt leider nicht."));
     expect(await screen.findByText(/Begründung: Der Zeitrahmen passt leider nicht\./)).toBeInTheDocument();
