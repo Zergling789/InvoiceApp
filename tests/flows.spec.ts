@@ -83,8 +83,8 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await page.getByRole("button", { name: "Anmelden" }).click();
     await expect(page).toHaveURL(/\/app/);
 
-    await page.getByRole("link", { name: "Angebote" }).click();
-    await page.getByRole("button", { name: "Erstellen" }).click();
+    await page.getByRole("link", { name: "Dokumente" }).click();
+    await page.getByRole("button", { name: "Angebot erstellen" }).click();
 
     await expect(page.getByRole("heading", { name: "Angebot erstellen" })).toBeVisible();
     await page.locator("#document-client").selectOption({ label: client.companyName });
