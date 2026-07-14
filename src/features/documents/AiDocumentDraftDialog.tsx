@@ -4,6 +4,8 @@ import { AlertTriangle, Sparkles, X } from "lucide-react";
 
 import { createAiDocumentDraft, type AiDocumentDraft } from "@/app/ai/aiService";
 import { AppButton } from "@/ui/AppButton";
+import { AppNumberInput } from "@/ui/AppNumberInput";
+import { getCurrencySymbol } from "@/utils/money";
 
 type Props = {
   documentType: "invoice" | "offer";
@@ -14,6 +16,7 @@ type Props = {
 };
 
 export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply, onClose }: Props) {
+  const currencySymbol = getCurrencySymbol(currency);
   const [description, setDescription] = useState("");
   const [draft, setDraft] = useState<AiDocumentDraft | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,11 +35,11 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
     }
   };
 
-  const updatePosition = (index: number, field: keyof AiDocumentDraft["positions"][number], value: string) => {
+  const updatePosition = (index: number, field: keyof AiDocumentDraft["positions"][number], value: string | number) => {
     setDraft((current) => current && ({
       ...current,
       positions: current.positions.map((position, positionIndex) => positionIndex === index
-        ? { ...position, [field]: field === "description" || field === "unit" ? value : Number(value) }
+        ? { ...position, [field]: value }
         : position),
     }));
   };
@@ -79,9 +82,9 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, onApply
                 {draft.positions.map((position, index) => (
                   <div key={index} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_90px_90px_120px]">
                     <input aria-label={`Beschreibung ${index + 1}`} value={position.description} onChange={(e) => updatePosition(index, "description", e.target.value)} />
-                    <input aria-label={`Menge ${index + 1}`} type="number" min="0.01" step="any" value={position.quantity} onChange={(e) => updatePosition(index, "quantity", e.target.value)} />
+                    <AppNumberInput aria-label={`Menge ${index + 1}`} min={0.01} step="any" value={position.quantity} onValueChange={(quantity) => updatePosition(index, "quantity", quantity)} />
                     <input aria-label={`Einheit ${index + 1}`} value={position.unit} onChange={(e) => updatePosition(index, "unit", e.target.value)} />
-                    <input aria-label={`Preis ${index + 1}`} type="number" min="0" step="any" value={position.price} onChange={(e) => updatePosition(index, "price", e.target.value)} />
+                    <AppNumberInput aria-label={`Preis ${index + 1}`} className="pr-10" min={0} step="any" suffix={currencySymbol} value={position.price} onValueChange={(price) => updatePosition(index, "price", price)} />
                   </div>
                 ))}
               </div>

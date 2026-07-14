@@ -4,6 +4,7 @@ import type { SenderIdentity, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { AppBadge } from "@/ui/AppBadge";
+import { AppNumberInput } from "@/ui/AppNumberInput";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { supabase } from "@/supabaseClient";
 
@@ -500,19 +501,18 @@ export default function SettingsView() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tage (Custom)</label>
-            <input
-              type="number"
+            <AppNumberInput
               className="w-full border rounded p-2"
               value={clampPaymentTerms(settings.defaultPaymentTerms)}
-              onChange={(e) =>
+              onValueChange={(defaultPaymentTerms) =>
                 setSettings({
                   ...settings,
-                  defaultPaymentTerms: clampPaymentTerms(e.target.value),
+                  defaultPaymentTerms: Math.trunc(defaultPaymentTerms),
                 })
               }
               min={0}
               max={365}
-              inputMode="numeric"
+              step={1}
             />
             <p className="text-xs text-gray-500 mt-1">0–365 Tage möglich.</p>
           </div>
@@ -549,14 +549,14 @@ export default function SettingsView() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Standard MwSt (%)</label>
-            <input
-              type="number"
+            <AppNumberInput
               className="w-full border rounded p-2"
               value={settings.defaultVatRate}
-              onChange={(e) =>
-                setSettings({ ...settings, defaultVatRate: toNumberOrFallback(e.target.value, 19) })
+              min={0}
+              step="any"
+              onValueChange={(defaultVatRate) =>
+                setSettings({ ...settings, defaultVatRate })
               }
-              inputMode="decimal"
             />
           </div>
         </div>
@@ -611,17 +611,17 @@ export default function SettingsView() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Padding</label>
-              <input
-                type="number"
+              <AppNumberInput
                 className="w-full border rounded p-2"
                 value={settings.numberPadding ?? 4}
-                onChange={(e) =>
+                min={1}
+                step={1}
+                onValueChange={(numberPadding) =>
                   setSettings({
                     ...settings,
-                    numberPadding: Math.max(1, Math.trunc(Number(e.target.value ?? 4))),
+                    numberPadding: Math.trunc(numberPadding),
                   })
                 }
-                inputMode="numeric"
               />
             </div>
           </div>

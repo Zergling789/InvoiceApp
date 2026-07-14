@@ -4,6 +4,8 @@ import { Save, X } from "lucide-react";
 import type { Client, Project } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { AppNumberInput } from "@/ui/AppNumberInput";
+import { getCurrencySymbol } from "@/utils/money";
 
 export type DraftProject = {
   id?: string;
@@ -25,12 +27,9 @@ type ProjectFormProps = {
   saving?: boolean;
   showHeader?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
+  currency?: string;
+  locale?: string;
 };
-
-function toNumber(v: unknown, fallback = 0) {
-  const n = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
-  return Number.isFinite(n) ? n : fallback;
-}
 
 export function ProjectForm({
   value,
@@ -42,8 +41,11 @@ export function ProjectForm({
   saving = false,
   showHeader = true,
   onDirtyChange,
+  currency = "EUR",
+  locale = "de-DE",
 }: ProjectFormProps) {
-  const budgetLabel = value.budgetType === "hourly" ? "Budget (Stunden)" : "Budget (EUR)";
+  const currencySymbol = getCurrencySymbol(currency, locale);
+  const budgetLabel = value.budgetType === "hourly" ? "Budget (Stunden)" : `Budget (${currency})`;
   const budgetHint = value.budgetType === "hourly" ? "Gib die geplanten Stunden an." : "Gib den Festpreis an.";
 
   const isDirty = useMemo(
@@ -112,13 +114,14 @@ export function ProjectForm({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Stundensatz</label>
-              <input
-                type="number"
-                className="w-full border rounded p-2"
-                value={String(value.hourlyRate)}
-                onChange={(e) => onChange({ ...value, hourlyRate: toNumber(e.target.value, 0) })}
+              <AppNumberInput
+                className="w-full border rounded p-2 pr-10"
+                value={value.hourlyRate}
+                onValueChange={(hourlyRate) => onChange({ ...value, hourlyRate })}
                 disabled={value.budgetType !== "hourly"}
-                inputMode="decimal"
+                min={0}
+                step="any"
+                suffix={currencySymbol}
               />
               {value.budgetType !== "hourly" && (
                 <div className="text-xs text-gray-500 mt-1">Nicht relevant bei Festpreis.</div>
@@ -127,12 +130,13 @@ export function ProjectForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{budgetLabel}</label>
-              <input
-                type="number"
-                className="w-full border rounded p-2"
-                value={String(value.budgetTotal)}
-                onChange={(e) => onChange({ ...value, budgetTotal: toNumber(e.target.value, 0) })}
-                inputMode="decimal"
+              <AppNumberInput
+                className="w-full border rounded p-2 pr-10"
+                value={value.budgetTotal}
+                onValueChange={(budgetTotal) => onChange({ ...value, budgetTotal })}
+                min={0}
+                step="any"
+                suffix={value.budgetType === "hourly" ? "Std." : currencySymbol}
               />
               <div className="text-xs text-gray-500 mt-1">{budgetHint}</div>
             </div>

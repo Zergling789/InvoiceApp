@@ -10,9 +10,10 @@ import {
 
 import type { Client, Position } from "@/types";
 import type { DocumentFormData } from "@/features/documents/documentEditorModel";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, getCurrencySymbol } from "@/utils/money";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { AppNumberInput } from "@/ui/AppNumberInput";
 
 type Props = {
   type: "offer" | "invoice";
@@ -63,6 +64,7 @@ export function DocumentCreateComposer({
   onSave,
 }: Props) {
   const isInvoice = type === "invoice";
+  const currencySymbol = getCurrencySymbol(data.currency ?? currency, locale);
   const client = clients.find((item) => item.id === data.clientId);
   const canSave = Boolean(
     data.clientId &&
@@ -292,15 +294,14 @@ export function DocumentCreateComposer({
                 )}
                 <label className="text-sm font-medium">
                   Standard-MwSt. (%)
-                  <input
-                    type="number"
-                    min="0"
+                  <AppNumberInput
+                    min={0}
                     step="any"
                     className={`${inputClass} mt-2`}
                     value={data.vatRate ?? 0}
                     disabled={disabled}
-                    onChange={(event) =>
-                      onChange({ ...data, vatRate: Number(event.target.value) })
+                    onValueChange={(vatRate) =>
+                      onChange({ ...data, vatRate })
                     }
                   />
                 </label>
@@ -380,18 +381,15 @@ export function DocumentCreateComposer({
                             )
                           }
                         />
-                        <input
+                        <AppNumberInput
                           aria-label={`Menge ${index + 1}`}
-                          type="number"
                           className={inputClass}
                           value={position.quantity}
                           disabled={disabled}
-                          onChange={(event) =>
-                            onUpdatePosition(
-                              index,
-                              "quantity",
-                              Number(event.target.value),
-                            )
+                          min={0}
+                          step="any"
+                          onValueChange={(quantity) =>
+                            onUpdatePosition(index, "quantity", quantity)
                           }
                         />
                         <input
@@ -403,18 +401,16 @@ export function DocumentCreateComposer({
                             onUpdatePosition(index, "unit", event.target.value)
                           }
                         />
-                        <input
+                        <AppNumberInput
                           aria-label={`Preis ${index + 1}`}
-                          type="number"
-                          className={inputClass}
+                          className={`${inputClass} pr-10`}
                           value={position.price}
                           disabled={disabled}
-                          onChange={(event) =>
-                            onUpdatePosition(
-                              index,
-                              "price",
-                              Number(event.target.value),
-                            )
+                          min={0}
+                          step="any"
+                          suffix={currencySymbol}
+                          onValueChange={(price) =>
+                            onUpdatePosition(index, "price", price)
                           }
                         />
                         <button
@@ -477,10 +473,9 @@ export function DocumentCreateComposer({
                             Kleinunternehmer
                           </option>
                         </select>
-                        <input
+                        <AppNumberInput
                           aria-label={`Steuersatz ${index + 1}`}
-                          type="number"
-                          min="0"
+                          min={0}
                           className={inputClass}
                           value={position.taxRate ?? data.vatRate ?? 0}
                           disabled={
@@ -489,12 +484,8 @@ export function DocumentCreateComposer({
                               position.taxCategory ?? "",
                             )
                           }
-                          onChange={(event) =>
-                            onUpdatePosition(
-                              index,
-                              "taxRate",
-                              Number(event.target.value),
-                            )
+                          onValueChange={(taxRate) =>
+                            onUpdatePosition(index, "taxRate", taxRate)
                           }
                         />
                         {position.taxCategory === "EXEMPT" && (

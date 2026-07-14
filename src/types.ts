@@ -131,6 +131,7 @@ export enum OfferStatus {
 
 export interface Offer {
   id: string;
+  createdAt?: string;
   number: string;
   clientId: string;
   projectId?: string;
@@ -161,6 +162,7 @@ export enum InvoiceStatus {
 
 export interface Invoice {
   id: string;
+  createdAt?: string;
   number: string | null;
   offerId?: string;
   clientId: string;

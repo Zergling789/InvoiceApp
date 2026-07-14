@@ -6,6 +6,7 @@ import ModalSheet from "@/components/ui/ModalSheet";
 import ProjectForm, { type DraftProject } from "@/features/projects/ProjectForm";
 import { useToast } from "@/ui/FeedbackProvider";
 import { useClients } from "@/app/clients/clientQueries";
+import { useSettings } from "@/app/settings/settingsQueries";
 import * as projectService from "@/app/projects/projectService";
 
 const newId = () =>
@@ -27,6 +28,7 @@ export default function ProjectCreatePage() {
   const location = useLocation();
   const toast = useToast();
   const { clients } = useClients();
+  const { settings } = useSettings();
 
   const idRef = useRef(newId());
   const [draft, setDraft] = useState<DraftProject>(() => emptyDraft());
@@ -98,6 +100,8 @@ export default function ProjectCreatePage() {
           value={draft}
           initialValue={initialDraft}
           clients={clients}
+          currency={settings?.currency ?? "EUR"}
+          locale={settings?.locale ?? "de-DE"}
           onChange={setDraft}
           onSave={save}
           onCancel={handleClose}

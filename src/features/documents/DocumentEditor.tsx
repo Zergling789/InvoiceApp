@@ -5,9 +5,10 @@ import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings, Sparkles } from "
 
 import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, getCurrencySymbol } from "@/utils/money";
 
 import { AppButton } from "@/ui/AppButton";
+import { AppNumberInput } from "@/ui/AppNumberInput";
 import BottomActionBar, { type MenuAction } from "@/components/BottomActionBar";
 import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
@@ -139,6 +140,7 @@ export function DocumentEditor({
     ? settings.currency ?? "EUR"
     : formData.currency ?? settings.currency ?? "EUR";
   const locale = settings.locale ?? "de-DE";
+  const currencySymbol = getCurrencySymbol(documentCurrency, locale);
   const showOfferWizard =
     !disableOfferWizard &&
     !isInvoice &&
@@ -1082,16 +1084,14 @@ export function DocumentEditor({
                       <label className="text-sm font-medium text-gray-700" htmlFor="document-vat">
                         MwSt. (%)
                       </label>
-                      <input
+                      <AppNumberInput
                         id="document-vat"
-                        type="number"
                         className="w-full sm:max-w-[260px] border rounded-lg p-2 text-sm"
                         value={formData.vatRate ?? 0}
                         disabled={disabled}
-                        onChange={(e) =>
-                          setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                        onValueChange={(vatRate) =>
+                          setFormData({ ...formData, vatRate })
                         }
-                        inputMode="decimal"
                       />
                     </div>
                     {!isInvoice && (
@@ -1132,16 +1132,16 @@ export function DocumentEditor({
                             disabled={disabled}
                             onChange={(e) => updatePosition(idx, "description", e.target.value)}
                           />
-                          <input
-                            type="number"
+                          <AppNumberInput
                             className="w-full border rounded-lg p-2 text-sm"
                             placeholder="Menge"
                             value={pos.quantity ?? 0}
                             disabled={disabled}
-                            onChange={(e) =>
-                              updatePosition(idx, "quantity", toNumberOrZero(e.target.value))
+                            min={0}
+                            step="any"
+                            onValueChange={(quantity) =>
+                              updatePosition(idx, "quantity", quantity)
                             }
-                            inputMode="decimal"
                           />
                           <input
                             className="w-full border rounded-lg p-2 text-sm"
@@ -1150,21 +1150,19 @@ export function DocumentEditor({
                             disabled={disabled}
                             onChange={(e) => updatePosition(idx, "unit", e.target.value)}
                           />
-                          <div className="relative">
-                            <input
-                              type="number"
+                          <div>
+                            <AppNumberInput
                               className="w-full border rounded-lg p-2 pr-12 text-sm"
                               placeholder="Preis/Std"
                               value={pos.price ?? 0}
                               disabled={disabled}
-                              onChange={(e) =>
-                                updatePosition(idx, "price", toNumberOrZero(e.target.value))
+                              min={0}
+                              step="any"
+                              suffix={currencySymbol}
+                              onValueChange={(price) =>
+                                updatePosition(idx, "price", price)
                               }
-                              inputMode="decimal"
                             />
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-                              {documentCurrency}
-                            </span>
                           </div>
                           <select
                             aria-label={`Steuerart ${idx + 1}`}
@@ -1475,24 +1473,20 @@ export function DocumentEditor({
                     >
                       Zahlungsziel (Tage)
                     </label>
-                    <input
+                    <AppNumberInput
                       id="document-payment-terms"
-                      type="number"
                       className="w-full border rounded p-2"
                       value={formData.paymentTermsDays ?? 14}
                       disabled={invoiceMetaDisabled}
                       min={0}
                       max={365}
-                      onChange={(e) =>
+                      step={1}
+                      onValueChange={(paymentTermsDays) =>
                         setFormData({
                           ...formData,
-                          paymentTermsDays: Math.min(
-                            365,
-                            Math.max(0, Math.trunc(toNumberOrZero(e.target.value)))
-                          ),
+                          paymentTermsDays: Math.trunc(paymentTermsDays),
                         })
                       }
-                      inputMode="numeric"
                     />
                   </div>
                   <div>
@@ -1528,16 +1522,14 @@ export function DocumentEditor({
                       >
                         MwSt (%)
                       </label>
-                      <input
+                      <AppNumberInput
                         id="document-vat"
-                        type="number"
                         className="w-full border rounded p-2"
                         value={formData.vatRate ?? 0}
                         disabled={disabled}
-                        onChange={(e) =>
-                          setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                        onValueChange={(vatRate) =>
+                          setFormData({ ...formData, vatRate })
                         }
-                        inputMode="decimal"
                       />
                     </div>
                   )}
@@ -1620,16 +1612,14 @@ export function DocumentEditor({
                     >
                       MwSt (%)
                     </label>
-                    <input
+                    <AppNumberInput
                       id="document-vat"
-                      type="number"
                       className="w-full border rounded p-2"
                       value={formData.vatRate ?? 0}
                       disabled={disabled}
-                      onChange={(e) =>
-                        setFormData({ ...formData, vatRate: toNumberOrZero(e.target.value) })
+                      onValueChange={(vatRate) =>
+                        setFormData({ ...formData, vatRate })
                       }
-                      inputMode="decimal"
                     />
                   </div>
                   <div>
@@ -1763,14 +1753,14 @@ export function DocumentEditor({
                   </div>
 
                   <div className="w-full sm:w-20">
-                    <input
-                      type="number"
+                    <AppNumberInput
                       className="w-full border rounded p-2"
                       placeholder="Menge"
                       value={pos.quantity ?? 0}
                       disabled={disabled}
-                      onChange={(e) => updatePosition(idx, "quantity", toNumberOrZero(e.target.value))}
-                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      onValueChange={(quantity) => updatePosition(idx, "quantity", quantity)}
                     />
                   </div>
 
@@ -1784,19 +1774,17 @@ export function DocumentEditor({
                     />
                   </div>
 
-                  <div className="relative w-full sm:w-28">
-                    <input
-                      type="number"
+                  <div className="w-full sm:w-28">
+                    <AppNumberInput
                       className="w-full border rounded p-2 pr-12"
                       placeholder="Preis/Std"
                       value={pos.price ?? 0}
                       disabled={disabled}
-                      onChange={(e) => updatePosition(idx, "price", toNumberOrZero(e.target.value))}
-                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      suffix={currencySymbol}
+                      onValueChange={(price) => updatePosition(idx, "price", price)}
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-                      {documentCurrency}
-                    </span>
                   </div>
 
                   {!readOnly && (

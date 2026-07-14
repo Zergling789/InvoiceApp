@@ -7,7 +7,7 @@ type DbOfferRow = Database["public"]["Tables"]["offers"]["Row"];
 type DbOfferInsert = Database["public"]["Tables"]["offers"]["Insert"];
 
 const OFFER_FIELDS =
-  "id,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,rejection_reason,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
+  "id,created_at,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,rejection_reason,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
 
 const normalizeOfferStatus = (status: string | null | undefined): OfferStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -46,12 +46,13 @@ export async function dbListOffers(): Promise<Offer[]> {
     .from("offers")
     .select(OFFER_FIELDS)
     .eq("user_id", uid)
-    .order("date", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
   return (data ?? []).map((r) => ({
     id: r.id,
+    createdAt: r.created_at,
     number: r.number,
     clientId: r.client_id,
     projectId: r.project_id ?? undefined,
@@ -88,6 +89,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
 
   return {
     id: data.id,
+    createdAt: data.created_at,
     number: data.number,
     clientId: data.client_id,
     projectId: data.project_id ?? undefined,
