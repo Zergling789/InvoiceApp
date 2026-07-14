@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/providers/ThemeProvider";
 import App from "./App";
 import "./styles/index.css";
 import { isSupabaseConfigured } from "@/supabaseClient";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function MissingLocalConfiguration() {
   return (
@@ -30,14 +31,16 @@ VITE_API_PROXY=http://localhost:4000`}</pre>
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ThemeProvider>
-      <ToastProvider>
-        <ConfirmProvider>
-          <BrowserRouter>
-            {isSupabaseConfigured ? <App /> : <MissingLocalConfiguration />}
-          </BrowserRouter>
-        </ConfirmProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ToastProvider>
+          <ConfirmProvider>
+            <BrowserRouter>
+              {isSupabaseConfigured ? <App /> : <MissingLocalConfiguration />}
+            </BrowserRouter>
+          </ConfirmProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

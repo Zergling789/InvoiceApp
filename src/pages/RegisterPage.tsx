@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -38,6 +39,9 @@ export default function RegisterPage() {
     }
     if (password !== passwordConfirm) {
       return "Die Passwoerter stimmen nicht ueberein.";
+    }
+    if (!legalAccepted) {
+      return "Bitte akzeptiere die Nutzungsbedingungen und bestätige die Datenschutzerklärung.";
     }
     return null;
   };
@@ -172,6 +176,11 @@ export default function RegisterPage() {
                     required
                   />
                 </div>
+
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-700">
+                  <input className="mt-1 h-4 w-4" type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} required />
+                  <span>Ich akzeptiere die <Link className="font-semibold text-indigo-600 dark:text-indigo-300" to="/terms" target="_blank">Nutzungsbedingungen</Link> und habe die <Link className="font-semibold text-indigo-600 dark:text-indigo-300" to="/privacy" target="_blank">Datenschutzerklärung</Link> zur Kenntnis genommen.</span>
+                </label>
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="email">

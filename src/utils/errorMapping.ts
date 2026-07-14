@@ -66,6 +66,14 @@ export const mapErrorCodeToToast = (code?: string | null) => {
     case "EINVOICE_GENERATION_TIMEOUT":
     case "EINVOICE_GENERATION_FAILED":
       return "Die E-Rechnung konnte nicht erzeugt werden.";
+    case "DATA_EXPORT_FAILED":
+      return "Der Datenexport konnte nicht erstellt werden.";
+    case "ACCOUNT_REAUTHENTICATION_FAILED":
+      return "Das eingegebene Passwort ist nicht korrekt.";
+    case "ACCOUNT_DELETION_CONFIRMATION_REQUIRED":
+      return "Bitte bestätige die Löschung mit deinem Passwort und dem Wort LÖSCHEN.";
+    case "ACCOUNT_DELETION_FAILED":
+      return "Der Löschauftrag konnte nicht erstellt werden.";
     case "CII_PREFLIGHT_FAILED":
       return "Die Rechnung enthält noch unvollständige oder nicht unterstützte E-Rechnungsdaten.";
     case "UNIQUE_VIOLATION":

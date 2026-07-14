@@ -3,14 +3,24 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import express from "express";
 import nodemailer from "nodemailer";
+import { buildOfferRecipientEmail } from "./recipientEmail.js";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
 import { buildCanonicalInvoice, canonicalInvoiceToRenderPayload } from "./einvoice/canonicalInvoice.js";
 import { serializeCanonicalInvoiceToCii } from "./einvoice/ciiSerializer.js";
 import { generateValidatedZugferd } from "./einvoice/zugferdGenerator.js";
+import { buildAccountExportZip, loadOwnedAccountData } from "./accountDataExport.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
+import { evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
+import {
+  buildLegalAcceptanceRows,
+  hasCurrentLegalAcceptances,
+  requiredLegalVersions,
+} from "./legalDocuments.js";
+import { getStripe, resolvePrice, safeReturnUrl, subscriptionRow } from "./billing/stripeBilling.js";
+import { createEpcQrDataUrl } from "./paymentQr.js";
 import {
   extractEmailAddress,
   generateToken,
@@ -40,6 +50,17 @@ const IS_PROD = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV 
 app.use((req, res, next) => {
   req.requestId = crypto.randomUUID();
   res.setHeader("x-request-id", req.requestId);
+  const startedAt = performance.now();
+  res.on("finish", () => {
+    logEvent(res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info", "request_completed", {
+      requestId: req.requestId,
+      method: req.method,
+      route: req.route?.path || req.path,
+      statusCode: res.statusCode,
+      durationMs: Math.round(performance.now() - startedAt),
+      userIdHash: hashLogUserId(req.user?.id),
+    });
+  });
   next();
 });
 
@@ -49,6 +70,7 @@ app.use((req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD") return next();
   // /api/email hat seinen eigenen Parser weiter unten
   if (req.path === "/api/email" || req.path.startsWith("/api/email/")) return next();
+  if (req.path === "/api/stripe/webhook") return next();
   return jsonParser(req, res, next);
 });
 
@@ -79,7 +101,7 @@ let supabaseConfigLogged = false;
 const requireSupabase = () => {
   if (!supabaseAdmin) {
     if (!supabaseConfigLogged) {
-      console.warn("[config] Missing Supabase admin config.", {
+      logEvent("warn", "supabase_admin_configuration_missing", {
         hasUrl: Boolean(SUPABASE_URL),
         hasServiceRole: Boolean(SUPABASE_SERVICE_ROLE),
       });
@@ -97,7 +119,7 @@ let supabaseUserConfigLogged = false;
 const createUserSupabaseClient = (token) => {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     if (!supabaseUserConfigLogged) {
-      console.warn("[config] Missing Supabase anon config.", {
+      logEvent("warn", "supabase_anon_configuration_missing", {
         hasUrl: Boolean(SUPABASE_URL),
         hasAnonKey: Boolean(SUPABASE_ANON_KEY),
       });
@@ -171,7 +193,7 @@ const getChromiumLaunchOptions = async () => {
   try {
     chromiumModule = await import("@sparticuz/chromium");
   } catch (error) {
-    console.error("[pdf] Missing @sparticuz/chromium dependency for Vercel runtime.");
+    logEvent("error", "pdf_chromium_dependency_missing");
     const err = new Error("Chromium dependency missing.");
     err.status = 500;
     err.code = "CHROMIUM_MISSING";
@@ -180,7 +202,7 @@ const getChromiumLaunchOptions = async () => {
   const chromium = chromiumModule.default ?? chromiumModule;
   const headless = toBooleanHeadless(chromium.headless);
   if (typeof chromium.headless !== "boolean") {
-    console.warn("[pdf] Coerced chromium.headless to boolean.", {
+    logEvent("warn", "pdf_chromium_headless_coerced", {
       headlessType: typeof chromium.headless,
     });
   }
@@ -210,7 +232,7 @@ const getBrowser = async () => {
     try {
       await browser.close();
     } catch (error) {
-      console.warn("[pdf] Failed to close disconnected browser", error);
+      logEvent("warn", "pdf_browser_close_failed", { error });
     }
     browserPromise = null;
     return getBrowser();
@@ -223,12 +245,12 @@ let smtpConfigLogged = false;
 
 const logMissingEnv = (scope, missing = []) => {
   if (missing.length === 0) return;
-  console.warn(`[config] Missing ${scope} env vars`, missing);
+  logEvent("warn", "configuration_missing", { scope, missing });
 };
 
 const logServerConfigOnce = () => {
   if (process.env.LOG_SERVER_CONFIG !== "1") return;
-  console.info("[config] runtime", {
+  logEvent("info", "server_configuration", {
     isVercel: IS_VERCEL,
     hasSupabaseUrl: Boolean(SUPABASE_URL),
     hasSupabaseServiceRole: Boolean(SUPABASE_SERVICE_ROLE),
@@ -346,7 +368,7 @@ const getRedisClient = async () => {
     });
     redisClient.on("error", (err) => {
       lastRedisErrorAt = Date.now();
-      console.error("Redis error", err);
+      logEvent("error", "redis_error", { error: err });
     });
   }
 
@@ -547,8 +569,7 @@ const sendSupabaseError = (res, err, req, fallback) => {
 };
 
 const sendUnexpectedError = (res, err, req) => {
-  const requestId = req?.requestId ?? res.req?.requestId;
-  console.error(`[error] requestId=${requestId}`, err);
+  logRequestError(req ?? res.req, err);
   return sendError(res, 500, "UNEXPECTED_ERROR", "Unerwarteter Serverfehler.", req);
 };
 
@@ -618,7 +639,7 @@ const requireAuth = async (req, res, next) => {
     req.user = data.user;
     next();
   } catch (err) {
-    console.error("Auth error", err);
+    logRequestError(req, err, "AUTH_ERROR");
     return sendError(res, 500, "auth_error", "Auth error.");
   }
 };
@@ -847,6 +868,7 @@ const mapOfferRow = (row = {}) => ({
   introText: row.intro_text ?? "",
   footerText: row.footer_text ?? "",
   vatRate: Number(row.vat_rate ?? 0),
+  status: row.status ?? "DRAFT",
 });
 
 const mapSettingsRow = (row = {}) => ({
@@ -942,7 +964,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 
   const selectFields = resolvedType === "invoice"
     ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot, status, finalized_at"
-    : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate";
+    : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate, status, updated_at";
 
   const { data: docRow, error: docError } = await db
     .from(table)
@@ -1011,10 +1033,20 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 const createPdfBufferFromPayload = async (type, payload, options = {}) => {
   const requestId = options.requestId ?? null;
   const source = options.source ?? "unknown";
-  console.info("[pdf_generate_attempt]", { requestId, source, type });
+  logEvent("info", "pdf_generate_attempt", { requestId, source, type });
+  const canonicalInvoice = type === "invoice" ? buildCanonicalInvoice(payload ?? {}) : null;
   const renderPayload = type === "invoice"
-    ? canonicalInvoiceToRenderPayload(buildCanonicalInvoice(payload ?? {}), payload ?? {})
+    ? canonicalInvoiceToRenderPayload(canonicalInvoice, payload ?? {})
     : { doc: payload?.doc ?? {}, settings: payload?.settings ?? {}, client: payload?.client ?? {} };
+  if (type === "invoice" && renderPayload.settings?.iban) {
+    renderPayload.settings.paymentQrDataUrl = await createEpcQrDataUrl({
+      beneficiary: renderPayload.settings.companyName,
+      iban: renderPayload.settings.iban,
+      bic: renderPayload.settings.bic,
+      amount: canonicalInvoice.totals.grossTotal,
+      reference: `Rechnung ${renderPayload.doc.number ?? ""}`.trim(),
+    });
+  }
   const html = renderDocumentHtml({ type, ...renderPayload });
 
   if (process.env.PDF_TEST_MODE === "1") {
@@ -1104,7 +1136,7 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
     return res.json({ draft });
   } catch (error) {
     const requestId = req.requestId;
-    console.error("[ai_invoice_draft]", { requestId, errorClass: error?.constructor?.name, code: error?.code });
+    logRequestError(req, error, error?.code || "AI_INVOICE_DRAFT_FAILED");
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele KI-Anfragen. Bitte versuche es später erneut.", req);
     if (error?.code === "AI_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Funktion ist nicht konfiguriert.", req);
     if (error?.code === "AI_MODEL_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Modell ist nicht konfiguriert.", req);
@@ -1122,7 +1154,7 @@ app.post("/api/ai/business-card", requireAuth, async (req, res) => {
     const contact = await extractBusinessCard({ imageDataUrl: req.body?.imageDataUrl, userId: req.user.id });
     return res.json({ contact });
   } catch (error) {
-    console.error("[ai_business_card]", { requestId: req.requestId, errorClass: error?.constructor?.name, code: error?.code });
+    logRequestError(req, error, error?.code || "AI_BUSINESS_CARD_FAILED");
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele Scan-Anfragen. Bitte versuche es später erneut.", req);
     if (error?.code === "AI_CARD_INVALID_IMAGE") return sendError(res, 400, error.code, "Bitte verwende ein JPEG-, PNG- oder WebP-Bild.", req);
     if (error?.code === "AI_CARD_IMAGE_SIZE") return sendError(res, 413, error.code, "Das Bild ist zu groß oder ungültig.", req);
@@ -1164,7 +1196,7 @@ app.post("/api/pdf", requireAuth, async (req, res) => {
   } catch (err) {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
-    console.error("PDF generation failed", err);
+    logRequestError(req, err, code);
     return sendError(res, status, code, "PDF generation failed.", req);
   }
 });
@@ -1202,7 +1234,7 @@ app.post("/api/einvoice/cii", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     return res.status(200).send(cii);
   } catch (err) {
-    console.error("CII generation failed", err);
+    logRequestError(req, err, err?.code || "CII_GENERATION_FAILED");
     return sendError(res, err?.status || 500, err?.code || "CII_GENERATION_FAILED", err?.code === "CII_PREFLIGHT_FAILED" ? "Die Rechnung enthält noch unvollständige oder nicht unterstützte E-Rechnungsdaten." : "CII-XML konnte nicht erstellt werden.", req, { extra: !IS_PROD && err?.issues ? { issues: err.issues } : undefined });
   }
 });
@@ -1245,10 +1277,252 @@ app.post("/api/einvoice/zugferd", requireAuth, async (req, res) => {
     res.setHeader("X-Content-SHA256", generated.contentHash);
     return res.status(200).send(generated.pdf);
   } catch (err) {
-    console.error("ZUGFeRD generation failed", { code: err?.code, requestId: req.requestId });
+    logRequestError(req, err, err?.code || "EINVOICE_GENERATION_FAILED");
     const code = err?.status === 404 ? "EINVOICE_FORBIDDEN" : err?.code === "CII_PREFLIGHT_FAILED" ? "EINVOICE_DATA_INCOMPLETE" : err?.code || "EINVOICE_GENERATION_FAILED";
     const message = code === "EINVOICE_NOT_FINALIZED" ? "Nur finalisierte Rechnungen können als E-Rechnung exportiert werden." : code === "EINVOICE_DATA_INCOMPLETE" ? "Für diese Rechnung fehlen strukturierte E-Rechnungsdaten." : code === "EINVOICE_VALIDATION_FAILED" ? "Die Rechnung hat die E-Rechnungsvalidierung nicht bestanden." : code === "EINVOICE_GENERATOR_NOT_CONFIGURED" ? "Der E-Rechnungsdienst ist noch nicht konfiguriert." : code === "EINVOICE_FORBIDDEN" ? "Diese E-Rechnung ist nicht verfügbar." : "Die E-Rechnung konnte nicht erzeugt werden.";
     return sendError(res, err?.status || 500, code, message, req, { extra: !IS_PROD && err?.issues ? { issues: err.issues } : undefined });
+  }
+});
+
+app.post("/api/account/export", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`account_export_${req.user.id}`, 3);
+    const datasets = await loadOwnedAccountData(requireSupabase(), req.user.id);
+    const archive = buildAccountExportZip({ user: req.user, datasets });
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="FreelanceFlow_Datenexport_${date}.zip"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.status(200).send(archive);
+  } catch (err) {
+    logRequestError(req, err, err?.code || "DATA_EXPORT_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "DATA_EXPORT_FAILED", "Der Datenexport konnte nicht erstellt werden.", req);
+  }
+});
+
+app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`account_deletion_${req.user.id}`, 5);
+    const password = String(req.body?.password ?? "");
+    const confirmation = String(req.body?.confirmation ?? "");
+    if (confirmation !== "LÖSCHEN" || !password) {
+      return sendError(res, 400, "ACCOUNT_DELETION_CONFIRMATION_REQUIRED", "Bitte bestätige die Löschung mit deinem Passwort und dem Wort LÖSCHEN.", req);
+    }
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !req.user.email) {
+      return sendError(res, 500, "ACCOUNT_DELETION_FAILED", "Die Accountlöschung ist nicht konfiguriert.", req);
+    }
+
+    const verificationClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { error: verificationError } = await verificationClient.auth.signInWithPassword({ email: req.user.email, password });
+    if (verificationError) {
+      return sendError(res, 403, "ACCOUNT_REAUTHENTICATION_FAILED", "Das Passwort konnte nicht bestätigt werden.", req);
+    }
+
+    const db = requireSupabase();
+    const { data: existing } = await db.from("account_deletion_requests").select("id,status,scheduled_for").eq("user_id", req.user.id).in("status", ["REQUESTED", "PROCESSING"]).maybeSingle();
+    if (existing) {
+      return res.status(200).json({ request: existing, alreadyRequested: true });
+    }
+    const { data: request, error: insertError } = await db.from("account_deletion_requests").insert({ user_id: req.user.id }).select("id,status,requested_at,scheduled_for").single();
+    if (insertError) throw Object.assign(new Error("Deletion request insert failed"), { code: "ACCOUNT_DELETION_FAILED", status: 500 });
+
+    const token = getBearerToken(req);
+    if (token) await db.auth.admin.signOut(token, "global");
+    return res.status(202).json({ request, alreadyRequested: false });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "ACCOUNT_DELETION_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "ACCOUNT_DELETION_FAILED", "Der Löschauftrag konnte nicht erstellt werden.", req);
+  }
+});
+
+app.get("/api/legal/acceptances", requireAuth, async (req, res) => {
+  try {
+    const db = requireSupabase();
+    const { data, error } = await db
+      .from("legal_acceptances")
+      .select("document_type,document_version,accepted_at")
+      .eq("user_id", req.user.id);
+    if (error) return sendSupabaseError(res, error, req, { code: "LEGAL_ACCEPTANCE_FETCH_FAILED", message: "Zustimmungsstatus konnte nicht geladen werden." });
+    return res.json({ current: hasCurrentLegalAcceptances(data), requiredVersions: requiredLegalVersions(), acceptances: data ?? [] });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "LEGAL_ACCEPTANCE_FETCH_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "LEGAL_ACCEPTANCE_FETCH_FAILED", "Zustimmungsstatus konnte nicht geladen werden.", req);
+  }
+});
+
+app.post("/api/legal/acceptances", requireAuth, async (req, res) => {
+  try {
+    if (req.body?.acceptTerms !== true || req.body?.acceptPrivacy !== true) {
+      return sendError(res, 400, "LEGAL_ACCEPTANCE_REQUIRED", "AGB und Datenschutzerklärung müssen aktiv bestätigt werden.", req);
+    }
+    const salt = process.env.LOG_HASH_SALT;
+    const ipHash = salt && req.ip
+      ? crypto.createHash("sha256").update(`${salt}:${req.ip}`).digest("hex")
+      : null;
+    const rows = buildLegalAcceptanceRows({
+      userId: req.user.id,
+      requestId: req.requestId,
+      ipHash,
+      userAgent: req.get("user-agent"),
+    });
+    const db = requireSupabase();
+    const { error } = await db.from("legal_acceptances").upsert(rows, {
+      onConflict: "user_id,document_type,document_version",
+      ignoreDuplicates: true,
+    });
+    if (error) return sendSupabaseError(res, error, req, { code: "LEGAL_ACCEPTANCE_SAVE_FAILED", message: "Zustimmung konnte nicht gespeichert werden." });
+    return res.status(201).json({ current: true, requiredVersions: requiredLegalVersions() });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "LEGAL_ACCEPTANCE_SAVE_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "LEGAL_ACCEPTANCE_SAVE_FAILED", "Zustimmung konnte nicht gespeichert werden.", req);
+  }
+});
+
+const loadRecipientLink = async (token) => {
+  if (!/^[A-Za-z0-9_-]{40,60}$/.test(String(token ?? ""))) return null;
+  const { data } = await requireSupabase().from("document_recipient_links").select("*").eq("token_hash", hashToken(token)).maybeSingle();
+  if (!data || data.revoked_at || new Date(data.expires_at).getTime() <= Date.now()) return null;
+  return data;
+};
+
+app.post("/api/documents/:type/:id/recipient-link", requireAuth, async (req, res) => {
+  try {
+    checkRateLimit(`recipient_link_${req.user.id}`, 30);
+    const type = normalizeDocType(req.params.type);
+    if (!type) return sendError(res, 400, "DOCUMENT_TYPE_INVALID", "Ungültiger Dokumenttyp.", req);
+    const table = type === "offer" ? "offers" : "invoices";
+    const fields = type === "invoice" ? "id,user_id,status,updated_at,finalized_at" : "id,user_id,status,updated_at";
+    const { data: document, error } = await requireSupabase().from(table).select(fields).eq("id", req.params.id).eq("user_id", req.user.id).single();
+    if (error || !document) return sendError(res, 404, "DOCUMENT_NOT_FOUND", "Dokument wurde nicht gefunden.", req);
+    if (type === "offer" && document.status !== "SENT") return sendError(res, 409, "OFFER_NOT_RESPONDABLE", "Nur versendete Angebote können öffentlich beantwortet werden.", req);
+    if (type === "invoice" && !document.finalized_at) return sendError(res, 409, "INVOICE_NOT_FINALIZED", "Nur finalisierte Rechnungen können geteilt werden.", req);
+    const db = requireSupabase();
+    await db.from("document_recipient_links").update({ revoked_at: new Date().toISOString() }).eq("user_id", req.user.id).eq("document_type", type).eq("document_id", document.id).is("revoked_at", null).is("responded_at", null);
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
+    const { error: insertError } = await db.from("document_recipient_links").insert({ user_id: req.user.id, document_type: type, document_id: document.id, token_hash: hashToken(token), document_updated_at: document.updated_at, expires_at: expiresAt });
+    if (insertError) throw insertError;
+    return res.status(201).json({ url: `${APP_BASE_URL}/recipient/${token}`, expiresAt });
+  } catch (err) { logRequestError(req, err, err?.code || "RECIPIENT_LINK_FAILED"); return sendError(res, err?.status || 500, err?.code || "RECIPIENT_LINK_FAILED", "Empfänger-Link konnte nicht erstellt werden.", req); }
+});
+
+app.get("/api/public/documents/:token", async (req, res) => {
+  try {
+    if (req.ip) checkRateLimit(`recipient_view_${req.ip}`, 120);
+    const link = await loadRecipientLink(req.params.token);
+    if (!link) return sendError(res, 404, "RECIPIENT_LINK_INVALID", "Dieser Link ist ungültig oder abgelaufen.", req);
+    const payload = await loadDocumentPayloadFromDb({ type: link.document_type, docId: link.document_id, userId: link.user_id });
+    return res.json({ type: link.document_type, doc: payload.doc, client: payload.client, settings: { companyName: payload.settings.companyName, address: payload.settings.address, iban: payload.settings.iban, bic: payload.settings.bic, bankName: payload.settings.bankName, currency: payload.settings.currency, locale: payload.settings.locale }, response: link.response, expiresAt: link.expires_at });
+  } catch (err) { logRequestError(req, err, "RECIPIENT_DOCUMENT_FAILED"); return sendError(res, 500, "RECIPIENT_DOCUMENT_FAILED", "Dokument konnte nicht geladen werden.", req); }
+});
+
+app.post("/api/public/offers/:token/respond", async (req, res) => {
+  try {
+    if (req.ip) checkRateLimit(`recipient_response_${req.ip}`, 20);
+    const link = await loadRecipientLink(req.params.token);
+    if (!link || link.document_type !== "offer") return sendError(res, 404, "RECIPIENT_LINK_INVALID", "Dieser Link ist ungültig oder abgelaufen.", req);
+    const response = String(req.body?.response ?? "").toUpperCase();
+    if (!["ACCEPTED", "REJECTED"].includes(response)) return sendError(res, 400, "RECIPIENT_RESPONSE_INVALID", "Bitte wähle Annehmen oder Ablehnen.", req);
+    const { data, error } = await requireSupabase().rpc("respond_to_offer_link", { p_link_id: link.id, p_response: response });
+    if (error) {
+      const code = ["DOCUMENT_CHANGED", "OFFER_NOT_RESPONDABLE", "LINK_EXPIRED"].find(value => error.message?.includes(value)) || "RECIPIENT_RESPONSE_FAILED";
+      return sendError(res, 409, code, code === "DOCUMENT_CHANGED" ? "Das Angebot wurde nach Versand geändert. Bitte fordere einen neuen Link an." : "Das Angebot kann nicht mehr beantwortet werden.", req);
+    }
+    return res.json({ response: data });
+  } catch (err) { logRequestError(req, err, "RECIPIENT_RESPONSE_FAILED"); return sendError(res, 500, "RECIPIENT_RESPONSE_FAILED", "Antwort konnte nicht gespeichert werden.", req); }
+});
+
+const getOrCreateStripeCustomer = async (db, stripe, user) => {
+  const { data: existing, error: lookupError } = await db.from("billing_customers").select("stripe_customer_id").eq("user_id", user.id).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing?.stripe_customer_id) return existing.stripe_customer_id;
+  const customer = await stripe.customers.create({ email: user.email || undefined, metadata: { user_id: user.id } }, { idempotencyKey: `customer:${user.id}` });
+  const { error } = await db.from("billing_customers").insert({ user_id: user.id, stripe_customer_id: customer.id });
+  if (error) throw error;
+  return customer.id;
+};
+
+app.get("/api/billing/status", requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await requireSupabase().from("billing_subscriptions").select("plan_key,status,current_period_end,cancel_at_period_end").eq("user_id", req.user.id).maybeSingle();
+    if (error) return sendSupabaseError(res, error, req, { code: "BILLING_STATUS_FAILED", message: "Abrechnungsstatus konnte nicht geladen werden." });
+    return res.json({ subscription: data ?? { plan_key: "BASIS", status: "INACTIVE", current_period_end: null, cancel_at_period_end: false } });
+  } catch (err) { return sendUnexpectedError(res, err, req); }
+});
+
+app.post("/api/billing/checkout", requireAuth, async (req, res) => {
+  try {
+    const selection = resolvePrice(req.body?.plan, req.body?.cycle);
+    const db = requireSupabase();
+    const { data: active } = await db.from("billing_subscriptions").select("status").eq("user_id", req.user.id).in("status", ["TRIALING", "ACTIVE", "PAST_DUE", "UNPAID", "PAUSED"]).maybeSingle();
+    if (active) return sendError(res, 409, "SUBSCRIPTION_ALREADY_EXISTS", "Ein Abonnement besteht bereits. Bitte verwalte es im Kundenportal.", req);
+    const stripe = getStripe();
+    const customerId = await getOrCreateStripeCustomer(db, stripe, req.user);
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription", customer: customerId,
+      line_items: [{ price: selection.priceId, quantity: 1 }],
+      success_url: `${safeReturnUrl(APP_BASE_URL)}?checkout=success`,
+      cancel_url: `${safeReturnUrl(APP_BASE_URL)}?checkout=canceled`,
+      client_reference_id: req.user.id,
+      metadata: { user_id: req.user.id, plan_key: selection.plan },
+      subscription_data: { metadata: { user_id: req.user.id, plan_key: selection.plan } },
+      allow_promotion_codes: true,
+    }, { idempotencyKey: `checkout:${req.user.id}:${selection.priceId}:${Math.floor(Date.now() / 300000)}` });
+    return res.status(201).json({ url: session.url });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "STRIPE_CHECKOUT_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "STRIPE_CHECKOUT_FAILED", "Stripe Checkout konnte nicht gestartet werden.", req);
+  }
+});
+
+app.post("/api/billing/portal", requireAuth, async (req, res) => {
+  try {
+    const db = requireSupabase();
+    const { data, error } = await db.from("billing_customers").select("stripe_customer_id").eq("user_id", req.user.id).maybeSingle();
+    if (error) throw error;
+    if (!data?.stripe_customer_id) return sendError(res, 404, "BILLING_CUSTOMER_NOT_FOUND", "Für dieses Konto besteht noch kein Abrechnungsprofil.", req);
+    const session = await getStripe().billingPortal.sessions.create({ customer: data.stripe_customer_id, return_url: safeReturnUrl(APP_BASE_URL) });
+    return res.json({ url: session.url });
+  } catch (err) {
+    logRequestError(req, err, err?.code || "STRIPE_PORTAL_FAILED");
+    return sendError(res, err?.status || 500, err?.code || "STRIPE_PORTAL_FAILED", "Stripe Kundenportal konnte nicht geöffnet werden.", req);
+  }
+});
+
+app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
+  let event;
+  try {
+    if (!process.env.STRIPE_WEBHOOK_SECRET) return sendError(res, 503, "STRIPE_WEBHOOK_NOT_CONFIGURED", "Webhook ist nicht konfiguriert.", req);
+    event = getStripe().webhooks.constructEvent(req.body, req.get("stripe-signature"), process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    logRequestError(req, err, "STRIPE_SIGNATURE_INVALID");
+    return sendError(res, 400, "STRIPE_SIGNATURE_INVALID", "Ungültige Webhook-Signatur.", req);
+  }
+
+  const db = requireSupabase();
+  const { data: claimed, error: claimError } = await db.rpc("claim_stripe_webhook", { p_event_id: event.id, p_event_type: event.type });
+  if (claimError) return sendSupabaseError(res, claimError, req, { code: "STRIPE_WEBHOOK_CLAIM_FAILED", message: "Webhook konnte nicht verarbeitet werden." });
+  if (!claimed) return res.json({ received: true, duplicate: true });
+
+  try {
+    if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
+      const subscription = event.data.object;
+      let userId = subscription.metadata?.user_id;
+      if (!userId) {
+        const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+        const { data } = await db.from("billing_customers").select("user_id").eq("stripe_customer_id", customerId).single();
+        userId = data?.user_id;
+      }
+      if (!userId) throw Object.assign(new Error("Subscription owner missing."), { code: "STRIPE_OWNER_MISSING" });
+      const { error } = await db.from("billing_subscriptions").upsert(subscriptionRow(subscription, userId), { onConflict: "user_id" });
+      if (error) throw error;
+    }
+    await db.from("stripe_webhook_events").update({ status: "PROCESSED", processed_at: new Date().toISOString() }).eq("event_id", event.id);
+    return res.json({ received: true });
+  } catch (err) {
+    await db.from("stripe_webhook_events").update({ status: "FAILED", last_error_code: String(err?.code || "PROCESSING_FAILED").slice(0, 100) }).eq("event_id", event.id);
+    logRequestError(req, err, err?.code || "STRIPE_WEBHOOK_PROCESSING_FAILED");
+    return sendError(res, 500, "STRIPE_WEBHOOK_PROCESSING_FAILED", "Webhook konnte nicht verarbeitet werden.", req);
   }
 });
 
@@ -1272,7 +1546,7 @@ app.post("/api/pdf/link", requireAuth, async (req, res) => {
   } catch (err) {
     const status = err?.status || 500;
     const code = err?.code || "pdf_link_failed";
-    console.error("PDF link generation failed", err);
+    logRequestError(req, err, code);
     return sendError(res, status, code, "PDF link generation failed.", req);
   }
 });
@@ -1551,7 +1825,7 @@ app.get("/api/pdf/download", async (req, res) => {
   } catch (err) {
     const status = err?.status || 500;
     const code = err?.code || "pdf_generation_failed";
-    console.error("PDF download failed", err);
+    logRequestError(req, err, code);
     return sendError(res, status, code, "PDF generation failed.", req);
   }
 });
@@ -1650,7 +1924,7 @@ app.post("/api/sender-identities", requireAuth, async (req, res) => {
       last_verification_sent_at: nowIso,
     });
   } catch (err) {
-    console.error("Create sender identity failed", err);
+    logRequestError(req, err, err?.code || "SENDER_IDENTITY_CREATE_FAILED");
     if (err?.code === "SMTP_NOT_CONFIGURED") {
       return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
     }
@@ -1729,7 +2003,7 @@ app.post("/api/sender-identities/:id/resend", requireAuth, async (req, res) => {
 
     res.json({ ok: true, last_verification_sent_at: nowIso });
   } catch (err) {
-    console.error("Resend sender identity failed", err);
+    logRequestError(req, err, err?.code || "SENDER_IDENTITY_RESEND_FAILED");
     if (err?.status === 429) {
       return sendError(
         res,
@@ -1819,7 +2093,7 @@ app.get("/api/sender-identities/verify", async (req, res) => {
 
     res.redirect(`${redirectBase}/app/settings/email/verify?status=success`);
   } catch (err) {
-    console.error("Verify sender identity failed", err);
+    logRequestError(req, err, err?.code || "SENDER_IDENTITY_VERIFY_FAILED");
     res.redirect(`${APP_BASE_URL.replace(/\/$/, "")}/app/settings/email/verify?status=error`);
   }
 });
@@ -1839,7 +2113,7 @@ app.get("/api/sender-identities", requireAuth, async (req, res) => {
     }
     res.json({ items: data ?? [] });
   } catch (err) {
-    console.error("List sender identities failed", err);
+    logRequestError(req, err, err?.code || "SENDER_IDENTITIES_FETCH_FAILED");
     return sendError(res, 500, "sender_identities_fetch_failed", "Failed to fetch sender identities.");
   }
 });
@@ -1876,7 +2150,7 @@ app.delete("/api/sender-identities/:id", requireAuth, async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Disable sender identity failed", err);
+    logRequestError(req, err, err?.code || "SENDER_IDENTITY_DISABLE_FAILED");
     return sendError(res, 500, "disable_failed", "Disable failed.");
   }
 });
@@ -1906,7 +2180,7 @@ app.patch("/api/settings/default_sender_identity", requireAuth, async (req, res)
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Update default sender identity failed", err);
+    logRequestError(req, err, err?.code || "SENDER_IDENTITY_UPDATE_FAILED");
     return sendError(res, err.status || 500, "update_failed", "Update failed.");
   }
 });
@@ -1949,7 +2223,7 @@ app.post("/api/test-email", requireAuth, async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Test email failed", err);
+    logRequestError(req, err, err?.code || "TEST_EMAIL_FAILED");
     if (err?.code === "SMTP_NOT_CONFIGURED") {
       return sendError(res, 501, "smtp_not_configured", "SMTP not configured.");
     }
@@ -1964,6 +2238,7 @@ app.post(
   emailRateLimitGuard,
   emailAuthGuard,
   async (req, res) => {
+    let pendingRecipientLinkId = null;
     try {
       if (!req.user?.id) {
       return sendError(res, 401, "unauthorized", "Unauthorized", req);
@@ -2025,6 +2300,36 @@ app.post(
 
       enforceLegacyPayloadMatch(req.body, payload);
 
+      let recipientUrl = null;
+      if (type === "offer") {
+        const db = requireSupabase();
+        const { data: offer, error: offerError } = await db
+          .from("offers")
+          .select("id,updated_at")
+          .eq("id", docId)
+          .eq("user_id", userId)
+          .single();
+        if (offerError || !offer) throw offerError ?? new Error("Offer not found");
+
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
+        const { data: link, error: linkError } = await db
+          .from("document_recipient_links")
+          .insert({
+            user_id: userId,
+            document_type: "offer",
+            document_id: offer.id,
+            token_hash: hashToken(token),
+            document_updated_at: offer.updated_at,
+            expires_at: expiresAt,
+          })
+          .select("id")
+          .single();
+        if (linkError || !link) throw linkError ?? new Error("Recipient link could not be created");
+        pendingRecipientLinkId = link.id;
+        recipientUrl = `${APP_BASE_URL}/recipient/${token}`;
+      }
+
       const transporter = await ensureMailer();
       const resolvedFrom = FROM_HEADER;
       const resolvedFromAddress = FROM_ADDRESS;
@@ -2052,13 +2357,17 @@ app.post(
         source: "api_email",
       });
 
+      const recipientEmail = recipientUrl
+        ? buildOfferRecipientEmail(messageText, recipientUrl)
+        : { text: messageText, html: undefined };
       const info = await transporter.sendMail({
         from,
         to: toList.join(", "),
         cc: ccList.length ? ccList.join(", ") : undefined,
         bcc: bccList.length ? bccList.join(", ") : undefined,
         subject: subjectText,
-        text: messageText ?? "",
+        text: recipientEmail.text,
+        html: recipientEmail.html,
         replyTo,
         sender: `${SENDER_DOMAIN_NAME} <${resolvedFromAddress}>`,
         attachments: [
@@ -2110,9 +2419,47 @@ app.post(
         throw err;
       }
 
+      if (pendingRecipientLinkId) {
+        const db = requireSupabase();
+        const { data: sentOffer, error: sentOfferError } = await db
+          .from("offers")
+          .select("updated_at")
+          .eq("id", docId)
+          .eq("user_id", userId)
+          .single();
+        if (sentOfferError || !sentOffer) throw sentOfferError ?? new Error("Sent offer could not be loaded");
+        const nowIso = new Date().toISOString();
+        const { error: activateError } = await db
+          .from("document_recipient_links")
+          .update({ document_updated_at: sentOffer.updated_at })
+          .eq("id", pendingRecipientLinkId)
+          .eq("user_id", userId);
+        if (activateError) throw activateError;
+        await db
+          .from("document_recipient_links")
+          .update({ revoked_at: nowIso })
+          .eq("user_id", userId)
+          .eq("document_type", "offer")
+          .eq("document_id", docId)
+          .neq("id", pendingRecipientLinkId)
+          .is("revoked_at", null)
+          .is("responded_at", null);
+        pendingRecipientLinkId = null;
+      }
+
       res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("Email send failed", err);
+      if (pendingRecipientLinkId) {
+        try {
+          await requireSupabase()
+            .from("document_recipient_links")
+            .update({ revoked_at: new Date().toISOString() })
+            .eq("id", pendingRecipientLinkId);
+        } catch {
+          // Preserve the original send error; an undelivered token is not exposed.
+        }
+      }
+      logRequestError(req, err, err?.code || "EMAIL_SEND_FAILED");
       const dbError = normalizeDbError(err);
       if (dbError) {
         return sendError(res, dbError.httpStatus, dbError.code, dbError.message, req);
@@ -2140,9 +2487,23 @@ app.post(
   }
 );
 
-// health endpoints (API + optional legacy)
+// Liveness confirms that the process responds. Readiness additionally verifies
+// required configuration and a minimal database query without exposing details.
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/api/health/ready", async (req, res) => {
+  const result = await evaluateReadiness({
+    supabase: supabaseAdmin,
+    hasUrl: Boolean(SUPABASE_URL),
+    hasServiceRole: Boolean(SUPABASE_SERVICE_ROLE),
+    hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+  });
+  return res.status(result.ready ? 200 : 503).json({
+    status: result.ready ? "ready" : "not_ready",
+    checks: result.checks,
+    requestId: req.requestId,
+  });
+});
 
 if (process.env.SERVER_TEST_MODE !== "1" && !process.env.VERCEL) {
   app.listen(PORT, () => {

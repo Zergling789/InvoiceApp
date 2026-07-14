@@ -42,7 +42,10 @@ export const isInvoiceOverdue = (invoice: Invoice, today = new Date()) => {
   return new Date(invoice.dueDate).getTime() < today.getTime();
 };
 
-export const isInvoiceOpen = (invoice: Invoice) => !isInvoicePaid(invoice) && !isInvoiceCanceled(invoice);
+export const isInvoiceOpen = (invoice: Invoice) =>
+  [InvoiceStatus.ISSUED, InvoiceStatus.SENT].includes(invoice.status) &&
+  !isInvoicePaid(invoice) &&
+  !isInvoiceCanceled(invoice);
 
 export const isOfferOpen = (offer: Offer) =>
   offer.status !== OfferStatus.ACCEPTED &&

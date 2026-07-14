@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 
 import { supabase } from "@/supabaseClient";
+import { LegalAcceptanceGate } from "./LegalAcceptanceGate";
 
 type RequireAuthProps = {
   children: React.ReactNode;
@@ -42,5 +43,5 @@ export default function RequireAuth({ children }: RequireAuthProps) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <LegalAcceptanceGate>{children}</LegalAcceptanceGate>;
 }

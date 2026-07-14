@@ -22,6 +22,7 @@ import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
 import { downloadDocumentPdf, downloadInvoiceCii, downloadInvoiceZugferd } from "@/app/pdf/documentPdfService";
+import { createRecipientLink } from "@/app/recipient/recipientService";
 import { formatDocumentStatus, formatInvoiceDisplayStatus } from "@/features/documents/utils/formatStatus";
 import {
   getDocumentCapabilities,
@@ -61,6 +62,16 @@ type DocumentDetailPageProps = {
   forcedType?: "offer" | "invoice";
   onDocumentsChange?: () => void;
 };
+
+export const canCreateRecipientLink = (
+  doc: Invoice | Offer | null,
+  docType: "invoice" | "offer"
+) =>
+  Boolean(
+    doc &&
+      ((docType === "invoice" && Boolean((doc as Invoice).finalizedAt)) ||
+        (docType === "offer" && (doc as Offer).status === OfferStatus.SENT))
+  );
 
 export default function DocumentDetailPage({ forcedType, onDocumentsChange }: DocumentDetailPageProps) {
   const { type, id } = useParams<{ type?: "offer" | "invoice"; id: string }>();
@@ -114,6 +125,18 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     return () => {
       mounted = false;
     };
+  }, [docType, id]);
+
+  useEffect(() => {
+    if (!id || docType !== "offer") return;
+    const channel = supabase
+      .channel(`offer-recipient-response-${id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "offers", filter: `id=eq.${id}` }, async () => {
+        const updated = await offerService.getOffer(id);
+        if (updated) setDoc(updated);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, [docType, id]);
 
   const client = useMemo(() => {
@@ -384,10 +407,26 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     }
   };
 
+  const handleCreateRecipientLink = async () => {
+    if (!doc) return;
+    try {
+      const result = await createRecipientLink(docType, doc.id);
+      await navigator.clipboard.writeText(result.url);
+      toast.success("Empfänger-Link wurde kopiert.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Empfänger-Link konnte nicht erstellt werden.");
+    }
+  };
+
+  const recipientLinkAction = canCreateRecipientLink(doc, docType)
+      ? [{ label: "Empfänger-Link kopieren", onSelect: () => void handleCreateRecipientLink() }]
+      : [];
+
   const actions =
     docType === "invoice"
       ? [
-          ...((doc as Invoice).finalizedAt
+          ...recipientLinkAction,
+          ...((doc as Invoice | null)?.finalizedAt
             ? [
                 {
                   label: "PDF herunterladen",
@@ -493,6 +532,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
             : []),
         ]
       : [
+          ...recipientLinkAction,
           ...(capabilities?.canSend
             ? [
                 {

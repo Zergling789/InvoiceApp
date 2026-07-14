@@ -171,6 +171,8 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
         gap: 8px 12px;
       }
       .bank strong { display: block; margin-bottom: 2px; }
+      .payment-qr { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+      .payment-qr img { width: 32mm; height: 32mm; image-rendering: crisp-edges; }
       .intro { margin-bottom: 16px; font-size: 12px; line-height: 1.6; }
       .doc-heading { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
       .w-60 { width: 40%; }
@@ -296,6 +298,7 @@ export function renderDocumentHtml({ type, doc = {}, settings = {}, client = {} 
                 <div style="text-align: right;"><strong>BIC:</strong> ${escapeHtml(settings.bic ?? "")}</div>
                 ${settings.sellerVatId ? `<div style="text-align: right;"><strong>USt-ID:</strong> ${escapeHtml(settings.sellerVatId)}</div>` : ""}
               </div>
+              ${settings.paymentQrDataUrl ? `<div class="payment-qr"><img src="${settings.paymentQrDataUrl}" alt="EPC-QR-Code für SEPA-Überweisung" /><div><strong>Mit Banking-App bezahlen</strong><div class="muted">QR-Code scannen. Betrag, IBAN und Rechnungsnummer vor Freigabe prüfen.</div></div></div>` : ""}
               <div class="muted" style="margin-top: 6px;">Bitte geben Sie bei der Zahlung die Rechnungsnummer an.</div>`
             : ""
         }

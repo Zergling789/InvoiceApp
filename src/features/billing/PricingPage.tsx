@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ShieldCheck, Sparkles, Zap } from "lucide-react";
 
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useToast } from "@/ui/FeedbackProvider";
+import { createBillingPortal, createCheckout, getBillingStatus, type BillingStatus } from "@/app/billing/billingService";
 
 type BillingCycle = "monthly" | "yearly";
 
@@ -36,10 +37,28 @@ const plans = [
 
 export default function PricingPage() {
   const [cycle, setCycle] = useState<BillingCycle>("yearly");
+  const [billing, setBilling] = useState<BillingStatus["subscription"] | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const toast = useToast();
 
-  const handleUpgrade = (plan: string) => {
-    toast.info(`${plan} ist vorbereitet. Der sichere Checkout wird nach der Stripe-Konfiguration aktiviert.`);
+  useEffect(() => {
+    getBillingStatus().then(result => setBilling(result.subscription)).catch(error => toast.error(error instanceof Error ? error.message : "Abrechnungsstatus konnte nicht geladen werden."));
+  }, [toast]);
+
+  const handleUpgrade = async (plan: "SOLO" | "PRO") => {
+    setLoadingPlan(plan);
+    try {
+      window.location.assign((await createCheckout(plan, cycle)).url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Checkout konnte nicht gestartet werden.");
+      setLoadingPlan(null);
+    }
+  };
+
+  const handlePortal = async () => {
+    setLoadingPlan("portal");
+    try { window.location.assign((await createBillingPortal()).url); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Kundenportal konnte nicht geöffnet werden."); setLoadingPlan(null); }
   };
 
   return (
@@ -65,11 +84,13 @@ export default function PricingPage() {
               <div className="mt-6"><span className="text-4xl font-semibold tracking-[-0.04em]">{monthlyEquivalent.toLocaleString("de-DE", { maximumFractionDigits: 2 })} €</span><span className="text-sm text-[var(--app-muted)]"> / Monat</span>{cycle === "yearly" && price > 0 && <div className="mt-1 text-xs text-[var(--app-muted)]">{price} € jährlich · zzgl. MwSt.</div>}{price === 0 && <div className="mt-1 text-xs text-[var(--app-muted)]">dauerhaft kostenlos</div>}</div>
               <div className="my-6 h-px bg-[var(--app-border)]" />
               <ul className="flex-1 space-y-3">{plan.features.map((feature) => <li key={feature} className="flex gap-3 text-sm"><Check size={17} className="mt-0.5 shrink-0 text-emerald-500" /><span>{feature}</span></li>)}</ul>
-              <AppButton type="button" variant={"recommended" in plan && plan.recommended ? "primary" : "secondary"} className="mt-7 w-full" disabled={"current" in plan && plan.current} onClick={() => handleUpgrade(plan.name)}>{"current" in plan && plan.current ? "Aktueller Tarif" : `${plan.name} wählen`}</AppButton>
+              <AppButton type="button" variant={"recommended" in plan && plan.recommended ? "primary" : "secondary"} className="mt-7 w-full" disabled={loadingPlan !== null || billing?.plan_key === plan.name.toUpperCase() || plan.name === "Basis"} onClick={() => plan.name !== "Basis" && void handleUpgrade(plan.name.toUpperCase() as "SOLO" | "PRO")}>{billing?.plan_key === plan.name.toUpperCase() || (plan.name === "Basis" && billing?.plan_key === "BASIS") ? "Aktueller Tarif" : loadingPlan === plan.name.toUpperCase() ? "Weiterleitung…" : `${plan.name} wählen`}</AppButton>
             </AppCard>
           );
         })}
       </section>
+
+      {billing && billing.plan_key !== "BASIS" && <div className="text-center"><AppButton variant="secondary" disabled={loadingPlan !== null} onClick={() => void handlePortal()}>Abonnement verwalten</AppButton><p className="mt-2 text-xs text-[var(--app-muted)]">Status: {billing.status}{billing.cancel_at_period_end ? " · endet zum Periodenende" : ""}</p></div>}
 
       <section className="grid gap-4 md:grid-cols-3">
         <AppCard className="p-5"><ShieldCheck size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Sicher bezahlen</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Der Checkout wird über Stripe abgewickelt; Zahlungsdaten werden nicht in FreelanceFlow gespeichert.</p></AppCard>
@@ -77,7 +98,7 @@ export default function PricingPage() {
         <AppCard className="p-5"><Sparkles size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Faire KI-Limits</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Planbare Kontingente schützen vor überraschenden Kosten und können später erweitert werden.</p></AppCard>
       </section>
 
-      <p className="text-center text-xs leading-5 text-[var(--app-muted)]">Die Tarifseite ist vorbereitet. Kostenpflichtige Buchungen werden erst nach Einrichtung von Stripe Checkout, Webhooks, Steuerregeln und Kundenportal aktiviert.</p>
+      <p className="text-center text-xs leading-5 text-[var(--app-muted)]">Buchungen werden über Stripe Checkout abgeschlossen. Der angezeigte Abonnementstatus wird ausschließlich aus signierten Stripe-Webhooks übernommen.</p>
     </div>
   );
 }
