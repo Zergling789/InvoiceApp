@@ -61,6 +61,13 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Die Rechnung hat die E-Rechnungsvalidierung nicht bestanden.";
     case "EINVOICE_GENERATOR_NOT_CONFIGURED":
       return "Der E-Rechnungsdienst ist noch nicht konfiguriert.";
+    case "EINVOICE_GENERATOR_AUTH_FAILED":
+      return "Der E-Rechnungsdienst konnte nicht authentifiziert werden.";
+    case "EINVOICE_REQUEST_TOO_LARGE":
+    case "EINVOICE_INPUT_INVALID":
+      return "Die E-Rechnung überschreitet die zulässige Größe oder enthält ungültige Eingangsdaten.";
+    case "EINVOICE_GENERATOR_RESPONSE_INVALID":
+      return "Der E-Rechnungsdienst hat keine vertrauenswürdige Antwort geliefert.";
     case "EINVOICE_FORBIDDEN":
       return "Diese E-Rechnung ist nicht verfügbar.";
     case "EINVOICE_GENERATION_TIMEOUT":

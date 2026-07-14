@@ -9,6 +9,7 @@ Stand: 14. Juli 2026. Der Workflow liegt in `.github/workflows/ci.yml` und läuf
 | Quality, unit tests and build | `npm ci`, Typecheck, UI-Tests, Server-Tests, Build, Audit | unabhängig |
 | Browser smoke and recipient portal | `basic.spec.ts`, `recipient-portal.spec.ts` | unabhängig |
 | EN16931 and PDF/A-3 validation | E-Rechnungstests, KoSIT, Mustang, gebrandete PDF/A-3-Prüfung | Java 17, Chromium, Ghostscript, ICC-Profile |
+| E-invoice generator container | baut das isolierte Generator-Image einschließlich Prüfsummenprüfung | Docker auf festem Ubuntu-Runner |
 | Supabase E2E availability | prüft ausschließlich, ob alle separaten E2E-Secrets vorhanden sind | unabhängig |
 | Supabase integration and RLS isolation | Dokumentflüsse, Rechnungsstatus und Zwei-Nutzer-RLS-Test | erfolgreicher Secret-Check |
 | CI status report | fasst die Resultate aller Jobs im GitHub Job Summary zusammen | läuft mit `always()` nach allen Jobs |
@@ -69,6 +70,7 @@ Lokal nicht als bestanden gewertet:
 
 - `npm run validate:zugferd:branded` – nicht ausführbar, weil Ghostscript 10.x auf dem Windows-Host fehlt; der CI-Job installiert es und der oben verlinkte `main`-Lauf war grün.
 - `flows.spec.ts`, `invoice-status.spec.ts` und `rls-isolation.spec.ts` – insgesamt 8 Tests wegen fehlender `E2E_SUPABASE_*`-Variablen übersprungen. Der oben verlinkte dedizierte Supabase-E2E-Lauf war grün.
+- `docker build -f services/einvoice-generator/Dockerfile ...` – lokal nicht ausführbar, weil die installierte Docker-Desktop-Engine nicht gestartet ist; der neue Container-CI-Job ist der maßgebliche Build-Nachweis.
 
 Der endgültige Nachweis dieser Workflow-Änderung ist ein neuer grüner Pull-Request- und anschließender `main`-Lauf.
 

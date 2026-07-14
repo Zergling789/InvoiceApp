@@ -1257,7 +1257,7 @@ app.post("/api/einvoice/zugferd", requireAuth, async (req, res) => {
     const invoice = buildCanonicalInvoice(payload);
     const cii = serializeCanonicalInvoiceToCii(invoice).replace("urn:factur-x.eu:1p0:en16931", "urn:cen.eu:en16931:2017");
     const visualPdf = await createPdfBufferFromPayload("invoice", payload, { requestId: req.requestId, source: "einvoice" });
-    const generated = await generateValidatedZugferd({ visualPdf, ciiXml: cii });
+    const generated = await generateValidatedZugferd({ requestId: req.requestId, visualPdf, ciiXml: cii });
     const generatedAt = new Date().toISOString();
 
     const { error: archiveError } = await requireSupabase().from("einvoice_exports").insert({

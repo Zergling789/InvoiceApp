@@ -99,6 +99,16 @@ jobs:
       - name: Validate branded ZUGFeRD PDF/A-3
         run: npm run validate:zugferd:branded
 
+  generator-container:
+    name: E-invoice generator container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Build pinned generator image
+        run: docker build -f services/einvoice-generator/Dockerfile -t freelanceflow/einvoice-generator:ci .
+
   e2e-config:
     name: Supabase E2E availability
     runs-on: ubuntu-24.04
@@ -158,7 +168,7 @@ jobs:
   ci-summary:
     name: CI status report
     if: ${{ always() }}
-    needs: [quality, browser-smoke, einvoice-validation, e2e-config, supabase-e2e]
+    needs: [quality, browser-smoke, einvoice-validation, generator-container, e2e-config, supabase-e2e]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -167,6 +177,7 @@ jobs:
           QUALITY: ${{ needs.quality.result }}
           BROWSER: ${{ needs.browser-smoke.result }}
           EINVOICE: ${{ needs.einvoice-validation.result }}
+          GENERATOR: ${{ needs.generator-container.result }}
           E2E_CONFIG: ${{ needs.e2e-config.result }}
           SUPABASE_E2E: ${{ needs.supabase-e2e.result }}
         run: |
@@ -178,6 +189,7 @@ jobs:
             echo "| Quality, unit tests and build | $QUALITY | independent |"
             echo "| Browser smoke and recipient portal | $BROWSER | independent |"
             echo "| EN16931 and PDF/A-3 validation | $EINVOICE | independent |"
+            echo "| E-invoice generator container | $GENERATOR | independent |"
             echo "| Supabase E2E availability | $E2E_CONFIG | independent |"
             echo "| Supabase integration and RLS isolation | $SUPABASE_E2E | requires dedicated E2E secrets |"
             echo ""
