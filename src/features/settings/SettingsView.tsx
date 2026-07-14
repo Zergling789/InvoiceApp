@@ -20,7 +20,7 @@ import {
 import { trackEvent } from "@/lib/track";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 import { BrandingSettingsSection } from "@/features/settings/BrandingSettingsSection";
-import { downloadAccountData, requestAccountDeletion } from "@/app/account/accountDataService";
+import { cancelAccountDeletion, downloadAccountData, getAccountDeletionStatus, requestAccountDeletion, type AccountDeletionRequest } from "@/app/account/accountDataService";
 
 const defaultSettings: UserSettings = {
   name: "",
@@ -81,6 +81,7 @@ export default function SettingsView() {
   const [accountAction, setAccountAction] = useState<"export" | "delete" | null>(null);
   const [deletionPassword, setDeletionPassword] = useState("");
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
+  const [deletionStatus, setDeletionStatus] = useState<AccountDeletionRequest | null>(null);
 
   const warnings = useMemo(() => {
     const w: string[] = [];
@@ -117,6 +118,8 @@ export default function SettingsView() {
       }
     })();
   }, []);
+
+  useEffect(() => { getAccountDeletionStatus().then(({ request }) => setDeletionStatus(request)).catch(() => undefined); }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -297,6 +300,13 @@ export default function SettingsView() {
     } finally {
       setAccountAction(null);
     }
+  };
+
+  const handleDeletionCancel = async () => {
+    setAccountAction("delete");
+    try { const { request } = await cancelAccountDeletion(); setDeletionStatus(request); toast.success("Löschauftrag wurde widerrufen."); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Löschauftrag konnte nicht widerrufen werden."); }
+    finally { setAccountAction(null); }
   };
 
   const handleSignOut = async () => {
@@ -782,6 +792,7 @@ export default function SettingsView() {
           </AppButton>
         </div>
         <div className="space-y-3 border-t border-red-200 pt-4">
+          {deletionStatus && !["CANCELED", "COMPLETED"].includes(deletionStatus.status) && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><div>Aktueller Status: {deletionStatus.status}</div><div>Geplante Verarbeitung: {new Date(deletionStatus.scheduled_for).toLocaleDateString("de-DE")}</div>{["REQUESTED", "COOLING_OFF"].includes(deletionStatus.status) && <AppButton className="mt-2" variant="secondary" onClick={() => void handleDeletionCancel()} disabled={accountAction !== null}>Löschauftrag widerrufen</AppButton>}</div>}
           <div>
             <div className="text-sm font-medium text-red-700">Account löschen</div>
             <div className="text-xs text-gray-500">Der Auftrag wird mit einer siebentägigen Prüf- und Bearbeitungsfrist angelegt. Aufbewahrungspflichtige Rechnungs- und Abrechnungsdaten werden nicht unkontrolliert gelöscht.</div>

@@ -1336,11 +1336,11 @@ app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
     }
 
     const db = requireSupabase();
-    const { data: existing } = await db.from("account_deletion_requests").select("id,status,scheduled_for").eq("user_id", req.user.id).in("status", ["REQUESTED", "PROCESSING"]).maybeSingle();
+    const { data: existing } = await db.from("account_deletion_requests").select("id,status,scheduled_for").eq("user_id", req.user.id).in("status", ["REQUESTED", "COOLING_OFF", "CLAIMED", "PROCESSING", "BLOCKED_PENDING_REVIEW"]).maybeSingle();
     if (existing) {
       return res.status(200).json({ request: existing, alreadyRequested: true });
     }
-    const { data: request, error: insertError } = await db.from("account_deletion_requests").insert({ user_id: req.user.id }).select("id,status,requested_at,scheduled_for").single();
+    const { data: request, error: insertError } = await db.from("account_deletion_requests").insert({ user_id: req.user.id, status: "COOLING_OFF" }).select("id,status,requested_at,scheduled_for").single();
     if (insertError) throw Object.assign(new Error("Deletion request insert failed"), { code: "ACCOUNT_DELETION_FAILED", status: 500 });
 
     const token = getBearerToken(req);
@@ -1350,6 +1350,20 @@ app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
     logRequestError(req, err, err?.code || "ACCOUNT_DELETION_FAILED");
     return sendError(res, err?.status || 500, err?.code || "ACCOUNT_DELETION_FAILED", "Der Löschauftrag konnte nicht erstellt werden.", req);
   }
+});
+
+app.get("/api/account/deletion-status", requireAuth, async (req, res) => {
+  const { data, error } = await requireSupabase().from("account_deletion_requests").select("id,status,requested_at,scheduled_for,completed_at,canceled_at,blocked_reason_code").eq("user_id", req.user.id).order("requested_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) return sendSupabaseError(res, error, req, { code: "ACCOUNT_DELETION_STATUS_FAILED", message: "Löschstatus konnte nicht geladen werden." });
+  return res.json({ request: data ?? null });
+});
+
+app.post("/api/account/deletion-cancel", requireAuth, async (req, res) => {
+  const now = new Date().toISOString();
+  const { data, error } = await requireSupabase().from("account_deletion_requests").update({ status: "CANCELED", canceled_at: now, updated_at: now }).eq("user_id", req.user.id).in("status", ["REQUESTED", "COOLING_OFF"]).select("id,status,canceled_at").maybeSingle();
+  if (error) return sendSupabaseError(res, error, req, { code: "ACCOUNT_DELETION_CANCEL_FAILED", message: "Löschauftrag konnte nicht widerrufen werden." });
+  if (!data) return sendError(res, 409, "ACCOUNT_DELETION_NOT_CANCELABLE", "Der Löschauftrag kann nicht mehr widerrufen werden.", req);
+  return res.json({ request: data });
 });
 
 app.get("/api/internal/account-deletions/process", async (req, res) => {
