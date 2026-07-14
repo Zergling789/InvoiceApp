@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-const SENSITIVE_KEY = /authorization|cookie|password|token|secret|api[-_]?key|service[-_]?role|smtp|dsn/i;
+const SENSITIVE_KEY = /authorization|cookie|password|token|secret|api[-_]?key|service[-_]?role|smtp|dsn|prompt|invoice|customer|client|message|description|image|payload|document/i;
 const MAX_DEPTH = 5;
 
 export const redactLogValue = (value, depth = 0) => {
@@ -54,6 +54,18 @@ export const logRequestError = (req, error, errorCode = "UNEXPECTED_ERROR") =>
     error,
     userIdHash: hashLogUserId(req?.user?.id),
   });
+
+export class NoopErrorReporter {
+  captureException() {}
+  captureMessage() {}
+}
+
+export class StructuredLogErrorReporter {
+  captureException(error, context = {}) { logEvent("error", "error_reported", { error, ...context }); }
+  captureMessage(message, context = {}) { logEvent("warn", "message_reported", { reporterMessage: String(message).slice(0, 200), ...context }); }
+}
+
+export const createErrorReporter = () => process.env.ERROR_REPORTER_MODE === "structured-log" ? new StructuredLogErrorReporter() : new NoopErrorReporter();
 
 export const evaluateReadiness = async ({ supabase, hasUrl, hasServiceRole, hasAnonKey }) => {
   const configuration = hasUrl && hasServiceRole && hasAnonKey ? "ok" : "missing";

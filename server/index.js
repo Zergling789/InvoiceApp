@@ -14,7 +14,7 @@ import { buildAccountExportZip, loadOwnedAccountData } from "./accountDataExport
 import { processDueAccountDeletions, verifyWorkerSecret } from "./accountDeletionWorker.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
-import { evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
+import { createErrorReporter, evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
 import {
   buildLegalAcceptanceRows,
   hasCurrentLegalAcceptances,
@@ -45,6 +45,7 @@ if (
 
 const PORT = process.env.PORT || 4000;
 const app = express();
+const errorReporter = createErrorReporter();
 app.disable("x-powered-by");
 
 const IS_PROD = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
@@ -62,6 +63,7 @@ app.use((req, res, next) => {
       durationMs: Math.round(performance.now() - startedAt),
       userIdHash: hashLogUserId(req.user?.id),
     });
+    if (res.statusCode >= 500) errorReporter.captureMessage("server_request_failed", { requestId: req.requestId, route: req.route?.path || req.path, statusCode: res.statusCode, durationMs: Math.round(performance.now() - startedAt) });
   });
   next();
 });
