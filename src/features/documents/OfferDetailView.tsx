@@ -115,6 +115,12 @@ export function OfferDetailView({
               <ArrowRight size={19} className="text-[var(--app-primary)] transition-transform group-hover:translate-x-1" />
             </button>
           )}
+          {offer.status === "REJECTED" && offer.rejectionReason && (
+            <AppCard className="border-red-500/20 bg-red-500/[0.04] p-5">
+              <div className="font-semibold">Begründung des Empfängers</div>
+              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--app-muted)]">{offer.rejectionReason}</p>
+            </AppCard>
+          )}
         </main>
 
         <aside className="space-y-4 xl:sticky xl:top-24">

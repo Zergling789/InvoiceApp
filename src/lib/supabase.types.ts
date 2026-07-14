@@ -108,9 +108,9 @@ export type Database = {
         Relationships: []
       }
       document_recipient_links: {
-        Row: { created_at: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id: string; responded_at: string | null; response: string | null; revoked_at: string | null; token_hash: string; user_id: string }
-        Insert: { created_at?: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id?: string; responded_at?: string | null; response?: string | null; revoked_at?: string | null; token_hash: string; user_id: string }
-        Update: { created_at?: string; document_id?: string; document_type?: string; document_updated_at?: string; expires_at?: string; id?: string; responded_at?: string | null; response?: string | null; revoked_at?: string | null; token_hash?: string; user_id?: string }
+        Row: { created_at: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id: string; responded_at: string | null; response: string | null; response_reason: string | null; revoked_at: string | null; token_hash: string; user_id: string }
+        Insert: { created_at?: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id?: string; responded_at?: string | null; response?: string | null; response_reason?: string | null; revoked_at?: string | null; token_hash: string; user_id: string }
+        Update: { created_at?: string; document_id?: string; document_type?: string; document_updated_at?: string; expires_at?: string; id?: string; responded_at?: string | null; response?: string | null; response_reason?: string | null; revoked_at?: string | null; token_hash?: string; user_id?: string }
         Relationships: []
       }
       audit_events: {
@@ -581,6 +581,7 @@ export type Database = {
           number: string
           positions: Json
           project_id: string | null
+          rejection_reason: string | null
           sent_at: string | null
           sent_count: number
           sent_via: string | null
@@ -604,6 +605,7 @@ export type Database = {
           number?: string
           positions?: Json
           project_id?: string | null
+          rejection_reason?: string | null
           sent_at?: string | null
           sent_count?: number
           sent_via?: string | null
@@ -627,6 +629,7 @@ export type Database = {
           number?: string
           positions?: Json
           project_id?: string | null
+          rejection_reason?: string | null
           sent_at?: string | null
           sent_count?: number
           sent_via?: string | null

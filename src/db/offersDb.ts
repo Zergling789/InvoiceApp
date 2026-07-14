@@ -7,7 +7,7 @@ type DbOfferRow = Database["public"]["Tables"]["offers"]["Row"];
 type DbOfferInsert = Database["public"]["Tables"]["offers"]["Insert"];
 
 const OFFER_FIELDS =
-  "id,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
+  "id,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,rejection_reason,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
 
 const normalizeOfferStatus = (status: string | null | undefined): OfferStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -69,6 +69,7 @@ export async function dbListOffers(): Promise<Offer[]> {
     sentCount: Number(r.sent_count ?? 0),
     sentVia: (r.sent_via as Offer["sentVia"]) ?? null,
     invoiceId: r.invoice_id ?? null,
+    rejectionReason: r.rejection_reason ?? null,
   }));
 }
 
@@ -104,6 +105,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
     sentCount: Number(data.sent_count ?? 0),
     sentVia: (data.sent_via as Offer["sentVia"]) ?? null,
     invoiceId: data.invoice_id ?? null,
+    rejectionReason: data.rejection_reason ?? null,
   };
 }
 
@@ -135,6 +137,7 @@ export async function dbUpsertOffer(o: Offer): Promise<void> {
     sent_count: Number(o.sentCount ?? 0),
     sent_via: o.sentVia ?? null,
     invoice_id: o.invoiceId ?? null,
+    rejection_reason: o.rejectionReason ?? null,
 
     updated_at: new Date().toISOString(),
   };

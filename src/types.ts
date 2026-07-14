@@ -148,6 +148,7 @@ export interface Offer {
   sentCount?: number;
   sentVia?: "EMAIL" | "MANUAL" | "EXPORT" | null;
   invoiceId?: string | null;
+  rejectionReason?: string | null;
 }
 
 export enum InvoiceStatus {

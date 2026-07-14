@@ -869,6 +869,7 @@ const mapOfferRow = (row = {}) => ({
   footerText: row.footer_text ?? "",
   vatRate: Number(row.vat_rate ?? 0),
   status: row.status ?? "DRAFT",
+  rejectionReason: row.rejection_reason ?? null,
 });
 
 const mapSettingsRow = (row = {}) => ({
@@ -964,7 +965,7 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 
   const selectFields = resolvedType === "invoice"
     ? "id, user_id, invoice_number, number, client_id, client_name, client_company_name, client_contact_person, client_email, client_phone, client_vat_id, client_address, client_street, client_house_number, client_postal_code, client_city, client_electronic_address, client_electronic_address_scheme, project_id, date, invoice_date, service_date, service_period_start, service_period_end, buyer_reference, currency, payment_terms_days, due_date, positions, intro_text, footer_text, vat_rate, is_small_business, small_business_note, branding_snapshot, status, finalized_at"
-    : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate, status, updated_at";
+    : "id, user_id, number, client_id, project_id, date, valid_until, positions, intro_text, footer_text, vat_rate, status, rejection_reason, updated_at";
 
   const { data: docRow, error: docError } = await db
     .from(table)
@@ -1412,7 +1413,7 @@ app.get("/api/public/documents/:token", async (req, res) => {
     const link = await loadRecipientLink(req.params.token);
     if (!link) return sendError(res, 404, "RECIPIENT_LINK_INVALID", "Dieser Link ist ungültig oder abgelaufen.", req);
     const payload = await loadDocumentPayloadFromDb({ type: link.document_type, docId: link.document_id, userId: link.user_id });
-    return res.json({ type: link.document_type, doc: payload.doc, client: payload.client, settings: { companyName: payload.settings.companyName, address: payload.settings.address, iban: payload.settings.iban, bic: payload.settings.bic, bankName: payload.settings.bankName, currency: payload.settings.currency, locale: payload.settings.locale }, response: link.response, expiresAt: link.expires_at });
+    return res.json({ type: link.document_type, doc: payload.doc, client: payload.client, settings: { companyName: payload.settings.companyName, address: payload.settings.address, iban: payload.settings.iban, bic: payload.settings.bic, bankName: payload.settings.bankName, currency: payload.settings.currency, locale: payload.settings.locale }, response: link.response, responseReason: link.response_reason, expiresAt: link.expires_at });
   } catch (err) { logRequestError(req, err, "RECIPIENT_DOCUMENT_FAILED"); return sendError(res, 500, "RECIPIENT_DOCUMENT_FAILED", "Dokument konnte nicht geladen werden.", req); }
 });
 
@@ -1423,7 +1424,9 @@ app.post("/api/public/offers/:token/respond", async (req, res) => {
     if (!link || link.document_type !== "offer") return sendError(res, 404, "RECIPIENT_LINK_INVALID", "Dieser Link ist ungültig oder abgelaufen.", req);
     const response = String(req.body?.response ?? "").toUpperCase();
     if (!["ACCEPTED", "REJECTED"].includes(response)) return sendError(res, 400, "RECIPIENT_RESPONSE_INVALID", "Bitte wähle Annehmen oder Ablehnen.", req);
-    const { data, error } = await requireSupabase().rpc("respond_to_offer_link", { p_link_id: link.id, p_response: response });
+    const rejectionReason = String(req.body?.rejectionReason ?? "").trim();
+    if (rejectionReason.length > 500) return sendError(res, 400, "REJECTION_REASON_TOO_LONG", "Die Ablehnungsbegründung darf höchstens 500 Zeichen enthalten.", req);
+    const { data, error } = await requireSupabase().rpc("respond_to_offer_link", { p_link_id: link.id, p_response: response, p_rejection_reason: response === "REJECTED" ? rejectionReason || null : null });
     if (error) {
       const code = ["DOCUMENT_CHANGED", "OFFER_NOT_RESPONDABLE", "LINK_EXPIRED"].find(value => error.message?.includes(value)) || "RECIPIENT_RESPONSE_FAILED";
       return sendError(res, 409, code, code === "DOCUMENT_CHANGED" ? "Das Angebot wurde nach Versand geändert. Bitte fordere einen neuen Link an." : "Das Angebot kann nicht mehr beantwortet werden.", req);
