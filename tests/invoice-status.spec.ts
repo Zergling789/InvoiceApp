@@ -110,7 +110,7 @@ test.describe.serial("invoice status transitions", () => {
         Authorization: `Bearer ${accessToken}`,
       },
     });
-    expect(finalizeRes.ok()).toBe(true);
+    expect(finalizeRes.ok(), await finalizeRes.text()).toBe(true);
 
     const { data: invoice, error } = await admin
       .from("invoices")
@@ -132,7 +132,7 @@ test.describe.serial("invoice status transitions", () => {
         Authorization: `Bearer ${accessToken}`,
       },
     });
-    expect(finalizeRes.ok()).toBe(true);
+    expect(finalizeRes.ok(), await finalizeRes.text()).toBe(true);
 
     const sentRes = await request.post(`/api/invoices/${invoiceId}/mark-sent`, {
       headers: {

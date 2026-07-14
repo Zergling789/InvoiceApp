@@ -83,6 +83,12 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await page.getByRole("button", { name: "Anmelden" }).click();
     await expect(page).toHaveURL(/\/app/);
 
+    const legalConsent = page.getByRole("checkbox");
+    if (await legalConsent.isVisible()) {
+      await legalConsent.check();
+      await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
+    }
+
     await page.getByRole("link", { name: "Dokumente" }).click();
     await page.getByRole("button", { name: "Angebot erstellen" }).click();
 
