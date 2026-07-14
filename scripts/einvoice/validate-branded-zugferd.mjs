@@ -49,6 +49,10 @@ const source = {
     currency: "EUR",
     buyerReference: "BUYER-REF-1",
     serviceDate: "2026-07-10",
+    sellerCountry: "DE",
+    customerCountry: "DE",
+    customerType: "BUSINESS",
+    serviceCountry: "DE",
     dueDate: "2026-07-25",
     positions: [
       {
@@ -65,6 +69,7 @@ const source = {
   settings: {
     companyName: "Muster GmbH",
     address: "Musterstraße 1\n10115 Berlin",
+    sellerCountry: "DE",
     sellerStreet: "Musterstraße",
     sellerHouseNumber: "1",
     sellerPostalCode: "10115",
