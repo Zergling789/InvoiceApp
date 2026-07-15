@@ -163,7 +163,7 @@ test.describe.serial("invoice status transitions", () => {
       return data;
     }).toEqual({ status: "ISSUED", is_locked: true });
 
-    await expect(page.getByText("Ausgestellt", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Offen", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Finalisieren", exact: true })).toHaveCount(0);
   });
 
