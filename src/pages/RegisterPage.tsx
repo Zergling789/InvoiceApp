@@ -6,6 +6,11 @@ import { supabase } from "@/supabaseClient";
 
 const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
 
+export const formatRegistrationError = (message: string) =>
+  message.includes("BETA_INVITE_REQUIRED")
+    ? "Die Registrierung ist derzeit nur mit einer freigeschalteten Beta-Einladung möglich."
+    : message;
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState("");
@@ -72,7 +77,7 @@ export default function RegisterPage() {
     });
 
     if (signUpError) {
-      setError(signUpError.message);
+      setError(formatRegistrationError(signUpError.message));
       setLoading(false);
       return;
     }

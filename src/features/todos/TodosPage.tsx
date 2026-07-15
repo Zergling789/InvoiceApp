@@ -18,6 +18,10 @@ import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { formatErrorToast } from "@/utils/errorMapping";
+import {
+  INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
+  INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
+} from "@/domain/rules/invoiceFinalizationNotice";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import {
   getDocumentCapabilities,
@@ -302,8 +306,8 @@ export default function TodosPage() {
 
     const ok = await confirm({
       title: "Rechnung finalisieren",
-      message:
-        "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+      message: INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
+      acknowledgementLabel: INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
     });
     if (!ok) return null;
 

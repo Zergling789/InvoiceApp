@@ -124,6 +124,49 @@ test.describe.serial("invoice status transitions", () => {
     expect(invoice?.finalized_at).toBeTruthy();
   });
 
+  test("mobile detail requires acknowledgement and finalizes visibly", async ({ page }) => {
+    const invoiceId = await createDraftInvoice();
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.goto("/login");
+    await page.getByLabel("E-Mail").fill(user.email);
+    await page.getByLabel("Passwort").fill(user.password);
+    await page.getByRole("button", { name: "Anmelden" }).click();
+    await expect(page).toHaveURL(/\/app/);
+
+    await page.goto(`/app/invoices/${invoiceId}`);
+    const legalConsent = page.getByRole("checkbox");
+    const invoiceHeading = page.getByRole("heading", { name: "Entwurf", exact: true });
+    await expect(legalConsent.or(invoiceHeading).first()).toBeVisible();
+    if (await legalConsent.isVisible()) {
+      await legalConsent.check();
+      await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
+    }
+
+    await expect(invoiceHeading).toBeVisible();
+    await page.getByRole("button", { name: "Finalisieren", exact: true }).click();
+    await expect(page.getByText(/ausschließlich einfache inländische B2B-Rechnungen/)).toBeVisible();
+
+    const confirmButton = page.getByRole("button", { name: "Bestaetigen" });
+    await expect(confirmButton).toBeDisabled();
+    await page.getByRole("checkbox", { name: /Hinweis gelesen/ }).check();
+    await expect(confirmButton).toBeEnabled();
+    await confirmButton.click();
+
+    await expect.poll(async () => {
+      const { data, error } = await admin
+        .from("invoices")
+        .select("status, is_locked")
+        .eq("id", invoiceId)
+        .single();
+      if (error) throw error;
+      return data;
+    }).toEqual({ status: "ISSUED", is_locked: true });
+
+    await expect(page.getByText("Ausgestellt", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Finalisieren", exact: true })).toHaveCount(0);
+  });
+
   test("issued -> mark sent -> sent_at set", async ({ request }) => {
     const invoiceId = await createDraftInvoice();
 

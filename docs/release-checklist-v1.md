@@ -14,7 +14,7 @@ Statuswerte: `OFFEN`, `IN_ARBEIT`, `BLOCKIERT`, `ERLEDIGT`, `EXTERN_ZU_PRÜFEN`.
 | Monitoring | IN_ARBEIT | Adapter/Alarme dokumentiert; realer Log-Drain und Alarmrouting offen |
 | Backup | BLOCKIERT | Runbook/Template vorhanden; praktischer Restore nicht durchgeführt |
 | RLS | ERLEDIGT | dedizierter Zwei-Nutzer-CI-Job zuletzt grün; nach Migrationen erneut erforderlich |
-| Beta | BLOCKIERT | Feedback/Beta-Hinweis vorhanden; serverseitige Einladungssperre fehlt |
+| Beta | IN_ARBEIT | Einmal-Allowlist und serverseitiger Auth-Hook implementiert; Aktivierung und Positiv-/Negativtest im produktiven Supabase-Projekt offen |
 | Support | OFFEN | reale Supportadresse, Zuständigkeit und Reaktionsprozess festlegen |
 | Incident Response | IN_ARBEIT | Runbook vorhanden; Kontakte und Rufbereitschaft fehlen |
 

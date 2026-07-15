@@ -11,6 +11,10 @@ import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActionSheet } from "@/components/ui/ActionSheet";
 import { calculateDocumentTotals } from "@/domain/rules/tax";
+import {
+  INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
+  INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
+} from "@/domain/rules/invoiceFinalizationNotice";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
@@ -383,7 +387,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     const invoice = doc as Invoice;
     const ok = await confirm({
       title: "Rechnung finalisieren",
-      message: "Nach dem Ausstellen sind Inhalt/Positionen gesperrt. Korrekturen nur per Gutschrift/Storno.",
+      message: INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
+      acknowledgementLabel: INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
     });
     if (!ok) return;
 

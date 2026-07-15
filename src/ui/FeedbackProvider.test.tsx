@@ -1,11 +1,26 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { ToastProvider, useToast } from "@/ui/FeedbackProvider";
+import { ConfirmProvider, ToastProvider, useConfirm, useToast } from "@/ui/FeedbackProvider";
 
 function ErrorTrigger() {
   const toast = useToast();
   return <button onClick={() => toast.error("Finalisierung fehlgeschlagen")}>Fehler ausl?sen</button>;
+}
+
+function ConfirmTrigger() {
+  const { confirm } = useConfirm();
+  return (
+    <button
+      onClick={() => void confirm({
+        title: "Rechnung finalisieren",
+        message: "Bitte prüfen.",
+        acknowledgementLabel: "Ich habe geprüft.",
+      })}
+    >
+      Finalisieren
+    </button>
+  );
 }
 
 describe("ToastProvider", () => {
@@ -22,5 +37,22 @@ describe("ToastProvider", () => {
     expect(
       container.querySelector(".fixed.inset-x-4")
     ).toHaveClass("z-[100]");
+  });
+});
+
+describe("ConfirmProvider", () => {
+  it("requires an explicit acknowledgement when configured", () => {
+    render(
+      <ConfirmProvider>
+        <ConfirmTrigger />
+      </ConfirmProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Finalisieren" }));
+    const submit = screen.getByRole("button", { name: "Bestaetigen" });
+    expect(submit).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ich habe geprüft." }));
+    expect(submit).toBeEnabled();
   });
 });
