@@ -19,6 +19,7 @@ type ToastApi = {
 type ConfirmOptions = {
   title: string;
   message: string;
+  acknowledgementLabel?: string;
 };
 
 type ConfirmApi = {
@@ -79,17 +80,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const [acknowledged, setAcknowledged] = useState(false);
   const [dialog, setDialog] = useState<{
     title: string;
     message: string;
+    acknowledgementLabel?: string;
     resolve: (value: boolean) => void;
   } | null>(null);
 
   const confirm = (opts: ConfirmOptions) =>
     new Promise<boolean>((resolve) => {
+      setAcknowledged(false);
       setDialog((prev) => {
         if (prev?.resolve) prev.resolve(false);
-        return { title: opts.title, message: opts.message, resolve };
+        return { ...opts, resolve };
       });
     });
 
@@ -107,12 +111,28 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
           <div className="max-h-[100dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl safe-bottom sm:max-h-[90dvh] sm:rounded-xl sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900">{dialog.title}</h3>
-            <p className="mt-2 text-sm text-gray-600">{dialog.message}</p>
+            <p className="mt-2 whitespace-pre-line text-sm text-gray-600">{dialog.message}</p>
+            {dialog.acknowledgementLabel && (
+              <label className="mt-4 flex items-start gap-3 rounded-lg border border-gray-200 p-3 text-sm text-gray-700">
+                <input
+                  className="mt-0.5 h-4 w-4"
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(event) => setAcknowledged(event.target.checked)}
+                />
+                <span>{dialog.acknowledgementLabel}</span>
+              </label>
+            )}
             <div className="mt-6 flex justify-end gap-2">
               <AppButton variant="secondary" onClick={() => close(false)}>
                 Abbrechen
               </AppButton>
-              <AppButton onClick={() => close(true)}>Bestaetigen</AppButton>
+              <AppButton
+                disabled={Boolean(dialog.acknowledgementLabel) && !acknowledged}
+                onClick={() => close(true)}
+              >
+                Bestaetigen
+              </AppButton>
             </div>
           </div>
         </div>

@@ -36,12 +36,20 @@ export type TestUser = {
 export async function createTestUser(): Promise<TestUser> {
   const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
   const password = `Test-${Math.random().toString(36).slice(2)}!`;
+  const { error: inviteError } = await admin.from("beta_signup_allowlist").insert({
+    email: email.toLowerCase(),
+    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  });
+  if (inviteError) {
+    throw inviteError;
+  }
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
   });
   if (error || !data.user) {
+    await admin.from("beta_signup_allowlist").delete().eq("email", email.toLowerCase());
     throw error ?? new Error("Failed to create test user.");
   }
   return { id: data.user.id, email, password };
@@ -62,6 +70,11 @@ export async function createAuthenticatedClient(user: TestUser) {
 }
 
 export async function deleteTestUser(userId: string): Promise<void> {
+  const { data } = await admin.auth.admin.getUserById(userId);
+  if (data.user?.email) {
+    await admin.from("beta_signup_allowlist").delete().eq("email", data.user.email.toLowerCase());
+  }
+  await admin.from("beta_signup_allowlist").delete().eq("consumed_by", userId);
   await admin.auth.admin.deleteUser(userId);
 }
 

@@ -16,6 +16,10 @@ import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { supabase } from "@/supabaseClient";
 import { formatErrorToast } from "@/utils/errorMapping";
+import {
+  INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
+  INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
+} from "@/domain/rules/invoiceFinalizationNotice";
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
@@ -518,8 +522,8 @@ export function DocumentEditor({
 
     const ok = await confirm({
       title: "Rechnung finalisieren",
-      message:
-        "FreelanceFlow unterstützt derzeit ausschließlich einfache inländische B2B-Rechnungen für deutsche Unternehmen. Bitte prüfe die Rechnung vor dem Ausstellen. FreelanceFlow ersetzt keine steuerliche oder rechtliche Beratung.\n\nMit der Bestätigung bestätigst du, diesen Hinweis gelesen und die Rechnung manuell geprüft zu haben.",
+      message: INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
+      acknowledgementLabel: INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
     });
     if (!ok) return null;
 

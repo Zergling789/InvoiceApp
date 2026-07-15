@@ -46,6 +46,8 @@ npx playwright test tests/invoice-status.spec.ts
 npx playwright test tests/rls-isolation.spec.ts
 ```
 
+`invoice-status.spec.ts` enthält zusätzlich einen mobilen Browserlauf für den vollständigen Finalisierungsdialog. Der Bestätigungsbutton bleibt gesperrt, bis der Marktumfangs- und Prüfungshinweis aktiv bestätigt wurde; anschließend werden sichtbarer Status und Datenbanksperre gemeinsam geprüft.
+
 Für die drei Supabase-Suites sind lokal dieselben `E2E_SUPABASE_*`-Variablen erforderlich. Ohne sie melden die Tests einen Skip; das ist kein bestandener Integrationsnachweis.
 
 ## Zuletzt geprüfte Ergebnisse
