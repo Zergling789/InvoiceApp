@@ -19,3 +19,10 @@ test("server blocks explicit cross-site state-changing requests", async () => {
   assert.match(source, /IS_PROD \|\| !origin/);
   assert.match(source, /hostname === "localhost"/);
 });
+
+test("the app shell does not request resources blocked by its own CSP", async () => {
+  const html = await readFile(new URL("../../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /fonts\.googleapis\.com/);
+  assert.doesNotMatch(html, /<script>(?![\s\S]*type=["']application\/ld\+json)/i);
+  assert.match(html, /<script src="\/theme-init\.js"><\/script>/);
+});
