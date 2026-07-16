@@ -98,8 +98,11 @@ test.describe.serial("value stream: offer -> invoice", () => {
 
     await expect(page.getByRole("heading", { name: "Neues Angebot" })).toBeVisible();
     await page.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
+    await expect(page.getByRole("button", { name: /2 Dokumentdaten/ })).toBeEnabled();
     await page.getByRole("button", { name: "Weiter zu Dokumentdaten" }).click();
 
+    await expect(page).toHaveURL(/step=dokument/);
+    await expect(page.getByLabel("Angebotsnummer")).toBeVisible();
     const offerNumber = await page.getByLabel("Angebotsnummer").inputValue();
     await page.getByRole("button", { name: "Weiter zu Positionen" }).click();
     await page.getByRole("button", { name: "Position hinzufügen" }).click();
