@@ -37,6 +37,7 @@ describe("PositionSuggestionInput", () => {
     render(<PositionSuggestionInput ariaLabel="Beschreibung" value="Wimpern" documentType="invoice" currency="EUR" onChange={() => undefined} onSelect={onSelect} />);
 
     const input = screen.getByRole("combobox", { name: "Beschreibung" });
+    input.focus();
     await waitFor(() => expect(screen.getByRole("option", { name: /Wimpernverlängerung/ })).toBeInTheDocument(), { timeout: 1000 });
     const option = screen.getByRole("option", { name: /Wimpernverlängerung/ });
 
@@ -50,8 +51,17 @@ describe("PositionSuggestionInput", () => {
   it("schließt Vorschläge erst beim Fokuswechsel nach außerhalb", async () => {
     render(<><PositionSuggestionInput ariaLabel="Beschreibung" value="Wimpern" documentType="invoice" currency="EUR" onChange={() => undefined} onSelect={() => undefined} /><button type="button">Außerhalb</button></>);
     const input = screen.getByRole("combobox", { name: "Beschreibung" });
+    input.focus();
     await screen.findByRole("option", { name: /Wimpernverlängerung/ }, { timeout: 1000 });
     fireEvent.blur(input, { relatedTarget: screen.getByRole("button", { name: "Außerhalb" }) });
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+
+  it("öffnet Vorschläge nicht bei einer programmgesteuert eingefügten Position", async () => {
+    render(<PositionSuggestionInput ariaLabel="Beschreibung" value="Auffüllen 2 Wochen" documentType="offer" currency="EUR" onChange={() => undefined} onSelect={() => undefined} />);
+
+    await waitFor(() => expect(service.findPositionSuggestions).toHaveBeenCalled());
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Beschreibung" })).toHaveAttribute("aria-expanded", "false");
   });
 });

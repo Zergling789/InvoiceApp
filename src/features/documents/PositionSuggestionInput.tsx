@@ -18,6 +18,7 @@ type Props = {
 export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId, documentType, currency, onChange, onSelect }: Props) {
   const listboxId = useId();
   const request = useRef(0);
+  const focusedWithin = useRef(false);
   const [suggestions, setSuggestions] = useState<PositionSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,7 +41,7 @@ export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId
         if (request.current !== requestId) return;
         setSuggestions(next);
         setActiveIndex(0);
-        setOpen(next.length > 0);
+        setOpen(focusedWithin.current && next.length > 0);
       } catch (cause) {
         if (request.current === requestId) setError(cause instanceof Error ? cause.message : "Vorschläge konnten nicht geladen werden.");
       } finally {
@@ -61,6 +62,7 @@ export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId
     onBlur={(event) => {
       const nextTarget = event.relatedTarget;
       if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+      focusedWithin.current = false;
       setOpen(false);
     }}
   >
@@ -76,7 +78,10 @@ export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId
       aria-controls={listboxId}
       aria-activedescendant={open && suggestions[activeIndex] ? `${listboxId}-${activeIndex}` : undefined}
       onChange={(event) => onChange(event.target.value)}
-      onFocus={() => suggestions.length > 0 && setOpen(true)}
+      onFocus={() => {
+        focusedWithin.current = true;
+        if (suggestions.length > 0) setOpen(true);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") { setOpen(false); return; }
         if (!open || suggestions.length === 0) return;
