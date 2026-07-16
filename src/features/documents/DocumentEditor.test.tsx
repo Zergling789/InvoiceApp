@@ -11,6 +11,7 @@ const saveInvoiceMock = vi.fn();
 const getInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
 const createAiDocumentDraftMock = vi.fn();
+const saveOfferMock = vi.fn();
 
 
 vi.mock("@/app/invoices/invoiceService", () => ({
@@ -24,7 +25,7 @@ vi.mock("@/app/invoices/invoiceService", () => ({
 }));
 
 vi.mock("@/app/offers/offerService", () => ({
-  saveOffer: vi.fn(),
+  saveOffer: (...args: unknown[]) => saveOfferMock(...args),
 }));
 
 vi.mock("@/app/email/emailService", () => ({
@@ -96,6 +97,8 @@ describe("DocumentEditor send email status", () => {
     getInvoiceMock.mockReset();
     sendDocumentEmailMock.mockReset();
     createAiDocumentDraftMock.mockReset();
+    saveOfferMock.mockReset();
+    saveOfferMock.mockResolvedValue(undefined);
   });
 
   it("appends an accepted AI draft and preserves existing content", async () => {
@@ -158,13 +161,46 @@ describe("DocumentEditor send email status", () => {
           currency: "EUR",
         }}
       />,
-      { route: "/app/offers/new" }
+      { route: "/app/offers/new?step=positionen" }
     );
 
     await user.click(screen.getByRole("button", { name: /mit ki erstellen/i }));
 
     expect(await screen.findByRole("dialog", { name: /dokument mit ki erstellen/i })).toBeVisible();
     expect(screen.getByLabelText(/leistungen beschreiben/i)).toBeEnabled();
+  });
+
+  it("führt schrittweise durch die Angebotserstellung und erhält Eingaben", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DocumentEditor type="offer" seed={{ ...seed, id: "offer-wizard", number: "ANG-0001" }} settings={settings} clients={clients} onClose={vi.fn()} onSaved={vi.fn()} useCreateComposer initial={{ clientId: "", positions: [], status: OfferStatus.DRAFT, validUntil: "2025-01-31", currency: "EUR" }} />, { route: "/app/offers/new" });
+
+    expect(screen.getByRole("button", { name: /1 Kunde/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByLabelText("Angebotsnummer")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Kunde auswählen"), "client-1");
+    await user.click(screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }));
+    const number = screen.getByLabelText("Angebotsnummer");
+    await user.clear(number); await user.type(number, "ANG-0099");
+    await user.click(screen.getByRole("button", { name: "Zurück" }));
+    await user.click(screen.getByRole("button", { name: /2 Dokumentdaten/ }));
+    expect(screen.getByLabelText("Angebotsnummer")).toHaveValue("ANG-0099");
+    await user.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
+    await user.click(screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("mindestens eine vollständig ausgefüllte Position");
+    expect(screen.queryByText("Texte & Optionen", { selector: ".font-semibold" })).not.toBeInTheDocument();
+  });
+
+  it("zeigt die finale Erstellung ausschließlich in der Vorschau und speichert nur einmal", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DocumentEditor type="offer" seed={{ ...seed, id: "offer-final", number: "ANG-0010" }} settings={settings} clients={clients} onClose={vi.fn()} onSaved={vi.fn()} useCreateComposer initial={{ clientId: "client-1", positions: [{ id: "p1", description: "Beratung", quantity: 1, unit: "Std", price: 100, taxCategory: "STANDARD", taxRate: 19 }], status: OfferStatus.DRAFT, validUntil: "2025-01-31", currency: "EUR" }} />, { route: "/app/offers/new" });
+
+    expect(screen.queryByRole("button", { name: /^Angebot erstellen$/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }));
+    await user.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
+    await user.click(screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }));
+    await user.click(screen.getByRole("button", { name: "Weiter zur Vorschau" }));
+    expect(screen.getByText("Vorschau & Abschluss")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Angebot erstellen$/ }));
+    await waitFor(() => expect(saveOfferMock).toHaveBeenCalledTimes(1));
   });
 
   it("uses the shared composer for new invoices", () => {

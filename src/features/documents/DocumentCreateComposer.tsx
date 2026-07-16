@@ -1,4 +1,5 @@
 import {
+  Check,
   CalendarDays,
   Eye,
   FileText,
@@ -7,6 +8,8 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Client, Position } from "@/types";
 import type { DocumentFormData } from "@/features/documents/documentEditorModel";
@@ -45,6 +48,16 @@ type Props = {
 const inputClass =
   "w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] px-3 py-2.5 text-sm";
 
+const offerSteps = [
+  { key: "kunde", label: "Kunde" },
+  { key: "dokument", label: "Dokumentdaten" },
+  { key: "positionen", label: "Positionen" },
+  { key: "texte", label: "Texte & Optionen" },
+  { key: "vorschau", label: "Vorschau" },
+] as const;
+
+type OfferStep = (typeof offerSteps)[number]["key"];
+
 export function DocumentCreateComposer({
   type,
   data,
@@ -67,6 +80,13 @@ export function DocumentCreateComposer({
   onSave,
 }: Props) {
   const isInvoice = type === "invoice";
+  const wizardEnabled = !isInvoice && !isEditing;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const requestedStep = searchParams.get("step") as OfferStep | null;
+  const [step, setStep] = useState<OfferStep>(() => offerSteps.some((item) => item.key === requestedStep) ? requestedStep as OfferStep : "kunde");
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const currencySymbol = getCurrencySymbol(data.currency ?? currency, locale);
   const client = clients.find((item) => item.id === data.clientId);
   const canSave = Boolean(
@@ -74,6 +94,54 @@ export function DocumentCreateComposer({
       data.positions.length > 0 &&
       (isInvoice || data.validUntil),
   );
+  const clientValid = Boolean(data.clientId && client);
+  const documentValid = Boolean(data.number?.trim() && data.date && data.validUntil && data.currency && data.validUntil >= data.date);
+  const positionsValid = data.positions.length > 0 && data.positions.every((position) => Boolean(position.description.trim() && position.unit.trim() && Number(position.quantity) > 0 && Number(position.price) >= 0));
+  const stepIndex = offerSteps.findIndex((item) => item.key === step);
+  const highestReachableIndex = clientValid ? documentValid ? positionsValid ? 4 : 2 : 1 : 0;
+  const summaryDate = data.date ? new Date(`${data.date}T00:00:00`).toLocaleDateString(locale) : "Noch nicht angegeben";
+
+  useEffect(() => {
+    if (!wizardEnabled) return;
+    const requestedIndex = offerSteps.findIndex((item) => item.key === requestedStep);
+    const nextIndex = requestedIndex < 0 ? 0 : Math.min(requestedIndex, highestReachableIndex);
+    const nextStep = offerSteps[nextIndex].key;
+    if (nextStep !== step) setStep(nextStep);
+    if (searchParams.get("step") !== nextStep) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("step", nextStep);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [highestReachableIndex, requestedStep, searchParams, setSearchParams, step, wizardEnabled]);
+
+  const goToStep = (nextStep: OfferStep) => {
+    const nextIndex = offerSteps.findIndex((item) => item.key === nextStep);
+    if (nextIndex > highestReachableIndex) return;
+    setValidationMessage(null);
+    setStep(nextStep);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("step", nextStep);
+    setSearchParams(nextParams, { replace: true });
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`offer-step-${nextStep}`);
+      if (typeof target?.scrollIntoView === "function") target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const continueWizard = () => {
+    const valid = step === "kunde" ? clientValid : step === "dokument" ? documentValid : step === "positionen" ? positionsValid : true;
+    if (!valid) {
+      const message = step === "kunde" ? "Bitte wähle einen gültigen Kunden aus." : step === "dokument" ? "Bitte prüfe Angebotsnummer, Datum, Gültigkeit und Währung." : "Füge mindestens eine vollständig ausgefüllte Position hinzu.";
+      setValidationMessage(message);
+      window.requestAnimationFrame(() => {
+        const target = document.getElementById(`offer-step-${step}`);
+        if (typeof target?.scrollIntoView === "function") target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+    const next = offerSteps[Math.min(stepIndex + 1, offerSteps.length - 1)];
+    goToStep(next.key);
+  };
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-[var(--app-bg)]">
@@ -86,11 +154,15 @@ export function DocumentCreateComposer({
               {isEditing ? (isInvoice ? "Rechnung bearbeiten" : "Angebot bearbeiten") : isInvoice ? "Rechnung erstellen" : "Angebot erstellen"}
               </h2>
               <p className="mt-2 text-sm text-[var(--app-muted)]">
-                Alle Angaben auf einer übersichtlichen Arbeitsfläche.
+                {wizardEnabled ? "Schritt für Schritt zu einem vollständigen Angebot." : "Alle Angaben auf einer übersichtlichen Arbeitsfläche."}
               </p>
             </div>
 
-            <AppCard className="p-0 overflow-hidden">
+            {wizardEnabled && <nav aria-label="Fortschritt Angebotserstellung" className="overflow-x-auto pb-1"><ol className="grid min-w-[640px] grid-cols-5 gap-2">{offerSteps.map((item, index) => { const active = item.key === step; const complete = index < stepIndex; const reachable = index <= highestReachableIndex; return <li key={item.key}><button type="button" aria-current={active ? "step" : undefined} disabled={!reachable} onClick={() => goToStep(item.key)} className={`flex min-h-14 w-full items-center gap-2 rounded-xl border px-3 text-left text-sm transition-colors ${active ? "border-[var(--app-primary)] bg-blue-500/10 font-semibold text-[var(--app-primary)]" : complete ? "border-green-500/30 bg-green-500/10" : "border-[var(--app-border)] text-[var(--app-muted)]"}`}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${active ? "bg-[var(--app-primary)] text-white" : complete ? "bg-green-600 text-white" : "bg-black/5 dark:bg-white/10"}`}>{complete ? <Check size={15} /> : index + 1}</span><span>{item.label}</span></button></li>; })}</ol></nav>}
+
+            {wizardEnabled && validationMessage && <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">{validationMessage}</div>}
+
+            {(!wizardEnabled || step === "kunde") && <div id="offer-step-kunde"><AppCard className="p-0 overflow-hidden">
               <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4">
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">
                   1
@@ -115,6 +187,7 @@ export function DocumentCreateComposer({
                   value={data.clientId}
                   disabled={disabled}
                   onChange={(event) => onClientChange(event.target.value)}
+                  aria-invalid={wizardEnabled && Boolean(validationMessage) && !clientValid}
                 >
                   <option value="">Kunde suchen oder auswählen</option>
                   {clients.map((item) => (
@@ -141,10 +214,11 @@ export function DocumentCreateComposer({
                     </div>
                   </div>
                 )}
+                {wizardEnabled && <div className="mt-4"><AppButton type="button" variant="secondary" onClick={() => navigate(`/app/customers/new?returnUrl=${encodeURIComponent(`${location.pathname}?step=kunde`)}`)}><Plus size={16} /> Neuen Kunden anlegen</AppButton></div>}
               </div>
-            </AppCard>
+            </AppCard></div>}
 
-            <AppCard className="p-0 overflow-hidden">
+            {(!wizardEnabled || step === "dokument") && <div id="offer-step-dokument"><AppCard className="p-0 overflow-hidden">
               <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4">
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">
                   2
@@ -326,9 +400,9 @@ export function DocumentCreateComposer({
                   </label>
                 )}
               </div>
-            </AppCard>
+            </AppCard></div>}
 
-            <AppCard className="p-0 overflow-hidden">
+            {(!wizardEnabled || step === "positionen") && <div id="offer-step-positionen"><AppCard className="p-0 overflow-hidden">
               <div className="flex flex-col gap-3 border-b border-[var(--app-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">
@@ -517,9 +591,9 @@ export function DocumentCreateComposer({
                   Position hinzufügen
                 </AppButton>
               </div>
-            </AppCard>
+            </AppCard></div>}
 
-            <AppCard className="p-0 overflow-hidden">
+            {(!wizardEnabled || step === "texte") && <div id="offer-step-texte"><AppCard className="p-0 overflow-hidden">
               <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4">
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">
                   4
@@ -557,7 +631,9 @@ export function DocumentCreateComposer({
                   />
                 </label>
               </div>
-            </AppCard>
+            </AppCard></div>}
+
+            {wizardEnabled && step === "vorschau" && <div id="offer-step-vorschau"><AppCard className="overflow-hidden p-0"><div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4"><span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]">5</span><div><div className="font-semibold">Vorschau & Abschluss</div><div className="text-xs text-[var(--app-muted)]">Prüfe alle Angaben vor dem Erstellen</div></div></div><div className="space-y-5 p-5"><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.04]"><div className="text-xs text-[var(--app-muted)]">Kunde</div><div className="mt-1 font-medium">{client?.companyName ?? "Noch nicht angegeben"}</div></div><div className="rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.04]"><div className="text-xs text-[var(--app-muted)]">Angebotsnummer</div><div className="mt-1 font-medium">{data.number || "Noch nicht angegeben"}</div></div><div className="rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.04]"><div className="text-xs text-[var(--app-muted)]">Datum / gültig bis</div><div className="mt-1 font-medium">{summaryDate} / {data.validUntil ? new Date(`${data.validUntil}T00:00:00`).toLocaleDateString(locale) : "Noch nicht angegeben"}</div></div><div className="rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.04]"><div className="text-xs text-[var(--app-muted)]">Positionen</div><div className="mt-1 font-medium">{data.positions.length}</div></div></div><div className="rounded-2xl border border-[var(--app-border)] p-4"><div className="flex justify-between text-sm text-[var(--app-muted)]"><span>Netto</span><span>{formatMoney(totals.subtotal, data.currency ?? currency, locale)}</span></div><div className="mt-2 flex justify-between text-sm text-[var(--app-muted)]"><span>MwSt.</span><span>{formatMoney(totals.tax, data.currency ?? currency, locale)}</span></div><div className="mt-3 flex justify-between border-t border-[var(--app-border)] pt-3 text-lg font-semibold"><span>Gesamt</span><span>{formatMoney(totals.total, data.currency ?? currency, locale)}</span></div></div><AppButton type="button" variant="secondary" onClick={onPreview}><Eye size={17} /> Vollständige Dokumentvorschau öffnen</AppButton></div></AppCard></div>}
           </main>
 
           <aside className="space-y-4 xl:sticky xl:top-4">
@@ -571,7 +647,7 @@ export function DocumentCreateComposer({
                 <div>
                   <div className="text-xs text-[var(--app-muted)]">Kunde</div>
                   <div className="text-sm font-medium">
-                    {client?.companyName || "Noch nicht ausgewählt"}
+                    {client?.companyName || "Noch nicht angegeben"}
                   </div>
                 </div>
               </div>
@@ -585,10 +661,11 @@ export function DocumentCreateComposer({
                     Dokumentdatum
                   </div>
                   <div className="text-sm font-medium">
-                    {new Date(data.date).toLocaleDateString(locale)}
+                    {summaryDate}
                   </div>
                 </div>
               </div>
+              {!isInvoice && <div className="mt-4 space-y-2 text-sm"><div className="flex justify-between gap-3"><span className="text-[var(--app-muted)]">Angebotsnummer</span><span className="text-right font-medium">{data.number || "Noch nicht angegeben"}</span></div><div className="flex justify-between gap-3"><span className="text-[var(--app-muted)]">Positionen</span><span className="font-medium">{data.positions.length}</span></div></div>}
               <div className="my-5 h-px bg-[var(--app-border)]" />
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-[var(--app-muted)]">
@@ -624,6 +701,7 @@ export function DocumentCreateComposer({
       </div>
 
       <footer className="border-t border-[var(--app-border)] bg-[var(--app-surface-solid)] px-4 py-3 safe-bottom sm:px-6">
+        {wizardEnabled ? <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3"><div>{step === "kunde" ? <AppButton type="button" variant="ghost" onClick={onCancel}>Abbrechen</AppButton> : <AppButton type="button" variant="secondary" onClick={() => goToStep(offerSteps[stepIndex - 1].key)}>Zurück{step === "vorschau" ? " und bearbeiten" : ""}</AppButton>}</div><div className="flex flex-wrap justify-end gap-2">{step === "vorschau" ? <><AppButton type="button" variant="secondary" disabled={!canSave || saving} onClick={onSave}>Als Entwurf speichern</AppButton><AppButton type="button" disabled={!canSave || saving} onClick={onSave}>{saving ? "Wird gespeichert …" : "Angebot erstellen"}</AppButton></> : <AppButton type="button" onClick={continueWizard} disabled={disabled}>{step === "kunde" ? "Weiter zu Dokumentdaten" : step === "dokument" ? "Weiter zu Positionen" : step === "positionen" ? "Weiter zu Texte und Optionen" : "Weiter zur Vorschau"}</AppButton>}</div></div> :
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <AppButton type="button" variant="ghost" onClick={onCancel}>
             Abbrechen
@@ -652,7 +730,7 @@ export function DocumentCreateComposer({
                       : "Angebot erstellen"}
             </AppButton>
           </div>
-        </div>
+        </div>}
       </footer>
     </div>
   );

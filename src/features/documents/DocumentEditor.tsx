@@ -1,5 +1,5 @@
 // src/features/documents/DocumentEditor.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings, Sparkles, Layers3 } from "lucide-react";
 
@@ -92,6 +92,7 @@ export function DocumentEditor({
   const showStatusActions = actionMode === "full";
 
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const toast = useToast();
   const { confirm } = useConfirm();
   const navigate = useNavigate();
@@ -308,7 +309,7 @@ export function DocumentEditor({
     data?: FormData;
     allowLocked?: boolean;
   }): Promise<boolean> => {
-    if (readOnly || (!opts?.allowLocked && locked)) return false;
+    if (savingRef.current || readOnly || (!opts?.allowLocked && locked)) return false;
 
     const closeAfterSave = opts?.closeAfterSave ?? true;
     const data = opts?.data ?? formData;
@@ -322,6 +323,7 @@ export function DocumentEditor({
       return false;
     }
 
+    savingRef.current = true;
     setSaving(true);
     try {
       if (isInvoice) {
@@ -410,6 +412,7 @@ export function DocumentEditor({
       );
       return false;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
