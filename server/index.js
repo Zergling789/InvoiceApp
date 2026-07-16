@@ -1179,34 +1179,54 @@ app.get("/api/positions/templates", requireAuth, async (req, res) => {
   }
 });
 
+const parsePositionTemplateInput = (body = {}) => {
+  const kind = ["PRODUCT", "SERVICE", "TEMPLATE"].includes(body.kind) ? body.kind : "SERVICE";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const unit = typeof body.unit === "string" ? body.unit.trim() : "";
+  const taxCategory = ["STANDARD", "REDUCED", "ZERO", "EXEMPT", "SMALL_BUSINESS", "REVERSE_CHARGE"].includes(body.taxCategory) ? body.taxCategory : "STANDARD";
+  const taxRate = Number(body.taxRate);
+  const price = body.defaultUnitPrice === null || body.defaultUnitPrice === "" ? null : Number(body.defaultUnitPrice);
+  if (!name || name.length > 200 || !unit || unit.length > 30 || !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 || (price !== null && (!Number.isFinite(price) || price < 0))) {
+    throw Object.assign(new Error("Invalid position template"), { status: 400, code: "POSITION_TEMPLATE_INVALID" });
+  }
+  return {
+    kind, name, unit,
+    description: String(body.description ?? "").trim().slice(0, 2000),
+    category: String(body.category ?? "").trim().slice(0, 100),
+    default_quantity: Number(body.defaultQuantity) > 0 ? Number(body.defaultQuantity) : 1,
+    default_unit_price: price, tax_category: taxCategory, tax_rate: taxRate,
+    product_number: body.productNumber ? String(body.productNumber).trim().slice(0, 100) : null,
+    manufacturer: body.manufacturer ? String(body.manufacturer).trim().slice(0, 200) : null,
+    image_url: body.imageUrl ? String(body.imageUrl).trim().slice(0, 2000) : null,
+  };
+};
+
 app.post("/api/positions/templates", requireAuth, async (req, res) => {
   try {
-    const body = req.body ?? {};
-    const kind = ["PRODUCT", "SERVICE", "TEMPLATE"].includes(body.kind) ? body.kind : "SERVICE";
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    const unit = typeof body.unit === "string" ? body.unit.trim() : "";
-    const taxCategory = ["STANDARD", "REDUCED", "ZERO", "EXEMPT", "SMALL_BUSINESS", "REVERSE_CHARGE"].includes(body.taxCategory) ? body.taxCategory : "STANDARD";
-    const taxRate = Number(body.taxRate);
-    const price = body.defaultUnitPrice === null || body.defaultUnitPrice === "" ? null : Number(body.defaultUnitPrice);
-    if (!name || name.length > 200 || !unit || unit.length > 30 || !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 || (price !== null && (!Number.isFinite(price) || price < 0))) {
-      return sendError(res, 400, "POSITION_TEMPLATE_INVALID", "Bitte prüfe Bezeichnung, Einheit, Preis und Steuer.", req);
-    }
+    const values = parsePositionTemplateInput(req.body);
     const db = createUserSupabaseClient(getBearerToken(req));
     const { data, error } = await db.from("position_templates").insert({
-      user_id: req.user.id, kind, name, unit,
-      description: String(body.description ?? "").trim().slice(0, 2000),
-      category: String(body.category ?? "").trim().slice(0, 100),
-      default_quantity: Number(body.defaultQuantity) > 0 ? Number(body.defaultQuantity) : 1,
-      default_unit_price: price, tax_category: taxCategory, tax_rate: taxRate,
-      product_number: body.productNumber ? String(body.productNumber).trim().slice(0, 100) : null,
-      manufacturer: body.manufacturer ? String(body.manufacturer).trim().slice(0, 200) : null,
-      image_url: body.imageUrl ? String(body.imageUrl).trim().slice(0, 2000) : null,
+      user_id: req.user.id, ...values,
     }).select("*").single();
     if (error) throw error;
     return res.status(201).json({ template: data });
   } catch (error) {
     logRequestError(req, error, "POSITION_TEMPLATE_SAVE_FAILED");
-    return sendError(res, 500, "POSITION_TEMPLATE_SAVE_FAILED", "Position konnte nicht gespeichert werden.", req);
+    return sendError(res, error?.status ?? 500, error?.code ?? "POSITION_TEMPLATE_SAVE_FAILED", error?.status === 400 ? "Bitte prüfe Bezeichnung, Einheit, Preis und Steuer." : "Position konnte nicht gespeichert werden.", req);
+  }
+});
+
+app.patch("/api/positions/templates/:id", requireAuth, async (req, res) => {
+  try {
+    const values = parsePositionTemplateInput(req.body);
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { data, error } = await db.from("position_templates").update({ ...values, updated_at: new Date().toISOString() }).eq("id", req.params.id).select("*").maybeSingle();
+    if (error) throw error;
+    if (!data) return sendError(res, 404, "POSITION_TEMPLATE_NOT_FOUND", "Eintrag wurde nicht gefunden.", req);
+    return res.json({ template: data });
+  } catch (error) {
+    logRequestError(req, error, "POSITION_TEMPLATE_UPDATE_FAILED");
+    return sendError(res, error?.status ?? 500, error?.code ?? "POSITION_TEMPLATE_UPDATE_FAILED", error?.status === 400 ? "Bitte prüfe Bezeichnung, Einheit, Preis und Steuer." : "Eintrag konnte nicht aktualisiert werden.", req);
   }
 });
 
@@ -1234,7 +1254,7 @@ app.get("/api/positions/groups", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/positions/groups", requireAuth, async (req, res) => {
+app.post("/api/positions/groups-legacy", requireAuth, async (req, res) => {
   const db = createUserSupabaseClient(getBearerToken(req));
   let groupId = null;
   try {
@@ -1255,6 +1275,38 @@ app.post("/api/positions/groups", requireAuth, async (req, res) => {
     return sendError(res, error?.status ?? 500, error?.code ?? "POSITION_GROUP_SAVE_FAILED", error?.status === 400 ? "Bitte prüfe die Positionen der Gruppe." : "Positionsgruppe konnte nicht gespeichert werden.", req);
   }
 });
+
+const savePositionGroupHandler = async (req, res, groupId = null) => {
+  try {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
+    if (!name || name.length > 200 || items.length === 0) return sendError(res, 400, "POSITION_GROUP_INVALID", "Paketname und mindestens eine Position sind erforderlich.", req);
+    const normalizedItems = items.map((item) => ({
+      positionTemplateId: typeof item.positionTemplateId === "string" ? item.positionTemplateId : null,
+      title: String(item.title ?? "").trim().slice(0, 200), description: String(item.description ?? "").slice(0, 2000),
+      quantity: Number(item.quantity), unit: String(item.unit ?? "").trim().slice(0, 30),
+      unitPrice: item.unitPrice === null || item.unitPrice === "" ? null : Number(item.unitPrice),
+      taxCategory: ["STANDARD", "REDUCED", "ZERO", "EXEMPT", "SMALL_BUSINESS", "REVERSE_CHARGE"].includes(item.taxCategory) ? item.taxCategory : "STANDARD",
+      taxRate: Number(item.taxRate), optional: Boolean(item.optional),
+    }));
+    if (normalizedItems.some((item) => !item.title || !item.unit || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.unitPrice !== null && (!Number.isFinite(item.unitPrice) || item.unitPrice < 0) || !Number.isFinite(item.taxRate) || item.taxRate < 0 || item.taxRate > 100)) {
+      return sendError(res, 400, "POSITION_GROUP_INVALID", "Bitte prüfe die Positionen des Pakets.", req);
+    }
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { data: savedId, error: saveError } = await db.rpc("save_position_group", { p_group_id: groupId, p_name: name, p_description: String(req.body?.description ?? "").slice(0, 2000), p_category: String(req.body?.category ?? "").slice(0, 100), p_items: normalizedItems });
+    if (saveError) throw saveError;
+    const { data: group, error: loadError } = await db.from("position_groups").select("*, position_group_items(*)").eq("id", savedId).single();
+    if (loadError) throw loadError;
+    group.position_group_items.sort((a, b) => a.sort_order - b.sort_order);
+    return res.status(groupId ? 200 : 201).json({ group });
+  } catch (error) {
+    logRequestError(req, error, groupId ? "POSITION_GROUP_UPDATE_FAILED" : "POSITION_GROUP_SAVE_FAILED");
+    return sendError(res, error?.code === "42501" ? 404 : 500, groupId ? "POSITION_GROUP_UPDATE_FAILED" : "POSITION_GROUP_SAVE_FAILED", groupId ? "Paket konnte nicht aktualisiert werden." : "Paket konnte nicht gespeichert werden.", req);
+  }
+};
+
+app.post("/api/positions/groups", requireAuth, (req, res) => savePositionGroupHandler(req, res));
+app.patch("/api/positions/groups/:id", requireAuth, (req, res) => savePositionGroupHandler(req, res, req.params.id));
 
 app.delete("/api/positions/groups/:id", requireAuth, async (req, res) => {
   try {

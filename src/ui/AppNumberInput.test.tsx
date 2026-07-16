@@ -43,4 +43,13 @@ describe("AppNumberInput", () => {
     expect(screen.getByText("€")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Preis" })).toHaveValue("95");
   });
+
+  it("meldet ein bewusst geleertes optionales Feld", async () => {
+    const user = userEvent.setup();
+    const onEmpty = vi.fn();
+    render(<AppNumberInput aria-label="Optionaler Preis" value={12} onEmpty={onEmpty} onValueChange={() => undefined} />);
+    const input = screen.getByRole("textbox", { name: "Optionaler Preis" });
+    await user.clear(input);
+    expect(onEmpty).toHaveBeenCalledOnce();
+  });
 });
