@@ -115,7 +115,7 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await page.getByRole("button", { name: "Weiter zur Vorschau" }).click();
     await page.getByRole("button", { name: "Angebot erstellen", exact: true }).click();
 
-    const offerRow = page.getByRole("button").filter({ hasText: offerNumber });
+    const offerRow = page.getByRole("row").filter({ hasText: offerNumber });
     await expect(offerRow).toBeVisible();
     await offerRow.click();
     await expect(page).toHaveURL(/\/app\/offers\//);
