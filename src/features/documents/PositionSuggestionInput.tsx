@@ -56,7 +56,14 @@ export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId
     void recordPositionSuggestionEvent({ customerId, documentType, query: value, suggestionType: suggestion.kind, suggestionId: suggestion.id, action: "SELECTED", originalValue: suggestion });
   };
 
-  return <div className="relative min-w-0">
+  return <div
+    className="relative min-w-0"
+    onBlur={(event) => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+      setOpen(false);
+    }}
+  >
     <input
       className="w-full border rounded-lg p-2 text-sm"
       placeholder="Bezeichnung"
@@ -70,7 +77,6 @@ export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId
       aria-activedescendant={open && suggestions[activeIndex] ? `${listboxId}-${activeIndex}` : undefined}
       onChange={(event) => onChange(event.target.value)}
       onFocus={() => suggestions.length > 0 && setOpen(true)}
-      onBlur={() => window.setTimeout(() => setOpen(false), 150)}
       onKeyDown={(event) => {
         if (event.key === "Escape") { setOpen(false); return; }
         if (!open || suggestions.length === 0) return;
@@ -91,7 +97,7 @@ export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId
           role="option"
           aria-selected={index === activeIndex}
           className={`block w-full rounded-lg p-3 text-left text-sm ${index === activeIndex ? "bg-blue-500/10" : "hover:bg-black/5 dark:hover:bg-white/5"}`}
-          onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.preventDefault()}
           onClick={() => choose(suggestion)}
         >
           <span className="flex items-center gap-2 font-semibold">{suggestion.kind === "PRODUCT" ? <Package size={15} /> : <Wrench size={15} />}{suggestion.title}</span>
