@@ -13,7 +13,6 @@ const sendDocumentEmailMock = vi.fn();
 const createAiDocumentDraftMock = vi.fn();
 const saveOfferMock = vi.fn();
 
-
 vi.mock("@/app/invoices/invoiceService", () => ({
   saveInvoice: (...args: unknown[]) => saveInvoiceMock(...args),
   getInvoice: (...args: unknown[]) => getInvoiceMock(...args),
@@ -37,7 +36,8 @@ vi.mock("@/app/pdf/documentPdfService", () => ({
 }));
 
 vi.mock("@/app/ai/aiService", () => ({
-  createAiDocumentDraft: (...args: unknown[]) => createAiDocumentDraftMock(...args),
+  createAiDocumentDraft: (...args: unknown[]) =>
+    createAiDocumentDraftMock(...args),
 }));
 
 const seed = {
@@ -103,7 +103,9 @@ describe("DocumentEditor send email status", () => {
 
   it("appends an accepted AI draft and preserves existing content", async () => {
     createAiDocumentDraftMock.mockResolvedValue({
-      positions: [{ description: "Hosting", quantity: 12, unit: "Monat", price: 15 }],
+      positions: [
+        { description: "Hosting", quantity: 12, unit: "Monat", price: 15 },
+      ],
       introText: "Neue Einleitung",
       footerText: "Neuer Fußtext",
       warnings: [],
@@ -118,26 +120,42 @@ describe("DocumentEditor send email status", () => {
         onClose={vi.fn()}
         onSaved={vi.fn()}
         useCreateComposer
+        composerEditing
         initial={{
           clientId: "client-1",
-          positions: [{ id: "existing", description: "Beratung", quantity: 1, unit: "Std", price: 100 }],
+          positions: [
+            {
+              id: "existing",
+              description: "Beratung",
+              quantity: 1,
+              unit: "Std",
+              price: 100,
+            },
+          ],
           introText: "Bestehende Einleitung",
           footerText: "Bestehender Fußtext",
           status: InvoiceStatus.DRAFT,
         }}
       />,
-      { route: "/app/invoices/inv-1/edit" }
+      { route: "/app/invoices/inv-1/edit" },
     );
 
     await user.click(screen.getByRole("button", { name: /mit ki erstellen/i }));
-    await user.type(screen.getByLabelText(/leistungen beschreiben/i), "Hosting für zwölf Monate");
-    await user.click(screen.getByRole("button", { name: /vorschlag erstellen/i }));
+    await user.type(
+      screen.getByLabelText(/leistungen beschreiben/i),
+      "Hosting für zwölf Monate",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /vorschlag erstellen/i }),
+    );
     await screen.findByLabelText("KI-Vorschau");
     await user.click(screen.getByRole("button", { name: /^übernehmen$/i }));
 
     expect(screen.getByDisplayValue("Beratung")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Hosting")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Bestehende Einleitung")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("Bestehende Einleitung"),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue("Bestehender Fußtext")).toBeInTheDocument();
     expect(saveInvoiceMock).not.toHaveBeenCalled();
   });
@@ -161,49 +179,127 @@ describe("DocumentEditor send email status", () => {
           currency: "EUR",
         }}
       />,
-      { route: "/app/offers/new?step=positionen" }
+      { route: "/app/offers/new?step=positionen" },
     );
 
     await user.click(screen.getByRole("button", { name: /mit ki erstellen/i }));
 
-    expect(await screen.findByRole("dialog", { name: /dokument mit ki erstellen/i })).toBeVisible();
+    expect(
+      await screen.findByRole("dialog", { name: /dokument mit ki erstellen/i }),
+    ).toBeVisible();
     expect(screen.getByLabelText(/leistungen beschreiben/i)).toBeEnabled();
   });
 
   it("führt schrittweise durch die Angebotserstellung und erhält Eingaben", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<DocumentEditor type="offer" seed={{ ...seed, id: "offer-wizard", number: "ANG-0001" }} settings={settings} clients={clients} onClose={vi.fn()} onSaved={vi.fn()} useCreateComposer initial={{ clientId: "", positions: [], status: OfferStatus.DRAFT, validUntil: "2025-01-31", currency: "EUR" }} />, { route: "/app/offers/new" });
+    renderWithProviders(
+      <DocumentEditor
+        type="offer"
+        seed={{ ...seed, id: "offer-wizard", number: "ANG-0001" }}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        useCreateComposer
+        initial={{
+          clientId: "",
+          positions: [],
+          status: OfferStatus.DRAFT,
+          validUntil: "2025-01-31",
+          currency: "EUR",
+        }}
+      />,
+      { route: "/app/offers/new" },
+    );
 
-    expect(screen.getByRole("button", { name: /1 Kunde/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("button", { name: /1 Kunde/ })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
     expect(screen.queryByLabelText("Angebotsnummer")).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Kunde auswählen"), "client-1");
-    await user.click(screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }));
+    await user.selectOptions(
+      screen.getByLabelText("Kunde auswählen"),
+      "client-1",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }),
+    );
     const number = screen.getByLabelText("Angebotsnummer");
-    await user.clear(number); await user.type(number, "ANG-0099");
+    await user.clear(number);
+    await user.type(number, "ANG-0099");
     await user.click(screen.getByRole("button", { name: "Zurück" }));
     await user.click(screen.getByRole("button", { name: /2 Dokumentdaten/ }));
     expect(screen.getByLabelText("Angebotsnummer")).toHaveValue("ANG-0099");
-    await user.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
-    await user.click(screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("mindestens eine vollständig ausgefüllte Position");
-    expect(screen.queryByText("Texte & Optionen", { selector: ".font-semibold" })).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Positionen" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "mindestens eine vollständig ausgefüllte Position",
+    );
+    expect(
+      screen.queryByText("Texte & Optionen", { selector: ".font-semibold" }),
+    ).not.toBeInTheDocument();
   });
 
   it("zeigt die finale Erstellung ausschließlich in der Vorschau und speichert nur einmal", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<DocumentEditor type="offer" seed={{ ...seed, id: "offer-final", number: "ANG-0010" }} settings={settings} clients={clients} onClose={vi.fn()} onSaved={vi.fn()} useCreateComposer initial={{ clientId: "client-1", positions: [{ id: "p1", description: "Beratung", quantity: 1, unit: "Std", price: 100, taxCategory: "STANDARD", taxRate: 19 }], status: OfferStatus.DRAFT, validUntil: "2025-01-31", currency: "EUR" }} />, { route: "/app/offers/new" });
+    renderWithProviders(
+      <DocumentEditor
+        type="offer"
+        seed={{ ...seed, id: "offer-final", number: "ANG-0010" }}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        useCreateComposer
+        initial={{
+          clientId: "client-1",
+          positions: [
+            {
+              id: "p1",
+              description: "Beratung",
+              quantity: 1,
+              unit: "Std",
+              price: 100,
+              taxCategory: "STANDARD",
+              taxRate: 19,
+            },
+          ],
+          status: OfferStatus.DRAFT,
+          validUntil: "2025-01-31",
+          currency: "EUR",
+        }}
+      />,
+      { route: "/app/offers/new" },
+    );
 
-    expect(screen.queryByRole("button", { name: /^Angebot erstellen$/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }));
-    await user.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
-    await user.click(screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }));
-    await user.click(screen.getByRole("button", { name: "Weiter zur Vorschau" }));
+    expect(
+      screen.queryByRole("button", { name: /^Angebot erstellen$/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Positionen" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zur Vorschau" }),
+    );
     expect(screen.getByText("Vorschau & Abschluss")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Angebot erstellen$/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Angebot erstellen$/ }),
+    );
     await waitFor(() => expect(saveOfferMock).toHaveBeenCalledTimes(1));
   });
 
-  it("uses the shared composer for new invoices", () => {
+  it("führt neue Rechnungen durch denselben fünfstufigen Erstellungsablauf", async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <DocumentEditor
         type="invoice"
@@ -213,16 +309,60 @@ describe("DocumentEditor send email status", () => {
         onClose={vi.fn()}
         onSaved={vi.fn()}
         useCreateComposer
-        initial={{ clientId: "client-1", positions: [], status: InvoiceStatus.DRAFT }}
+        initial={{
+          clientId: "client-1",
+          positions: [
+            {
+              id: "invoice-position",
+              description: "Beratung",
+              quantity: 1,
+              unit: "Std",
+              price: 100,
+              taxCategory: "STANDARD",
+              taxRate: 19,
+            },
+          ],
+          status: InvoiceStatus.DRAFT,
+        }}
       />,
-      { route: "/app/invoices/new" }
+      { route: "/app/invoices/new" },
     );
 
-    expect(screen.getByRole("heading", { name: /rechnung erstellen/i })).toBeVisible();
-    expect(screen.getByText("Dokumentdaten")).toBeVisible();
-    expect(screen.getByText("Positionen")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: /rechnung erstellen/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("navigation", {
+        name: /fortschritt rechnungserstellung/i,
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /1 Kunde/ })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    expect(screen.queryByLabelText("Rechnungsnummer")).not.toBeInTheDocument();
     expect(screen.getByText("Zusammenfassung")).toBeVisible();
-    expect(screen.getByRole("button", { name: /rechnung erstellen/i })).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }),
+    );
+    expect(screen.getByLabelText("Rechnungsnummer")).toBeDisabled();
+    expect(screen.getByLabelText("Leistungsdatum")).toHaveValue("2025-01-01");
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Positionen" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Weiter zur Vorschau" }),
+    );
+
+    expect(screen.getByText("Vorschau & Abschluss")).toBeVisible();
+    expect(screen.getAllByText("RE-0001")).not.toHaveLength(0);
+    expect(
+      screen.getByRole("button", { name: /^Rechnung erstellen$/ }),
+    ).toBeEnabled();
   });
 
   it("sets status SENT on successful send", async () => {
@@ -245,27 +385,32 @@ describe("DocumentEditor send email status", () => {
     const user = userEvent.setup();
 
     renderWithProviders(
-          <DocumentEditor
-            type="invoice"
-            seed={seed}
-            settings={settings}
-            clients={clients}
-            onClose={vi.fn()}
-            onSaved={vi.fn()}
-            initial={{
-              id: "inv-1",
-              clientId: "client-1",
-              positions: [],
-              status: InvoiceStatus.ISSUED,
-              paymentTermsDays: 14,
-            }}
-          />,
-      { route: "/app/invoices/inv-1" }
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        initial={{
+          id: "inv-1",
+          clientId: "client-1",
+          positions: [],
+          status: InvoiceStatus.ISSUED,
+          paymentTermsDays: 14,
+        }}
+      />,
+      { route: "/app/invoices/inv-1" },
     );
 
     await user.click(screen.getByRole("button", { name: /mehr optionen/i }));
-    await user.click(screen.getByRole("button", { name: /per e-mail senden/i }));
-    await user.type(screen.getByPlaceholderText("to@example.com"), "client@example.com");
+    await user.click(
+      screen.getByRole("button", { name: /per e-mail senden/i }),
+    );
+    await user.type(
+      screen.getByPlaceholderText("to@example.com"),
+      "client@example.com",
+    );
     await user.click(screen.getByRole("button", { name: /^senden$/i }));
 
     await waitFor(() => {
@@ -275,7 +420,6 @@ describe("DocumentEditor send email status", () => {
     await waitFor(() => {
       expect(getInvoiceMock).toHaveBeenCalled();
     });
-
   });
 
   it("keeps status unchanged on failed send", async () => {
@@ -284,26 +428,31 @@ describe("DocumentEditor send email status", () => {
     const user = userEvent.setup();
 
     renderWithProviders(
-          <DocumentEditor
-            type="invoice"
-            seed={seed}
-            settings={settings}
-            clients={clients}
-            onClose={vi.fn()}
-            onSaved={vi.fn()}
-            initial={{
-              id: "inv-1",
-              clientId: "client-1",
-              positions: [],
-              status: InvoiceStatus.ISSUED,
-            }}
-          />,
-      { route: "/app/invoices/inv-1" }
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        initial={{
+          id: "inv-1",
+          clientId: "client-1",
+          positions: [],
+          status: InvoiceStatus.ISSUED,
+        }}
+      />,
+      { route: "/app/invoices/inv-1" },
     );
 
     await user.click(screen.getByRole("button", { name: /mehr optionen/i }));
-    await user.click(screen.getByRole("button", { name: /per e-mail senden/i }));
-    await user.type(screen.getByPlaceholderText("to@example.com"), "client@example.com");
+    await user.click(
+      screen.getByRole("button", { name: /per e-mail senden/i }),
+    );
+    await user.type(
+      screen.getByPlaceholderText("to@example.com"),
+      "client@example.com",
+    );
     await user.click(screen.getByRole("button", { name: /^senden$/i }));
 
     await waitFor(() => {
@@ -317,25 +466,24 @@ describe("DocumentEditor send email status", () => {
     consoleSpy.mockRestore();
   });
 
-
   it("is read-only when invoice is locked", async () => {
     renderWithProviders(
-          <DocumentEditor
-            type="invoice"
-            seed={seed}
-            settings={settings}
-            clients={clients}
-            onClose={vi.fn()}
-            onSaved={vi.fn()}
-            initial={{
-              id: "inv-1",
-              clientId: "client-1",
-              positions: [],
-              status: InvoiceStatus.ISSUED,
-              isLocked: true,
-            }}
-          />,
-      { route: "/app/invoices/inv-1" }
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        initial={{
+          id: "inv-1",
+          clientId: "client-1",
+          positions: [],
+          status: InvoiceStatus.ISSUED,
+          isLocked: true,
+        }}
+      />,
+      { route: "/app/invoices/inv-1" },
     );
 
     const numberInput = screen.getByLabelText("Nummer");
@@ -343,30 +491,38 @@ describe("DocumentEditor send email status", () => {
   });
 
   it("does not send when email is not configured", async () => {
-    sendDocumentEmailMock.mockResolvedValue({ ok: false, code: "EMAIL_NOT_CONFIGURED" });
+    sendDocumentEmailMock.mockResolvedValue({
+      ok: false,
+      code: "EMAIL_NOT_CONFIGURED",
+    });
     const user = userEvent.setup();
 
     renderWithProviders(
-          <DocumentEditor
-            type="invoice"
-            seed={seed}
-            settings={settings}
-            clients={clients}
-            onClose={vi.fn()}
-            onSaved={vi.fn()}
-            initial={{
-              id: "inv-1",
-              clientId: "client-1",
-              positions: [],
-              status: InvoiceStatus.ISSUED,
-            }}
-          />,
-      { route: "/app/invoices/inv-1" }
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        initial={{
+          id: "inv-1",
+          clientId: "client-1",
+          positions: [],
+          status: InvoiceStatus.ISSUED,
+        }}
+      />,
+      { route: "/app/invoices/inv-1" },
     );
 
     await user.click(screen.getByRole("button", { name: /mehr optionen/i }));
-    await user.click(screen.getByRole("button", { name: /per e-mail senden/i }));
-    await user.type(screen.getByPlaceholderText("to@example.com"), "client@example.com");
+    await user.click(
+      screen.getByRole("button", { name: /per e-mail senden/i }),
+    );
+    await user.type(
+      screen.getByPlaceholderText("to@example.com"),
+      "client@example.com",
+    );
     await user.click(screen.getByRole("button", { name: /^senden$/i }));
 
     await waitFor(() => {
