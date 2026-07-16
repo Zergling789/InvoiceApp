@@ -6,6 +6,7 @@ type AppNumberInputProps = Omit<
 > & {
   value: number | null | undefined;
   onValueChange: (value: number) => void;
+  onEmpty?: () => void;
   min?: number;
   max?: number;
   step?: number | "any";
@@ -20,6 +21,7 @@ const parseInputValue = (text: string) => Number(text.replace(",", "."));
 export function AppNumberInput({
   value,
   onValueChange,
+  onEmpty,
   min,
   max,
   step,
@@ -64,7 +66,10 @@ export function AppNumberInput({
         const nextText = event.target.value;
         if (!/^-?\d*(?:[.,]\d*)?$/.test(nextText)) return;
         setText(nextText);
-        if (nextText.trim() === "") return;
+        if (nextText.trim() === "") {
+          onEmpty?.();
+          return;
+        }
 
         const parsed = parseInputValue(nextText);
         if (

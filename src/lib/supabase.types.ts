@@ -991,6 +991,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      save_position_group: {
+        Args: {
+          p_category: string
+          p_description: string
+          p_group_id: string | null
+          p_items: Json
+          p_name: string
+        }
+        Returns: string
+      }
       convert_offer_to_invoice: {
         Args: { offer_id: string }
         Returns: {
