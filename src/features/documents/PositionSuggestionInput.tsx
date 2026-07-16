@@ -5,6 +5,7 @@ import { findPositionSuggestions, recordPositionSuggestionEvent, type PositionSu
 import { formatMoney } from "@/utils/money";
 
 type Props = {
+  ariaLabel?: string;
   value: string;
   disabled?: boolean;
   customerId?: string;
@@ -14,7 +15,7 @@ type Props = {
   onSelect: (suggestion: PositionSuggestion) => void;
 };
 
-export function PositionSuggestionInput({ value, disabled, customerId, documentType, currency, onChange, onSelect }: Props) {
+export function PositionSuggestionInput({ ariaLabel, value, disabled, customerId, documentType, currency, onChange, onSelect }: Props) {
   const listboxId = useId();
   const request = useRef(0);
   const [suggestions, setSuggestions] = useState<PositionSuggestion[]>([]);
@@ -59,6 +60,7 @@ export function PositionSuggestionInput({ value, disabled, customerId, documentT
     <input
       className="w-full border rounded-lg p-2 text-sm"
       placeholder="Bezeichnung"
+      aria-label={ariaLabel}
       value={value}
       disabled={disabled}
       role="combobox"

@@ -1160,7 +1160,7 @@ export function DocumentEditor({
                     <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
                       {(formData.positions ?? []).map((pos, idx) => (
                         <div key={pos.id ?? idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_1.4fr_auto] sm:items-center">
-                          <PositionSuggestionInput value={pos.description ?? ""} disabled={disabled} customerId={formData.clientId} documentType={type} currency={documentCurrency} onChange={(value) => updatePosition(idx, "description", value)} onSelect={(suggestion) => applyPositionSuggestion(idx, suggestion)} />
+                          <PositionSuggestionInput ariaLabel={`Beschreibung ${idx + 1}`} value={pos.description ?? ""} disabled={disabled} customerId={formData.clientId} documentType={type} currency={documentCurrency} onChange={(value) => updatePosition(idx, "description", value)} onSelect={(suggestion) => applyPositionSuggestion(idx, suggestion)} />
                           <AppNumberInput
                             className="w-full border rounded-lg p-2 text-sm"
                             placeholder="Menge"
@@ -1775,7 +1775,7 @@ export function DocumentEditor({
               {(formData.positions ?? []).map((pos, idx) => (
                 <div key={pos.id ?? idx} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <div className="flex-[3]">
-                    <PositionSuggestionInput value={pos.description ?? ""} disabled={disabled} customerId={formData.clientId} documentType={type} currency={documentCurrency} onChange={(value) => updatePosition(idx, "description", value)} onSelect={(suggestion) => applyPositionSuggestion(idx, suggestion)} />
+                    <PositionSuggestionInput ariaLabel={`Beschreibung ${idx + 1}`} value={pos.description ?? ""} disabled={disabled} customerId={formData.clientId} documentType={type} currency={documentCurrency} onChange={(value) => updatePosition(idx, "description", value)} onSelect={(suggestion) => applyPositionSuggestion(idx, suggestion)} />
                   </div>
 
                   <div className="w-full sm:w-20">

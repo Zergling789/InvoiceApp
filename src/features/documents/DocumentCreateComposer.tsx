@@ -363,6 +363,7 @@ export function DocumentCreateComposer({
                         className="grid gap-2 rounded-2xl border border-[var(--app-border)] p-3 md:grid-cols-[minmax(0,1fr)_85px_90px_120px_44px] md:items-center"
                       >
                         <PositionSuggestionInput
+                          ariaLabel={`Beschreibung ${index + 1}`}
                           value={position.description}
                           disabled={disabled}
                           customerId={data.clientId}
