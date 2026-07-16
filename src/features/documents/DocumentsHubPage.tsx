@@ -24,6 +24,7 @@ import {
 } from "@/features/documents/state/formatPhaseLabel";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
+import { getClientDisplayName, getClientPersonName } from "@/domain/models/Client";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
@@ -34,6 +35,9 @@ type DocumentRow = {
   type: "offer" | "invoice";
   number: string;
   clientName: string;
+  firstName: string;
+  lastName: string;
+  companyName: string;
   date: string;
   createdAt?: string;
   amountLabel: string;
@@ -43,6 +47,27 @@ type DocumentRow = {
   dueDate?: string;
   validUntil?: string;
   isOverdue?: boolean;
+};
+
+const splitPersonName = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return { firstName: parts[0] ?? "", lastName: "" };
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts.at(-1) ?? "",
+  };
+};
+
+const getClientColumns = (client: Client | undefined, fallbackName = "", fallbackCompany = "") => {
+  const personName = client ? getClientPersonName(client) : fallbackName;
+  const splitName = splitPersonName(personName);
+  const companyName = client?.companyName.trim() || fallbackCompany.trim();
+  return {
+    firstName: client?.firstName?.trim() || splitName.firstName,
+    lastName: client?.lastName?.trim() || splitName.lastName,
+    companyName,
+    clientName: client ? getClientDisplayName(client) : companyName || personName || "Unbekannter Kunde",
+  };
 };
 
 
@@ -195,9 +220,9 @@ export default function DocumentsHubPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [newMenuOpen, statusMenuOpen]);
 
-  const clientNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    clients.forEach((client) => map.set(client.id, client.companyName));
+  const clientById = useMemo(() => {
+    const map = new Map<string, Client>();
+    clients.forEach((client) => map.set(client.id, client));
     return map;
   }, [clients]);
 
@@ -251,15 +276,16 @@ export default function DocumentsHubPage() {
         ? []
         : invoices.map((invoice) => {
             const phase = getInvoicePhase(invoice, today);
+            const clientColumns = getClientColumns(
+              clientById.get(invoice.clientId),
+              invoice.clientContactPerson?.trim() || invoice.clientName?.trim() || "",
+              invoice.clientCompanyName?.trim() || "",
+            );
             return {
               id: invoice.id,
               type: "invoice",
               number: invoice.number ?? "Entwurf",
-              clientName:
-                invoice.clientName?.trim() ||
-                invoice.clientCompanyName?.trim() ||
-                clientNameById.get(invoice.clientId) ||
-                "Unbekannter Kunde",
+              ...clientColumns,
               date: invoice.date,
               createdAt: invoice.createdAt,
               amountLabel: formatMoney(
@@ -285,11 +311,12 @@ export default function DocumentsHubPage() {
         : offers.map((offer) => {
             const phase = getOfferPhase(offer);
             const currency = offer.currency ?? settings?.currency ?? "EUR";
+            const clientColumns = getClientColumns(clientById.get(offer.clientId));
             return {
               id: offer.id,
               type: "offer",
               number: offer.number,
-              clientName: clientNameById.get(offer.clientId) ?? "Unbekannter Kunde",
+              ...clientColumns,
               date: offer.date,
               createdAt: offer.createdAt,
               amountLabel: formatMoney(
@@ -305,7 +332,7 @@ export default function DocumentsHubPage() {
           });
 
     return [...offerRows, ...invoiceRows];
-  }, [clientNameById, invoices, offers, mode, settings]);
+  }, [clientById, invoices, offers, mode, settings]);
 
   const sortedRows = useMemo(() => {
     return sortDocumentsNewestFirst(rows);
@@ -315,7 +342,9 @@ export default function DocumentsHubPage() {
     let next = sortedRows;
     if (debouncedSearch) {
       next = next.filter((row) =>
-        [row.number, row.clientName].some((value) => value.toLowerCase().includes(debouncedSearch))
+        [row.number, row.clientName, row.firstName, row.lastName, row.companyName].some((value) =>
+          value.toLowerCase().includes(debouncedSearch),
+        )
       );
     }
     if (selectedStatuses.length) {
@@ -328,6 +357,15 @@ export default function DocumentsHubPage() {
     setSelectedStatuses((prev) =>
       prev.includes(status) ? prev.filter((item) => item !== status) : [...prev, status]
     );
+  };
+
+  const openDocument = (row: DocumentRow) => {
+    navigate(`/app/${row.type === "invoice" ? "invoices" : "offers"}/${row.id}`, {
+      state: {
+        backgroundLocation: location,
+        returnTo: `${location.pathname}${location.search}`,
+      },
+    });
   };
 
   const openNewEditor = (type: "invoice" | "offer") => {
@@ -530,20 +568,69 @@ export default function DocumentsHubPage() {
           <div className="text-sm text-gray-500">Keine Dokumente gefunden.</div>
         </AppCard>
       ) : (
-        <div className="space-y-3">
+        <div>
+          <div className="hidden overflow-x-auto rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] md:block">
+            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+              <thead className="border-b border-[var(--app-border)] bg-black/[0.025] text-xs uppercase tracking-wide text-[var(--app-muted)] dark:bg-white/[0.04]">
+                <tr>
+                  <th className="w-[17%] px-4 py-3 font-semibold">Dokument</th>
+                  <th className="w-[13%] px-4 py-3 font-semibold">Vorname</th>
+                  <th className="w-[13%] px-4 py-3 font-semibold">Nachname</th>
+                  <th className="w-[16%] px-4 py-3 font-semibold">Firma</th>
+                  <th className="w-[18%] px-4 py-3 font-semibold">Datum / Frist</th>
+                  <th className="w-[12%] px-4 py-3 text-right font-semibold">Betrag</th>
+                  <th className="w-[11%] px-4 py-3 text-right font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--app-border)]">
+                {filteredRows.map((row) => {
+                  const deadline = row.type === "invoice" ? row.dueDate : row.validUntil;
+                  return (
+                    <tr
+                      key={`${row.type}-${row.id}`}
+                      tabIndex={0}
+                      onClick={() => openDocument(row)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openDocument(row);
+                        }
+                      }}
+                      className={`cursor-pointer transition-colors hover:bg-[var(--app-primary)]/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--app-primary)] ${row.isOverdue ? "bg-red-500/[0.06]" : ""}`}
+                    >
+                      <td className="px-4 py-4">
+                        <div className="font-semibold text-[var(--app-text)]">{row.number}</div>
+                        <div className="mt-1 text-xs text-[var(--app-muted)]">
+                          {row.type === "invoice" ? "Rechnung" : "Angebot"}
+                        </div>
+                      </td>
+                      <td className="truncate px-4 py-4" title={row.firstName || undefined}>{row.firstName || "–"}</td>
+                      <td className="truncate px-4 py-4" title={row.lastName || undefined}>{row.lastName || "–"}</td>
+                      <td className="truncate px-4 py-4" title={row.companyName || undefined}>{row.companyName || "–"}</td>
+                      <td className="px-4 py-4">
+                        <div>{formatDate(row.date, "de-DE")}</div>
+                        {deadline && (
+                          <div className={`mt-1 text-xs ${row.isOverdue ? "font-medium text-red-600" : "text-[var(--app-muted)]"}`}>
+                            {row.type === "invoice" ? "Fällig" : "Gültig bis"}: {formatDate(deadline, "de-DE")}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-right font-semibold tabular-nums">{row.amountLabel}</td>
+                      <td className="px-4 py-4 text-right"><AppBadge color={row.statusTone}>{row.statusLabel}</AppBadge></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3 md:hidden">
           {filteredRows.map((row) => (
             <button
               key={`${row.type}-${row.id}`}
               type="button"
               className="text-left w-full"
-              onClick={() =>
-                navigate(`/app/${row.type === "invoice" ? "invoices" : "offers"}/${row.id}`, {
-                  state: {
-                    backgroundLocation: location,
-                    returnTo: `${location.pathname}${location.search}`,
-                  },
-                })
-              }
+              onClick={() => openDocument(row)}
             >
               <AppCard
                 className={[
@@ -576,6 +663,7 @@ export default function DocumentsHubPage() {
               </AppCard>
             </button>
           ))}
+          </div>
         </div>
       )}
 

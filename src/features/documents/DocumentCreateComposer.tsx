@@ -243,20 +243,22 @@ export function DocumentCreateComposer({
                     const complete = index < stepIndex;
                     const reachable = index <= highestReachableIndex;
                     return (
-                      <li key={item.key}>
+                      <li key={item.key} className="min-w-0">
                         <button
                           type="button"
                           aria-current={active ? "step" : undefined}
                           disabled={!reachable}
                           onClick={() => goToStep(item.key)}
-                          className={`flex min-h-14 w-full items-center gap-2 rounded-xl border px-3 text-left text-sm transition-colors ${active ? "border-[var(--app-primary)] bg-blue-500/10 font-semibold text-[var(--app-primary)]" : complete ? "border-green-500/30 bg-green-500/10" : "border-[var(--app-border)] text-[var(--app-muted)]"}`}
+                          className={`flex min-h-14 w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl border px-3 text-left text-sm transition-colors ${active ? "border-[var(--app-primary)] bg-blue-500/10 font-semibold text-[var(--app-primary)]" : complete ? "border-green-500/30 bg-green-500/10" : "border-[var(--app-border)] text-[var(--app-muted)]"}`}
                         >
                           <span
                             className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${active ? "bg-[var(--app-primary)] text-white" : complete ? "bg-green-600 text-white" : "bg-black/5 dark:bg-white/10"}`}
                           >
                             {complete ? <Check size={15} /> : index + 1}
                           </span>
-                          <span>{item.label}</span>
+                          <span className="min-w-0 [overflow-wrap:anywhere] leading-tight">
+                            {item.label}
+                          </span>
                         </button>
                       </li>
                     );
