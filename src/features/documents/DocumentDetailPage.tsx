@@ -27,6 +27,7 @@ import * as invoiceService from "@/app/invoices/invoiceService";
 import * as offerService from "@/app/offers/offerService";
 import { downloadDocumentPdf, downloadInvoiceCii, downloadInvoiceZugferd } from "@/app/pdf/documentPdfService";
 import { createRecipientLink } from "@/app/recipient/recipientService";
+import { dbListDocumentActivity } from "@/db/documentActivityDb";
 import { formatDocumentStatus, formatInvoiceDisplayStatus } from "@/features/documents/utils/formatStatus";
 import {
   getDocumentCapabilities,
@@ -77,6 +78,36 @@ export const canCreateRecipientLink = (
         (docType === "offer" && (doc as Offer).status === OfferStatus.SENT))
   );
 
+type DetailActivityEvent = Awaited<ReturnType<typeof dbListDocumentActivity>>[number];
+
+export const buildDocumentTimeline = (
+  doc: Invoice | Offer,
+  activityEvents: DetailActivityEvent[] = []
+) => {
+  const items: Array<{ label: string; value: string }> = [];
+  if (doc.date) items.push({ label: "Erstellt", value: formatDate(doc.date, "de-DE") });
+  if ("finalizedAt" in doc && doc.finalizedAt) {
+    items.push({ label: "Finalisiert", value: formatDate(doc.finalizedAt, "de-DE") });
+  }
+  if (doc.sentAt || doc.lastSentAt) {
+    const sentDate = doc.lastSentAt ?? doc.sentAt;
+    if (sentDate) items.push({ label: "Gesendet", value: formatDate(sentDate, "de-DE") });
+  }
+  const rejectedEvent = activityEvents.find(
+    (event) => event.event_type.toUpperCase() === "REJECTED"
+  );
+  if ("validUntil" in doc && doc.status === OfferStatus.REJECTED && rejectedEvent) {
+    items.push({
+      label: "Angebot abgelehnt",
+      value: formatDate(rejectedEvent.created_at, "de-DE"),
+    });
+  }
+  if ("paymentDate" in doc && doc.paymentDate) {
+    items.push({ label: "Bezahlt", value: formatDate(doc.paymentDate, "de-DE") });
+  }
+  return items;
+};
+
 export default function DocumentDetailPage({ forcedType, onDocumentsChange }: DocumentDetailPageProps) {
   const { type, id } = useParams<{ type?: "offer" | "invoice"; id: string }>();
   const navigate = useNavigate();
@@ -89,6 +120,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   const [doc, setDoc] = useState<Invoice | Offer | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [activityEvents, setActivityEvents] = useState<DetailActivityEvent[]>([]);
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendTemplateType, setSendTemplateType] = useState<
     "reminder" | "dunning" | "followup" | undefined
@@ -108,15 +140,17 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
       setLoading(true);
       setError(null);
       try {
-        const [clientData, settingsData, documentData] = await Promise.all([
+        const [clientData, settingsData, documentData, documentActivity] = await Promise.all([
           clientService.list(),
           fetchSettings(),
           docType === "invoice" && id ? invoiceService.getInvoice(id) : offerService.getOffer(id ?? ""),
+          id ? dbListDocumentActivity(docType, id) : Promise.resolve([]),
         ]);
         if (!mounted) return;
         setClients(clientData);
         setSettings(settingsData);
         setDoc(documentData ?? null);
+        setActivityEvents(documentActivity);
         if (!documentData) {
           setError("Dokument nicht gefunden.");
         }
@@ -136,8 +170,12 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     const channel = supabase
       .channel(`offer-recipient-response-${id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "offers", filter: `id=eq.${id}` }, async () => {
-        const updated = await offerService.getOffer(id);
+        const [updated, updatedActivity] = await Promise.all([
+          offerService.getOffer(id),
+          dbListDocumentActivity("offer", id),
+        ]);
         if (updated) setDoc(updated);
+        setActivityEvents(updatedActivity);
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -170,20 +208,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
 
   const timeline = useMemo(() => {
     if (!doc) return [];
-    const items: Array<{ label: string; value: string }> = [];
-    if (doc.date) items.push({ label: "Erstellt", value: formatDate(doc.date, "de-DE") });
-    if ("finalizedAt" in doc && doc.finalizedAt) {
-      items.push({ label: "Finalisiert", value: formatDate(doc.finalizedAt, "de-DE") });
-    }
-    if (doc.sentAt || doc.lastSentAt) {
-      const sentDate = doc.lastSentAt ?? doc.sentAt;
-      if (sentDate) items.push({ label: "Gesendet", value: formatDate(sentDate, "de-DE") });
-    }
-    if ("paymentDate" in doc && doc.paymentDate) {
-      items.push({ label: "Bezahlt", value: formatDate(doc.paymentDate, "de-DE") });
-    }
-    return items;
-  }, [doc]);
+    return buildDocumentTimeline(doc, activityEvents);
+  }, [activityEvents, doc]);
 
   const defaultSubject = useMemo(() => {
     if (!doc || !settings) return "";
