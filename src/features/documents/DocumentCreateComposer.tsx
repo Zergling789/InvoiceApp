@@ -18,6 +18,7 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { AppNumberInput } from "@/ui/AppNumberInput";
 import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
+import { getClientDisplayName } from "@/domain/models/Client";
 
 type Props = {
   type: "offer" | "invoice";
@@ -309,7 +310,7 @@ export function DocumentCreateComposer({
                       <option value="">Kunde suchen oder auswählen</option>
                       {clients.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.companyName}
+                          {getClientDisplayName(item)}
                         </option>
                       ))}
                     </select>
@@ -321,7 +322,7 @@ export function DocumentCreateComposer({
                         />
                         <div>
                           <div className="text-sm font-semibold">
-                            {client.companyName}
+                            {getClientDisplayName(client)}
                           </div>
                           <div className="mt-1 text-xs text-[var(--app-muted)]">
                             {[client.contactPerson, client.email]
@@ -867,7 +868,7 @@ export function DocumentCreateComposer({
                           Kunde
                         </div>
                         <div className="mt-1 font-medium">
-                          {client?.companyName ?? "Noch nicht angegeben"}
+                          {client ? getClientDisplayName(client) : "Noch nicht angegeben"}
                         </div>
                       </div>
                       <div className="rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.04]">
@@ -963,7 +964,7 @@ export function DocumentCreateComposer({
                 <div>
                   <div className="text-xs text-[var(--app-muted)]">Kunde</div>
                   <div className="text-sm font-medium">
-                    {client?.companyName || "Noch nicht angegeben"}
+                    {client ? getClientDisplayName(client) : "Noch nicht angegeben"}
                   </div>
                 </div>
               </div>

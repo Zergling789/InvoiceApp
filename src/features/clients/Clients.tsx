@@ -9,6 +9,7 @@ import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { useClients, useDeleteClient, useSaveClient } from "@/app/clients/clientQueries";
 import CustomerForm from "@/features/clients/CustomerForm";
+import { getClientDisplayName } from "@/domain/models/Client";
 
 export default function Clients() {
   const { clients, loading, error, refresh } = useClients();
@@ -37,16 +38,19 @@ export default function Clients() {
 
   const saveClient = async () => {
     if (!editing) return;
-    const name = editing.companyName.trim();
-    if (!name) {
-      toast.error("Firmenname fehlt.");
+    const firstName = editing.firstName?.trim() ?? "";
+    const lastName = editing.lastName?.trim() ?? "";
+    if (!firstName || !lastName) {
+      toast.error("Vorname und Nachname sind erforderlich.");
       return;
     }
 
     await save({
       ...editing,
-      companyName: name,
-      contactPerson: editing.contactPerson ?? "",
+      companyName: editing.companyName.trim(),
+      firstName,
+      lastName,
+      contactPerson: `${firstName} ${lastName}`,
       email: editing.email ?? "",
       address: editing.address ?? "",
       notes: editing.notes ?? "",
@@ -110,7 +114,7 @@ export default function Clients() {
             {clients.map((c) => (
               <div key={c.id} className="py-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div className="font-semibold text-gray-900">{c.companyName}</div>
+                  <div className="font-semibold text-gray-900">{getClientDisplayName(c)}</div>
                   <div className="text-sm text-gray-600">
                     {c.contactPerson ? `${c.contactPerson} · ` : ""}
                     {c.email || "—"}

@@ -6,6 +6,7 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { ActionSheet } from "@/components/ui/ActionSheet";
 import BottomActionBar from "@/components/BottomActionBar";
+import { getClientDisplayName, getClientPersonName } from "@/domain/models/Client";
 
 type CustomerFormProps = { value: Client; initialValue: Client; onChange: (next: Client) => void; onSave: () => void; onCancel: () => void; onDelete?: () => void; isExisting: boolean; isBusy?: boolean; showHeader?: boolean; onDirtyChange?: (dirty: boolean) => void };
 type TextKey = "companyName" | "contactPerson" | "email" | "customerNumber" | "firstName" | "lastName" | "jobTitle" | "department" | "phone" | "mobile" | "website" | "street" | "houseNumber" | "addressAddition" | "postalCode" | "city" | "state" | "country" | "legalForm" | "industry" | "vatId" | "taxNumber" | "registrationNumber" | "invoiceEmail" | "source";
@@ -20,11 +21,13 @@ export function CustomerForm({ value, initialValue, onChange, onSave, onCancel, 
   const isDirty = useMemo(() => JSON.stringify(value) !== JSON.stringify(initialValue), [initialValue, value]);
   useEffect(() => { onDirtyChange?.(isDirty); }, [isDirty, onDirtyChange]);
 
-  const textField = (label: string, key: TextKey, options?: { type?: string; required?: boolean; placeholder?: string }) => <label className="text-sm font-medium">{label}{options?.required ? " *" : ""}<input type={options?.type ?? "text"} className={inputClass} value={String(value[key] ?? "")} placeholder={options?.placeholder} onChange={(event) => onChange({ ...value, [key]: event.target.value })} /></label>;
-  const contactName = [value.firstName, value.lastName].filter(Boolean).join(" ") || value.contactPerson || "Keine Kontaktperson";
+  const textField = (label: string, key: TextKey, options?: { type?: string; required?: boolean; placeholder?: string }) => <label className="text-sm font-medium">{label}{options?.required ? " *" : ""}<input type={options?.type ?? "text"} required={options?.required} className={inputClass} value={String(value[key] ?? "")} placeholder={options?.placeholder} onChange={(event) => onChange({ ...value, [key]: event.target.value })} /></label>;
+  const contactName = getClientPersonName(value) || "Keine Kontaktperson";
+  const displayName = getClientDisplayName(value);
+  const requiredNamesComplete = Boolean(value.firstName?.trim() && value.lastName?.trim());
   const structuredAddress = [[value.street, value.houseNumber].filter(Boolean).join(" "), value.addressAddition, [value.postalCode, value.city].filter(Boolean).join(" "), value.state, value.country].filter(Boolean).join("\n");
   const displayAddress = structuredAddress || value.address || "Keine Adresse hinterlegt";
-  const initials = (contactName !== "Keine Kontaktperson" ? contactName : value.companyName).split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "K";
+  const initials = (contactName !== "Keine Kontaktperson" ? contactName : displayName).split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "K";
 
   return <div className="space-y-5 bottom-action-spacer">
     {showHeader && <header className="flex items-start justify-between gap-3"><div><div className="app-eyebrow">Kundenakte</div><h2 className="mt-1 text-2xl font-semibold tracking-[-0.035em]">{isExisting ? value.companyName || "Kunde bearbeiten" : "Neuer Kunde"}</h2><p className="mt-1 text-sm text-[var(--app-muted)]">{value.customerNumber || "Noch keine Kundennummer"} · {isDirty ? "Ungespeicherte Änderungen" : "Alle Änderungen gespeichert"}</p></div>{isExisting && onDelete && <AppButton variant="ghost" onClick={() => setShowActions(true)}><MoreVertical size={16} />Mehr</AppButton>}</header>}
@@ -33,15 +36,15 @@ export function CustomerForm({ value, initialValue, onChange, onSave, onCancel, 
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
       <main className="min-w-0 space-y-4">
         <AppCard className="p-0 overflow-hidden"><div className="flex items-center gap-3 border-b border-[var(--app-border)] px-5 py-4"><UserRound size={18} /><div><div className="font-semibold">Kontakt</div><div className="text-xs text-[var(--app-muted)]">Die wichtigsten Daten auf einen Blick</div></div></div><div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
-          {textField("Firma", "companyName", { required: true })}{textField("Kundennummer", "customerNumber")}{textField("Kontaktperson", "contactPerson")}
-          {textField("Vorname", "firstName")}{textField("Nachname", "lastName")}{textField("Position", "jobTitle")}
+          {textField("Firma", "companyName")}{textField("Kundennummer", "customerNumber")}{textField("Kontaktperson", "contactPerson")}
+          {textField("Vorname", "firstName", { required: true })}{textField("Nachname", "lastName", { required: true })}{textField("Position", "jobTitle")}
           {textField("Abteilung", "department")}{textField("E-Mail", "email", { type: "email" })}{textField("Telefon", "phone", { type: "tel" })}
           {textField("Mobil", "mobile", { type: "tel" })}{textField("Webseite", "website", { type: "url", placeholder: "https://" })}
         </div></AppCard>
 
         <Section title="Adresse" summary={displayAddress.replace(/\n/g, ", ")} open={!value.address && !structuredAddress}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><div className="sm:col-span-2">{textField("Straße", "street")}</div>{textField("Hausnummer", "houseNumber")}{textField("Adresszusatz", "addressAddition")}{textField("PLZ", "postalCode")}{textField("Ort", "city")}{textField("Bundesland", "state")}{textField("Land", "country")}</div>
-          <div className="mt-4 rounded-xl bg-black/[0.025] p-3 text-xs leading-5 text-[var(--app-muted)] dark:bg-white/[0.04]"><div className="font-semibold text-[var(--app-text)]">Dokumentvorschau</div><div className="mt-1 whitespace-pre-line">{value.companyName || "Firma"}\n{contactName !== "Keine Kontaktperson" ? `${contactName}\n` : ""}{displayAddress}</div></div>
+          <div className="mt-4 rounded-xl bg-black/[0.025] p-3 text-xs leading-5 text-[var(--app-muted)] dark:bg-white/[0.04]"><div className="font-semibold text-[var(--app-text)]">Dokumentvorschau</div><div className="mt-1 whitespace-pre-line">{value.companyName ? `${value.companyName}\n` : ""}{contactName !== "Keine Kontaktperson" ? `${contactName}\n` : ""}{displayAddress}</div></div>
           {value.address && !structuredAddress && <label className="mt-4 block text-sm font-medium">Bestehende kombinierte Adresse<textarea rows={3} className={inputClass} value={value.address} onChange={(event) => onChange({ ...value, address: event.target.value })} /></label>}
         </Section>
 
@@ -59,7 +62,7 @@ export function CustomerForm({ value, initialValue, onChange, onSave, onCancel, 
       <aside className="xl:sticky xl:top-4"><AppCard className="p-5"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--app-primary)]/10 font-semibold text-[var(--app-primary)]">{initials}</div><div className="min-w-0"><div className="truncate font-semibold">{contactName}</div><div className="truncate text-sm text-[var(--app-muted)]">{value.jobTitle || value.companyName || "Neuer Kontakt"}</div></div></div><div className="mt-5 space-y-3 text-sm"><div className="flex gap-3"><Building2 size={16} className="mt-0.5 text-[var(--app-muted)]" /><span>{value.companyName || "Keine Firma"}</span></div><div className="flex gap-3"><Mail size={16} className="mt-0.5 text-[var(--app-muted)]" /><span className="break-all">{value.email || "Keine E-Mail"}</span></div><div className="flex gap-3"><Phone size={16} className="mt-0.5 text-[var(--app-muted)]" /><span>{value.phone || value.mobile || "Keine Telefonnummer"}</span></div></div><div className="mt-5 flex gap-2">{value.email && <a className="flex-1" href={`mailto:${value.email}`}><AppButton type="button" variant="secondary" className="w-full">E-Mail</AppButton></a>}{(value.phone || value.mobile) && <a className="flex-1" href={`tel:${value.phone || value.mobile}`}><AppButton type="button" variant="secondary" className="w-full">Anrufen</AppButton></a>}</div><div className="mt-5 border-t border-[var(--app-border)] pt-4"><div className="text-xs font-semibold uppercase tracking-wide text-[var(--app-muted)]">Adresse</div><div className="mt-2 whitespace-pre-line text-sm leading-6">{displayAddress}</div></div></AppCard></aside>
     </div>
 
-    <BottomActionBar primaryLabel="Änderungen speichern" onPrimary={onSave} primaryDisabled={isBusy || !value.companyName.trim()} loading={isBusy} secondaryLabel="Abbrechen" onSecondary={onCancel} />
+    <BottomActionBar primaryLabel="Änderungen speichern" onPrimary={onSave} primaryDisabled={isBusy || !requiredNamesComplete} loading={isBusy} secondaryLabel="Abbrechen" onSecondary={onCancel} />
   </div>;
 }
 

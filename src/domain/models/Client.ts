@@ -1,5 +1,28 @@
 import type { Client } from "../types";
 
+export function getClientPersonName(
+  client: Pick<Client, "firstName" | "lastName" | "contactPerson">,
+): string {
+  return (
+    [client.firstName?.trim(), client.lastName?.trim()]
+      .filter(Boolean)
+      .join(" ") || client.contactPerson.trim()
+  );
+}
+
+export function getClientDisplayName(
+  client: Pick<
+    Client,
+    "companyName" | "firstName" | "lastName" | "contactPerson"
+  >,
+): string {
+  return (
+    client.companyName.trim() ||
+    getClientPersonName(client) ||
+    "Unbekannter Kunde"
+  );
+}
+
 export function createEmptyClient(id: string): Client {
   return {
     id,

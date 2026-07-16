@@ -66,9 +66,10 @@ export default function CustomerCreatePage() {
   };
 
   const saveClient = async () => {
-    const name = draft.companyName.trim();
-    if (!name) {
-      toast.error("Firmenname fehlt.");
+    const firstName = draft.firstName?.trim() ?? "";
+    const lastName = draft.lastName?.trim() ?? "";
+    if (!firstName || !lastName) {
+      toast.error("Vorname und Nachname sind erforderlich.");
       return;
     }
 
@@ -76,8 +77,10 @@ export default function CustomerCreatePage() {
     try {
       await clientService.saveClient({
         ...draft,
-        companyName: name,
-        contactPerson: draft.contactPerson ?? "",
+        companyName: draft.companyName.trim(),
+        firstName,
+        lastName,
+        contactPerson: `${firstName} ${lastName}`,
         email: draft.email ?? "",
         address: draft.address ?? "",
         notes: draft.notes ?? "",
