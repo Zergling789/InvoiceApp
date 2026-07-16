@@ -14,6 +14,7 @@ import { formatMoney, getCurrencySymbol } from "@/utils/money";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { AppNumberInput } from "@/ui/AppNumberInput";
+import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
 
 type Props = {
   type: "offer" | "invoice";
@@ -35,6 +36,7 @@ type Props = {
   ) => void;
   onRemovePosition: (index: number) => void;
   onOpenAi: () => void;
+  onOpenGroups: () => void;
   onPreview: () => void;
   onCancel: () => void;
   onSave: () => void;
@@ -59,6 +61,7 @@ export function DocumentCreateComposer({
   onUpdatePosition,
   onRemovePosition,
   onOpenAi,
+  onOpenGroups,
   onPreview,
   onCancel,
   onSave,
@@ -338,15 +341,7 @@ export function DocumentCreateComposer({
                     </div>
                   </div>
                 </div>
-                <AppButton
-                  type="button"
-                  variant="secondary"
-                  onClick={onOpenAi}
-                  disabled={disabled}
-                >
-                  <Sparkles size={16} />
-                  Mit KI erstellen
-                </AppButton>
+                <div className="flex flex-wrap gap-2"><AppButton type="button" variant="secondary" onClick={onOpenGroups} disabled={disabled}>Positionsgruppe</AppButton><AppButton type="button" variant="secondary" onClick={onOpenAi} disabled={disabled}><Sparkles size={16} /> Mit KI erstellen</AppButton></div>
               </div>
               <div className="p-5">
                 {data.positions.length === 0 ? (
@@ -367,19 +362,21 @@ export function DocumentCreateComposer({
                         key={position.id}
                         className="grid gap-2 rounded-2xl border border-[var(--app-border)] p-3 md:grid-cols-[minmax(0,1fr)_85px_90px_120px_44px] md:items-center"
                       >
-                        <input
-                          aria-label={`Beschreibung ${index + 1}`}
-                          className={inputClass}
-                          placeholder="Beschreibung"
+                        <PositionSuggestionInput
                           value={position.description}
                           disabled={disabled}
-                          onChange={(event) =>
-                            onUpdatePosition(
-                              index,
-                              "description",
-                              event.target.value,
-                            )
-                          }
+                          customerId={data.clientId}
+                          documentType={type}
+                          currency={data.currency ?? currency}
+                          onChange={(value) => onUpdatePosition(index, "description", value)}
+                          onSelect={(suggestion) => {
+                            onUpdatePosition(index, "description", suggestion.title);
+                            onUpdatePosition(index, "quantity", suggestion.quantity || 1);
+                            onUpdatePosition(index, "unit", suggestion.unit || "Stk");
+                            onUpdatePosition(index, "price", suggestion.lastPrice ?? suggestion.standardPrice ?? 0);
+                            if (suggestion.taxCategory) onUpdatePosition(index, "taxCategory", suggestion.taxCategory);
+                            if (suggestion.taxRate !== null) onUpdatePosition(index, "taxRate", suggestion.taxRate);
+                          }}
                         />
                         <AppNumberInput
                           aria-label={`Menge ${index + 1}`}

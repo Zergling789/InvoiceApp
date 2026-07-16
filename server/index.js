@@ -13,6 +13,7 @@ import { generateValidatedZugferd } from "./einvoice/zugferdGenerator.js";
 import { buildAccountExportZip, loadOwnedAccountData } from "./accountDataExport.js";
 import { processDueAccountDeletions, verifyWorkerSecret } from "./accountDeletionWorker.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
+import { rankPositionSuggestions } from "./positionSuggestions.js";
 import { extractBusinessCard } from "./ai/businessCard.js";
 import { createErrorReporter, evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
 import {
@@ -1137,6 +1138,164 @@ const enforceLegacyPayloadMatch = (body, payload) => {
   }
 };
 
+app.get("/api/positions/suggestions", requireAuth, async (req, res) => {
+  try {
+    const query = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const customerId = typeof req.query.customerId === "string" && /^[0-9a-f-]{36}$/i.test(req.query.customerId) ? req.query.customerId : null;
+    if (query.length < 2) return res.json({ suggestions: [] });
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const [templateResult, invoiceResult, offerResult, eventResult] = await Promise.all([
+      db.from("position_templates").select("id,kind,name,description,category,unit,default_quantity,default_unit_price,tax_category,tax_rate,product_number,manufacturer,image_url,usage_count,last_used_at").limit(100),
+      db.from("invoices").select("id,client_id,positions,created_at,updated_at").order("updated_at", { ascending: false }).limit(100),
+      db.from("offers").select("id,client_id,positions,created_at,updated_at").order("updated_at", { ascending: false }).limit(100),
+      db.from("position_suggestion_events").select("suggestion_id,action,created_at").order("created_at", { ascending: false }).limit(500),
+    ]);
+    const error = templateResult.error || invoiceResult.error || offerResult.error || eventResult.error;
+    if (error) throw error;
+    const suggestions = rankPositionSuggestions({
+      query,
+      customerId,
+      templates: templateResult.data ?? [],
+      invoices: invoiceResult.data ?? [],
+      offers: offerResult.data ?? [],
+      events: eventResult.data ?? [],
+    });
+    return res.json({ suggestions });
+  } catch (error) {
+    logRequestError(req, error, "POSITION_SUGGESTIONS_FAILED");
+    return sendError(res, 500, "POSITION_SUGGESTIONS_FAILED", "Positionsvorschläge konnten nicht geladen werden.", req);
+  }
+});
+
+app.get("/api/positions/templates", requireAuth, async (req, res) => {
+  try {
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { data, error } = await db.from("position_templates").select("*").order("name");
+    if (error) throw error;
+    return res.json({ templates: data ?? [] });
+  } catch (error) {
+    logRequestError(req, error, "POSITION_TEMPLATES_FAILED");
+    return sendError(res, 500, "POSITION_TEMPLATES_FAILED", "Positionskatalog konnte nicht geladen werden.", req);
+  }
+});
+
+app.post("/api/positions/templates", requireAuth, async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const kind = ["PRODUCT", "SERVICE", "TEMPLATE"].includes(body.kind) ? body.kind : "SERVICE";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const unit = typeof body.unit === "string" ? body.unit.trim() : "";
+    const taxCategory = ["STANDARD", "REDUCED", "ZERO", "EXEMPT", "SMALL_BUSINESS", "REVERSE_CHARGE"].includes(body.taxCategory) ? body.taxCategory : "STANDARD";
+    const taxRate = Number(body.taxRate);
+    const price = body.defaultUnitPrice === null || body.defaultUnitPrice === "" ? null : Number(body.defaultUnitPrice);
+    if (!name || name.length > 200 || !unit || unit.length > 30 || !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 || (price !== null && (!Number.isFinite(price) || price < 0))) {
+      return sendError(res, 400, "POSITION_TEMPLATE_INVALID", "Bitte prüfe Bezeichnung, Einheit, Preis und Steuer.", req);
+    }
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { data, error } = await db.from("position_templates").insert({
+      user_id: req.user.id, kind, name, unit,
+      description: String(body.description ?? "").trim().slice(0, 2000),
+      category: String(body.category ?? "").trim().slice(0, 100),
+      default_quantity: Number(body.defaultQuantity) > 0 ? Number(body.defaultQuantity) : 1,
+      default_unit_price: price, tax_category: taxCategory, tax_rate: taxRate,
+      product_number: body.productNumber ? String(body.productNumber).trim().slice(0, 100) : null,
+      manufacturer: body.manufacturer ? String(body.manufacturer).trim().slice(0, 200) : null,
+      image_url: body.imageUrl ? String(body.imageUrl).trim().slice(0, 2000) : null,
+    }).select("*").single();
+    if (error) throw error;
+    return res.status(201).json({ template: data });
+  } catch (error) {
+    logRequestError(req, error, "POSITION_TEMPLATE_SAVE_FAILED");
+    return sendError(res, 500, "POSITION_TEMPLATE_SAVE_FAILED", "Position konnte nicht gespeichert werden.", req);
+  }
+});
+
+app.delete("/api/positions/templates/:id", requireAuth, async (req, res) => {
+  try {
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { error } = await db.from("position_templates").delete().eq("id", req.params.id);
+    if (error) throw error;
+    return res.status(204).end();
+  } catch (error) {
+    logRequestError(req, error, "POSITION_TEMPLATE_DELETE_FAILED");
+    return sendError(res, 500, "POSITION_TEMPLATE_DELETE_FAILED", "Position konnte nicht gelöscht werden.", req);
+  }
+});
+
+app.get("/api/positions/groups", requireAuth, async (req, res) => {
+  try {
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { data, error } = await db.from("position_groups").select("*, position_group_items(*)").order("name");
+    if (error) throw error;
+    return res.json({ groups: (data ?? []).map((group) => ({ ...group, position_group_items: [...(group.position_group_items ?? [])].sort((a, b) => a.sort_order - b.sort_order) })) });
+  } catch (error) {
+    logRequestError(req, error, "POSITION_GROUPS_FAILED");
+    return sendError(res, 500, "POSITION_GROUPS_FAILED", "Positionsgruppen konnten nicht geladen werden.", req);
+  }
+});
+
+app.post("/api/positions/groups", requireAuth, async (req, res) => {
+  const db = createUserSupabaseClient(getBearerToken(req));
+  let groupId = null;
+  try {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
+    if (!name || name.length > 200 || items.length === 0) return sendError(res, 400, "POSITION_GROUP_INVALID", "Gruppenname und mindestens eine Position sind erforderlich.", req);
+    const { data: group, error: groupError } = await db.from("position_groups").insert({ user_id: req.user.id, name, description: String(req.body.description ?? "").slice(0, 2000), category: String(req.body.category ?? "").slice(0, 100) }).select("*").single();
+    if (groupError) throw groupError;
+    groupId = group.id;
+    const rows = items.map((item, index) => ({ user_id: req.user.id, position_group_id: group.id, position_template_id: item.positionTemplateId ?? null, title: String(item.title ?? "").trim().slice(0, 200), description: String(item.description ?? "").slice(0, 2000), quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1, unit: String(item.unit ?? "Stk").slice(0, 30), unit_price: item.unitPrice === null || item.unitPrice === "" ? null : Number(item.unitPrice), tax_category: ["STANDARD", "REDUCED", "ZERO", "EXEMPT", "SMALL_BUSINESS", "REVERSE_CHARGE"].includes(item.taxCategory) ? item.taxCategory : "STANDARD", tax_rate: Number.isFinite(Number(item.taxRate)) ? Number(item.taxRate) : 19, sort_order: index, optional: Boolean(item.optional) }));
+    if (rows.some((row) => !row.title || row.quantity <= 0 || row.unit_price !== null && (!Number.isFinite(row.unit_price) || row.unit_price < 0))) throw Object.assign(new Error("Invalid group item"), { status: 400, code: "POSITION_GROUP_INVALID" });
+    const { error: itemError } = await db.from("position_group_items").insert(rows);
+    if (itemError) throw itemError;
+    return res.status(201).json({ group: { ...group, position_group_items: rows } });
+  } catch (error) {
+    if (groupId) await db.from("position_groups").delete().eq("id", groupId);
+    logRequestError(req, error, "POSITION_GROUP_SAVE_FAILED");
+    return sendError(res, error?.status ?? 500, error?.code ?? "POSITION_GROUP_SAVE_FAILED", error?.status === 400 ? "Bitte prüfe die Positionen der Gruppe." : "Positionsgruppe konnte nicht gespeichert werden.", req);
+  }
+});
+
+app.delete("/api/positions/groups/:id", requireAuth, async (req, res) => {
+  try {
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { error } = await db.from("position_groups").delete().eq("id", req.params.id);
+    if (error) throw error;
+    return res.status(204).end();
+  } catch (error) {
+    logRequestError(req, error, "POSITION_GROUP_DELETE_FAILED");
+    return sendError(res, 500, "POSITION_GROUP_DELETE_FAILED", "Positionsgruppe konnte nicht gelöscht werden.", req);
+  }
+});
+
+app.post("/api/positions/suggestion-events", requireAuth, async (req, res) => {
+  try {
+    const allowedTypes = new Set(["PRODUCT", "SERVICE", "TEMPLATE", "HISTORY", "AI", "GROUP"]);
+    const allowedActions = new Set(["SHOWN", "SELECTED", "DISCARDED", "APPLIED", "EDITED", "PRICE_CHANGED"]);
+    const body = req.body ?? {};
+    if (!allowedTypes.has(body.suggestionType) || !allowedActions.has(body.action)) {
+      return sendError(res, 400, "POSITION_EVENT_INVALID", "Ungültiges Positionsereignis.", req);
+    }
+    const db = createUserSupabaseClient(getBearerToken(req));
+    const { error } = await db.from("position_suggestion_events").insert({
+      user_id: req.user.id,
+      customer_id: typeof body.customerId === "string" ? body.customerId : null,
+      document_type: body.documentType === "offer" ? "offer" : "invoice",
+      query: String(body.query ?? "").slice(0, 500),
+      suggestion_type: body.suggestionType,
+      suggestion_id: body.suggestionId ? String(body.suggestionId).slice(0, 200) : null,
+      action: body.action,
+      original_value: body.originalValue ?? null,
+      final_value: body.finalValue ?? null,
+    });
+    if (error) throw error;
+    return res.status(204).end();
+  } catch (error) {
+    logRequestError(req, error, "POSITION_EVENT_FAILED");
+    return sendError(res, 500, "POSITION_EVENT_FAILED", "Positionsereignis konnte nicht gespeichert werden.", req);
+  }
+});
+
 app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`ai_user_${req.user.id}`, 20);
@@ -1157,12 +1316,30 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
       ? req.body.currency
       : "EUR";
     const vatRate = Number.isFinite(Number(req.body?.vatRate)) ? Number(req.body.vatRate) : 0;
+    const customerId = typeof req.body?.customerId === "string" && /^[0-9a-f-]{36}$/i.test(req.body.customerId) ? req.body.customerId : null;
+    const userDb = createUserSupabaseClient(getBearerToken(req));
+    const [templateResult, invoiceResult, offerResult] = await Promise.all([
+      userDb.from("position_templates").select("id,kind,name,description,category,unit,default_quantity,default_unit_price,tax_category,tax_rate,product_number,manufacturer,image_url").limit(100),
+      userDb.from("invoices").select("id,client_id,positions,created_at,updated_at").order("updated_at", { ascending: false }).limit(100),
+      userDb.from("offers").select("id,client_id,positions,created_at,updated_at").order("updated_at", { ascending: false }).limit(100),
+    ]);
+    const contextError = templateResult.error || invoiceResult.error || offerResult.error;
+    if (contextError) throw contextError;
+    const priceCandidates = rankPositionSuggestions({
+      query: description,
+      customerId,
+      templates: templateResult.data ?? [],
+      invoices: invoiceResult.data ?? [],
+      offers: offerResult.data ?? [],
+      limit: 20,
+    });
     const draft = await generateInvoiceDraft({
       description,
       documentType,
       currency,
       vatRate,
       userId: req.user.id,
+      priceCandidates,
     });
     return res.json({ draft });
   } catch (error) {

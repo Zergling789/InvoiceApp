@@ -695,6 +695,30 @@ export type Database = {
         }
         Relationships: []
       }
+      position_templates: {
+        Row: { id: string; user_id: string; kind: string; name: string; description: string; category: string; unit: string; default_quantity: number | null; default_unit_price: number | null; tax_category: string; tax_rate: number; product_number: string | null; manufacturer: string | null; image_url: string | null; usage_count: number; last_used_at: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; user_id: string; kind?: string; name: string; description?: string; category?: string; unit?: string; default_quantity?: number | null; default_unit_price?: number | null; tax_category?: string; tax_rate?: number; product_number?: string | null; manufacturer?: string | null; image_url?: string | null; usage_count?: number; last_used_at?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; user_id?: string; kind?: string; name?: string; description?: string; category?: string; unit?: string; default_quantity?: number | null; default_unit_price?: number | null; tax_category?: string; tax_rate?: number; product_number?: string | null; manufacturer?: string | null; image_url?: string | null; usage_count?: number; last_used_at?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      position_groups: {
+        Row: { id: string; user_id: string; name: string; description: string; category: string; created_at: string; updated_at: string }
+        Insert: { id?: string; user_id: string; name: string; description?: string; category?: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; user_id?: string; name?: string; description?: string; category?: string; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      position_group_items: {
+        Row: { id: string; user_id: string; position_group_id: string; position_template_id: string | null; title: string; description: string; quantity: number; unit: string; unit_price: number | null; tax_category: string; tax_rate: number; sort_order: number; optional: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; user_id: string; position_group_id: string; position_template_id?: string | null; title: string; description?: string; quantity?: number; unit?: string; unit_price?: number | null; tax_category?: string; tax_rate?: number; sort_order?: number; optional?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; user_id?: string; position_group_id?: string; position_template_id?: string | null; title?: string; description?: string; quantity?: number; unit?: string; unit_price?: number | null; tax_category?: string; tax_rate?: number; sort_order?: number; optional?: boolean; created_at?: string; updated_at?: string }
+        Relationships: [{ foreignKeyName: "position_group_items_position_group_id_fkey"; columns: ["position_group_id"]; isOneToOne: false; referencedRelation: "position_groups"; referencedColumns: ["id"] }, { foreignKeyName: "position_group_items_position_template_id_fkey"; columns: ["position_template_id"]; isOneToOne: false; referencedRelation: "position_templates"; referencedColumns: ["id"] }]
+      }
+      position_suggestion_events: {
+        Row: { id: string; user_id: string; customer_id: string | null; document_type: string; query: string; suggestion_type: string; suggestion_id: string | null; action: string; original_value: Json | null; final_value: Json | null; created_at: string }
+        Insert: { id?: string; user_id: string; customer_id?: string | null; document_type: string; query?: string; suggestion_type: string; suggestion_id?: string | null; action: string; original_value?: Json | null; final_value?: Json | null; created_at?: string }
+        Update: { id?: string; user_id?: string; customer_id?: string | null; document_type?: string; query?: string; suggestion_type?: string; suggestion_id?: string | null; action?: string; original_value?: Json | null; final_value?: Json | null; created_at?: string }
+        Relationships: [{ foreignKeyName: "position_suggestion_events_customer_id_fkey"; columns: ["customer_id"]; isOneToOne: false; referencedRelation: "clients"; referencedColumns: ["id"] }]
+      }
       projects: {
         Row: {
           budget_total: number | null

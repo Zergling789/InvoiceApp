@@ -4,7 +4,7 @@ import test from "node:test";
 import { generateInvoiceDraft, invoiceDraftSchema, sanitizeDraftDescription } from "../ai/invoiceDraft.js";
 
 const validDraft = {
-  positions: [{ description: "Webdesign", quantity: 2, unit: "Std", price: 95 }],
+  positions: [{ title: "Webdesign", description: "Konzeption und Umsetzung", quantity: 2, unit: "Std", category: "Web", internalNote: "", subpositions: [], priceSourceId: "template-1" }],
   introText: "Vielen Dank für Ihren Auftrag.",
   footerText: "Zahlbar innerhalb von 14 Tagen.",
   warnings: [],
@@ -37,8 +37,10 @@ test("AI generation returns a validated response without a real API call", async
   process.env.OPENAI_API_KEY = "test-key";
   process.env.OPENAI_MODEL = "test-model";
   const client = { responses: { parse: async () => ({ output_parsed: validDraft }) } };
-  const result = await generateInvoiceDraft({ description: "Webdesign", documentType: "offer", currency: "EUR", vatRate: 19, userId: "user-1", client });
-  assert.deepEqual(result, validDraft);
+  const result = await generateInvoiceDraft({ description: "Webdesign", documentType: "offer", currency: "EUR", vatRate: 19, userId: "user-1", client, priceCandidates: [{ id: "template-1", title: "Webdesign", kind: "SERVICE", source: "Leistungskatalog", lastPrice: 95, taxCategory: "STANDARD", taxRate: 19 }] });
+  assert.equal(result.positions[0].price, 95);
+  assert.equal(result.positions[0].priceNeedsReview, false);
+  assert.equal(result.positions[0].source.id, "template-1");
   if (previousKey) process.env.OPENAI_API_KEY = previousKey; else delete process.env.OPENAI_API_KEY;
   if (previousModel) process.env.OPENAI_MODEL = previousModel; else delete process.env.OPENAI_MODEL;
 });

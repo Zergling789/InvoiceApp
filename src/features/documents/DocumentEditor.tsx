@@ -1,7 +1,7 @@
 // src/features/documents/DocumentEditor.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings, Sparkles } from "lucide-react";
+import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings, Sparkles, Layers3 } from "lucide-react";
 
 import type { Client, UserSettings, Position } from "@/types";
 import { InvoiceStatus, OfferStatus, formatDate } from "@/types";
@@ -41,6 +41,9 @@ import {
 import { AiDocumentDraftDialog } from "@/features/documents/AiDocumentDraftDialog";
 import type { AiDocumentDraft } from "@/app/ai/aiService";
 import { DocumentCreateComposer } from "@/features/documents/DocumentCreateComposer";
+import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
+import type { PositionSuggestion } from "@/app/positions/positionSuggestionService";
+import { PositionGroupDialog } from "@/features/documents/PositionGroupDialog";
 
 export type { EditorSeed } from "@/features/documents/documentEditorModel";
 
@@ -96,6 +99,7 @@ export function DocumentEditor({
   const [showPrint, setShowPrint] = useState(startInPrint);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showAiDraftDialog, setShowAiDraftDialog] = useState(false);
+  const [showPositionGroups, setShowPositionGroups] = useState(false);
   const [pdfError, setPdfError] = useState<{ status?: number; message: string } | null>(null);
 
   const [formData, setFormData] = useState<FormData>(() =>
@@ -240,19 +244,43 @@ export function DocumentEditor({
     }));
   };
 
+  const applyPositionSuggestion = (index: number, suggestion: PositionSuggestion) => {
+    if (readOnly || locked) return;
+    setFormData((current) => {
+      const positions = [...(current.positions ?? [])];
+      positions[index] = {
+        ...positions[index],
+        description: suggestion.title,
+        quantity: suggestion.quantity || 1,
+        unit: suggestion.unit || "Stk",
+        price: suggestion.lastPrice ?? suggestion.standardPrice ?? 0,
+        taxCategory: suggestion.taxCategory ?? positions[index].taxCategory,
+        taxRate: suggestion.taxRate ?? positions[index].taxRate,
+      };
+      return { ...current, positions };
+    });
+    toast.success("Positionsvorschlag übernommen.");
+  };
+
   const applyAiDraft = (draft: AiDocumentDraft) => {
     if (disabled) return;
     setFormData((current) => ({
       ...current,
       positions: [
         ...(current.positions ?? []),
-        ...applyDefaultTaxToPositions(draft.positions.map((position) => ({ ...position, id: newId() })), Number(current.vatRate ?? 0), Boolean(current.isSmallBusiness)),
+        ...applyDefaultTaxToPositions(draft.positions.map((position) => ({ ...position, description: position.description.trim() ? `${position.title}\n${position.description.trim()}` : position.title, price: position.price ?? 0, id: newId() })), Number(current.vatRate ?? 0), Boolean(current.isSmallBusiness)),
       ],
       introText: current.introText.trim() ? current.introText : draft.introText,
       footerText: current.footerText.trim() ? current.footerText : draft.footerText,
     }));
     setShowAiDraftDialog(false);
     toast.success("KI-Vorschlag wurde übernommen.");
+  };
+
+  const applyPositionGroup = (positions: Omit<Position, "id">[]) => {
+    setFormData((current) => ({ ...current, positions: [...(current.positions ?? []), ...positions.map((position) => ({ ...position, id: newId() }))] }));
+    setShowPositionGroups(false);
+    toast.success("Positionsgruppe übernommen.");
   };
 
   const totals = useMemo(() => {
@@ -924,6 +952,7 @@ export function DocumentEditor({
           onUpdatePosition={updatePosition}
           onRemovePosition={removePosition}
           onOpenAi={() => setShowAiDraftDialog(true)}
+          onOpenGroups={() => setShowPositionGroups(true)}
           onPreview={() => setShowPrint(true)}
           onCancel={() => onClose()}
           onSave={() => void handleSave({ closeAfterSave: true })}
@@ -933,10 +962,12 @@ export function DocumentEditor({
             documentType={type}
             currency={documentCurrency}
             vatRate={toNumberOrZero(formData.vatRate)}
+            customerId={formData.clientId}
             onApply={applyAiDraft}
             onClose={() => setShowAiDraftDialog(false)}
           />
         )}
+        {showPositionGroups && <PositionGroupDialog onApply={applyPositionGroup} onClose={() => setShowPositionGroups(false)} />}
       </>
     );
   }
@@ -1129,13 +1160,7 @@ export function DocumentEditor({
                     <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
                       {(formData.positions ?? []).map((pos, idx) => (
                         <div key={pos.id ?? idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_1.4fr_auto] sm:items-center">
-                          <input
-                            className="w-full border rounded-lg p-2 text-sm"
-                            placeholder="Beschreibung"
-                            value={pos.description ?? ""}
-                            disabled={disabled}
-                            onChange={(e) => updatePosition(idx, "description", e.target.value)}
-                          />
+                          <PositionSuggestionInput value={pos.description ?? ""} disabled={disabled} customerId={formData.clientId} documentType={type} currency={documentCurrency} onChange={(value) => updatePosition(idx, "description", value)} onSelect={(suggestion) => applyPositionSuggestion(idx, suggestion)} />
                           <AppNumberInput
                             className="w-full border rounded-lg p-2 text-sm"
                             placeholder="Menge"
@@ -1212,6 +1237,7 @@ export function DocumentEditor({
                       >
                         <Sparkles size={17} /> Mit KI erstellen
                       </AppButton>
+                      <AppButton type="button" variant="secondary" onClick={() => setShowPositionGroups(true)} disabled={disabled} className="w-full sm:w-auto"><Layers3 size={17} /> Positionsgruppe</AppButton>
                       <AppButton
                         type="button"
                         onClick={addPosition}
@@ -1310,6 +1336,7 @@ export function DocumentEditor({
                 documentType={type}
                 currency={documentCurrency}
                 vatRate={toNumberOrZero(formData.vatRate)}
+                customerId={formData.clientId}
                 onApply={applyAiDraft}
                 onClose={() => setShowAiDraftDialog(false)}
               />
@@ -1741,19 +1768,14 @@ export function DocumentEditor({
               <AppButton type="button" variant="ghost" onClick={() => setShowAiDraftDialog(true)} disabled={disabled}>
                 <Sparkles size={16} /> Mit KI erstellen
               </AppButton>
+              <AppButton type="button" variant="ghost" onClick={() => setShowPositionGroups(true)} disabled={disabled}><Layers3 size={16} /> Positionsgruppe</AppButton>
             </div>
 
             <div className="space-y-2">
               {(formData.positions ?? []).map((pos, idx) => (
                 <div key={pos.id ?? idx} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <div className="flex-[3]">
-                    <input
-                      className="w-full border rounded p-2"
-                      placeholder="Beschreibung"
-                      value={pos.description ?? ""}
-                      disabled={disabled}
-                      onChange={(e) => updatePosition(idx, "description", e.target.value)}
-                    />
+                    <PositionSuggestionInput value={pos.description ?? ""} disabled={disabled} customerId={formData.clientId} documentType={type} currency={documentCurrency} onChange={(value) => updatePosition(idx, "description", value)} onSelect={(suggestion) => applyPositionSuggestion(idx, suggestion)} />
                   </div>
 
                   <div className="w-full sm:w-20">
@@ -1866,10 +1888,12 @@ export function DocumentEditor({
             documentType={type}
             currency={documentCurrency}
             vatRate={toNumberOrZero(formData.vatRate)}
+            customerId={formData.clientId}
             onApply={applyAiDraft}
             onClose={() => setShowAiDraftDialog(false)}
           />
         )}
+        {showPositionGroups && <PositionGroupDialog onApply={applyPositionGroup} onClose={() => setShowPositionGroups(false)} />}
 
         {showActionBar && (
           <BottomActionBar
