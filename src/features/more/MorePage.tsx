@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CreditCard, FolderKanban, Settings } from "lucide-react";
+import { CreditCard, FolderKanban, PackageSearch, Settings } from "lucide-react";
 
 import { AppCard } from "@/ui/AppCard";
 
@@ -9,6 +9,12 @@ const links = [
     label: "Projekte",
     description: "Projektstatus, Budgets und Aufgaben verwalten.",
     icon: <FolderKanban size={18} />,
+  },
+  {
+    to: "/app/positions",
+    label: "Produkte & Leistungen",
+    description: "Positionskatalog und wiederverwendbare Positionsgruppen verwalten.",
+    icon: <PackageSearch size={18} />,
   },
   {
     to: "/app/settings",

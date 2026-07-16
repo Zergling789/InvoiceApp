@@ -27,6 +27,7 @@ import PricingPage from "@/features/billing/PricingPage";
 import LegalPage from "@/pages/LegalPage";
 import RecipientDocumentPage from "@/pages/RecipientDocumentPage";
 import { PublicLegalFooter } from "@/components/PublicLegalFooter";
+import { PositionCatalogPage } from "@/features/positions/PositionCatalogPage";
 
 function LegacyDocumentRedirect({ type }: { type: "offer" | "invoice" }) {
   const { id } = useParams<{ id: string }>();
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="documents/:type/:id" element={<DocumentDetailRoute />} />
           <Route path="more" element={<MorePage />} />
           <Route path="settings" element={<SettingsView />} />
+          <Route path="positions" element={<PositionCatalogPage />} />
           <Route path="plans" element={<PricingPage />} />
           <Route path="settings/email/verify" element={<VerifyEmailResult />} />
 

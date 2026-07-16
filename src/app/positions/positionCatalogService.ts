@@ -1,0 +1,15 @@
+import { apiFetch, readJsonResponse } from "@/app/api/apiClient";
+import { readApiError } from "@/app/api/apiError";
+import type { TaxCategory } from "@/types";
+
+export type PositionTemplate = { id: string; kind: "PRODUCT" | "SERVICE" | "TEMPLATE"; name: string; description: string; category: string; unit: string; default_quantity: number | null; default_unit_price: number | null; tax_category: TaxCategory; tax_rate: number; product_number: string | null; manufacturer: string | null; image_url: string | null };
+export type PositionGroupItem = { id?: string; title: string; description: string; quantity: number; unit: string; unit_price: number | null; tax_category: TaxCategory; tax_rate: number; optional: boolean; position_template_id?: string | null };
+export type PositionGroup = { id: string; name: string; description: string; category: string; position_group_items: PositionGroupItem[] };
+
+async function checked<T>(response: Response, fallback: string): Promise<T> { if (!response.ok) { const error = await readApiError(response); throw new Error(error.message ?? fallback); } return readJsonResponse<T>(response); }
+export async function loadPositionTemplates() { return (await checked<{ templates: PositionTemplate[] }>(await apiFetch("/api/positions/templates", {}, { auth: true }), "Katalog konnte nicht geladen werden.")).templates; }
+export async function createPositionTemplate(input: { kind: PositionTemplate["kind"]; name: string; description?: string; category?: string; unit: string; defaultQuantity?: number; defaultUnitPrice: number | null; taxCategory: TaxCategory; taxRate: number; productNumber?: string; manufacturer?: string }) { return (await checked<{ template: PositionTemplate }>(await apiFetch("/api/positions/templates", { method: "POST", body: JSON.stringify(input) }, { auth: true }), "Position konnte nicht gespeichert werden.")).template; }
+export async function deletePositionTemplate(id: string) { await checked<unknown>(await apiFetch(`/api/positions/templates/${id}`, { method: "DELETE" }, { auth: true }), "Position konnte nicht gelöscht werden."); }
+export async function loadPositionGroups() { return (await checked<{ groups: PositionGroup[] }>(await apiFetch("/api/positions/groups", {}, { auth: true }), "Gruppen konnten nicht geladen werden.")).groups; }
+export async function createPositionGroup(input: { name: string; description?: string; category?: string; items: Array<{ positionTemplateId?: string; title: string; description: string; quantity: number; unit: string; unitPrice: number | null; taxCategory: TaxCategory; taxRate: number; optional: boolean }> }) { return (await checked<{ group: PositionGroup }>(await apiFetch("/api/positions/groups", { method: "POST", body: JSON.stringify(input) }, { auth: true }), "Gruppe konnte nicht gespeichert werden.")).group; }
+export async function deletePositionGroup(id: string) { await checked<unknown>(await apiFetch(`/api/positions/groups/${id}`, { method: "DELETE" }, { auth: true }), "Gruppe konnte nicht gelöscht werden."); }

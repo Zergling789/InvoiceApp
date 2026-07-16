@@ -2,6 +2,12 @@
 
 Leichte Angebots- und Rechnungs-App für Freelancer im DACH-Raum.
 
+### Intelligente Positionen
+
+Angebote und Rechnungen unterstützen einen mandantengetrennten Produkt- und Leistungskatalog, wiederverwendbare Positionsgruppen sowie Vorschläge aus der eigenen Dokumenthistorie. Die Reihenfolge ist deterministisch (Texttreffer, Nutzung, Kundenbezug und Aktualität). KI-generierte Positionen erscheinen ausschließlich als bearbeitbare Vorschau. Preise stammen nur aus eigenen Katalog- oder Historiendaten; ohne verlässliche Quelle muss der Nutzer den Preis selbst ergänzen.
+
+Katalog und Positionsgruppen werden unter **Mehr → Produkte & Leistungen** verwaltet.
+
 ### Setup
 1. Abhängigkeiten installieren:
    ```bash
