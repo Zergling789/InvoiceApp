@@ -64,16 +64,21 @@ test.describe.serial("new user onboarding", () => {
       .click();
 
     await page.getByRole("button", { name: "Neuen Kunden anlegen" }).click();
-    await expect(page.getByRole("heading", { name: "Neuer Kunde" })).toBeVisible();
-    await page.getByLabel("Vorname *").fill("Erika");
-    await page.getByLabel("Nachname *").fill("Empfänger");
-    await page.getByLabel("Firma").fill("E2E Kunde");
-    await page.getByLabel("E-Mail").fill("kunde@example.com");
-    await page.getByLabel("Straße").fill("Kundenweg");
-    await page.getByLabel("Hausnummer").fill("5");
-    await page.getByLabel("PLZ").fill("10115");
-    await page.getByLabel("Ort").fill("Berlin");
-    await page.getByRole("button", { name: "Änderungen speichern" }).click();
+    const customerDialog = page.getByRole("dialog", { name: "Neuer Kunde" });
+    await expect(customerDialog).toBeVisible();
+    await customerDialog.getByLabel("Vorname *").fill("Erika");
+    await customerDialog.getByLabel("Nachname *").fill("Empfänger");
+    await customerDialog.getByLabel("Firma", { exact: true }).fill("E2E Kunde");
+    await customerDialog.getByLabel("E-Mail", { exact: true }).fill("kunde@example.com");
+    await customerDialog.locator("summary").filter({ hasText: /^Adresse/ }).click();
+    const streetField = customerDialog.getByLabel("Straße", { exact: true });
+    await expect(streetField).toBeVisible();
+    await streetField.fill("Kundenweg");
+    await customerDialog.getByLabel("Hausnummer", { exact: true }).fill("5");
+    await customerDialog.getByLabel("PLZ", { exact: true }).fill("10115");
+    await customerDialog.getByLabel("Ort", { exact: true }).fill("Berlin");
+    await customerDialog.getByRole("button", { name: "Änderungen speichern" }).click();
+    await expect(customerDialog).toBeHidden();
 
     await expect(
       page.getByRole("heading", { name: "Erstes Angebot erstellen" }),
