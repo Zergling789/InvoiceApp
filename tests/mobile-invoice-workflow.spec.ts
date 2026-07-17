@@ -59,7 +59,11 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
     await customerDialog.getByLabel("Nachname *").fill("Mobil");
     await customerDialog.getByLabel("Firma", { exact: true }).fill("Mobilbau GmbH");
     await customerDialog.getByLabel("E-Mail", { exact: true }).fill("mobilbau@example.com");
-    await customerDialog.getByLabel("Straße", { exact: true }).fill("Kundenweg");
+    const addressSummary = customerDialog.locator("summary").filter({ hasText: /^Adresse/ });
+    await addressSummary.click();
+    const streetField = customerDialog.getByLabel("Straße", { exact: true });
+    await expect(streetField).toBeVisible();
+    await streetField.fill("Kundenweg");
     await customerDialog.getByLabel("Hausnummer", { exact: true }).fill("7");
     await customerDialog.getByLabel("PLZ", { exact: true }).fill("10115");
     await customerDialog.getByLabel("Ort", { exact: true }).fill("Berlin");
