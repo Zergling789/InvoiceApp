@@ -9,14 +9,6 @@ import {
   seedUserSettings,
 } from "./helpers/supabaseAdmin";
 
-async function acceptLegalTermsIfRequired(page: Page) {
-  const legalConsent = page.getByLabel(/Ich akzeptiere die Nutzungsbedingungen/);
-  if (await legalConsent.isVisible()) {
-    await legalConsent.check();
-    await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
-  }
-}
-
 async function expectNoPageOverflow(page: Page) {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -48,10 +40,16 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
     await page.getByLabel("Passwort").fill(user.password);
     await page.getByRole("button", { name: "Anmelden" }).click();
     await expect(page).toHaveURL(/\/app/);
-    await acceptLegalTermsIfRequired(page);
 
     await page.goto("/app/clients");
-    await expect(page.getByRole("heading", { name: "Kunden" })).toBeVisible();
+    const legalConsent = page.getByLabel(/Ich akzeptiere die Nutzungsbedingungen/);
+    const clientsHeading = page.getByRole("heading", { name: "Kunden" });
+    await expect(legalConsent.or(clientsHeading).first()).toBeVisible();
+    if (await legalConsent.isVisible()) {
+      await legalConsent.check();
+      await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
+    }
+    await expect(clientsHeading).toBeVisible();
     await page.getByRole("button", { name: /Neuer Kunde|Ersten Kunden anlegen/ }).click();
     await expect(page.getByRole("dialog", { name: "Neuer Kunde" })).toBeVisible();
     await expectNoPageOverflow(page);
