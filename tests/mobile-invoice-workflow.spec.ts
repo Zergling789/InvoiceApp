@@ -43,14 +43,14 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
 
     await page.goto("/app/clients");
     const legalConsent = page.getByLabel(/Ich akzeptiere die Nutzungsbedingungen/);
-    const clientsHeading = page.getByRole("heading", { name: "Kunden" });
+    const clientsHeading = page.getByRole("heading", { name: "Kunden", exact: true });
     await expect(legalConsent.or(clientsHeading).first()).toBeVisible();
     if (await legalConsent.isVisible()) {
       await legalConsent.check();
       await page.getByRole("button", { name: /Zustimmen und fortfahren/ }).click();
     }
     await expect(clientsHeading).toBeVisible();
-    await page.getByRole("button", { name: /Neuer Kunde|Ersten Kunden anlegen/ }).click();
+    await page.getByRole("button", { name: "Ersten Kunden anlegen", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Neuer Kunde" })).toBeVisible();
     await expectNoPageOverflow(page);
 
