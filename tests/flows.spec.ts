@@ -121,11 +121,11 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await expect(page).toHaveURL(/\/app\/offers\//);
     await expect(page.getByText(offerNumber, { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "Angebot senden" }).click();
-    const sendDialog = page.getByRole("dialog", { name: "Dokument senden" });
+    const sendDialog = page.getByRole("dialog", { name: "Angebot senden" });
     await expect(sendDialog).toBeVisible();
     await sendDialog.getByPlaceholder("to@example.com").fill(client.email);
     await sendDialog.getByRole("button", { name: "Senden" }).click();
-    await expect(page.getByText("E-Mail wurde erfolgreich versendet.")).toBeVisible();
+    await expect(page.getByText("Angebot wurde versendet.")).toBeVisible();
 
     await expect(page.getByText("Gesendet", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "Mehr", exact: true }).click();
