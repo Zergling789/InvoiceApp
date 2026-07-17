@@ -51,18 +51,19 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
     }
     await expect(clientsHeading).toBeVisible();
     await page.getByRole("button", { name: "Ersten Kunden anlegen", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Neuer Kunde" })).toBeVisible();
+    const customerDialog = page.getByRole("dialog", { name: "Neuer Kunde" });
+    await expect(customerDialog).toBeVisible();
     await expectNoPageOverflow(page);
 
-    await page.getByLabel("Vorname *").fill("Mara");
-    await page.getByLabel("Nachname *").fill("Mobil");
-    await page.getByLabel("Firma").fill("Mobilbau GmbH");
-    await page.getByLabel("E-Mail").fill("mobilbau@example.com");
-    await page.getByLabel("Straße").fill("Kundenweg");
-    await page.getByLabel("Hausnummer").fill("7");
-    await page.getByLabel("PLZ").fill("10115");
-    await page.getByLabel("Ort").fill("Berlin");
-    await page.getByRole("button", { name: "Änderungen speichern" }).click();
+    await customerDialog.getByLabel("Vorname *").fill("Mara");
+    await customerDialog.getByLabel("Nachname *").fill("Mobil");
+    await customerDialog.getByLabel("Firma", { exact: true }).fill("Mobilbau GmbH");
+    await customerDialog.getByLabel("E-Mail", { exact: true }).fill("mobilbau@example.com");
+    await customerDialog.getByLabel("Straße", { exact: true }).fill("Kundenweg");
+    await customerDialog.getByLabel("Hausnummer", { exact: true }).fill("7");
+    await customerDialog.getByLabel("PLZ", { exact: true }).fill("10115");
+    await customerDialog.getByLabel("Ort", { exact: true }).fill("Berlin");
+    await customerDialog.getByRole("button", { name: "Änderungen speichern" }).click();
 
     await expect(page.getByText("Mobilbau GmbH", { exact: true })).toBeVisible();
     await page.goto("/app/documents");
