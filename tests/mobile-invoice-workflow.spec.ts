@@ -104,11 +104,11 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
     if (error || !invoice?.id) throw error ?? new Error("Created invoice is missing.");
     expect(invoice).toMatchObject({ status: "DRAFT", is_locked: false });
 
-    const invoiceCard = page.locator(`[data-document-key="invoice-${invoice.id}"]`);
+    const invoiceCard = page.locator(`button[data-document-key="invoice-${invoice.id}"]`);
     await expect(invoiceCard).toBeVisible();
     await page.reload();
-    await expect(page.locator(`[data-document-key="invoice-${invoice.id}"]`)).toBeVisible();
-    await page.locator(`[data-document-key="invoice-${invoice.id}"]`).click();
+    await expect(invoiceCard).toBeVisible();
+    await invoiceCard.click();
 
     await expect(page.getByRole("heading", { name: "Entwurf", exact: true })).toBeVisible();
     await expectNoPageOverflow(page);
