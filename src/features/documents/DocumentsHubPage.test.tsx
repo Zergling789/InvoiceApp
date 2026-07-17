@@ -10,7 +10,7 @@ const listOffersMock = vi.fn();
 const listInvoicesMock = vi.fn();
 
 vi.mock("@/app/clients/clientService", () => ({
-  list: () => listClientsMock(),
+  listSummaries: () => listClientsMock(),
 }));
 
 vi.mock("@/app/offers/offerService", () => ({

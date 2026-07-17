@@ -1,38 +1,46 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useLocation, type Location } from "react-router-dom";
 import { LayoutDashboard, Users, FileText, ListTodo, Menu } from "lucide-react";
 
-import Dashboard from "@/features/dashboard/Dashboard";
-import Clients from "@/features/clients/Clients";
-import Projects from "@/features/projects/Projects";
-import DocumentsHubPage from "@/features/documents/DocumentsHubPage";
-import DocumentDetailRoute from "@/features/documents/DocumentDetailRoute";
-import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
-import InvoiceCreatePage from "@/features/documents/create/InvoiceCreatePage";
-import CustomerCreatePage from "@/features/clients/CustomerCreatePage";
-import CustomerEditPage from "@/features/clients/CustomerEditPage";
-import ProjectCreatePage from "@/features/projects/ProjectCreatePage";
-import TodosPage from "@/features/todos/TodosPage";
-import MorePage from "@/features/more/MorePage";
-import SettingsView from "@/features/settings/SettingsView";
-import VerifyEmailResult from "@/features/settings/VerifyEmailResult";
 import AppShell from "@/components/Layout/AppShell";
 import type { NavItem } from "@/components/Layout/Sidebar";
-import HomePage from "@/pages/HomePage";
-import LoginPage from "@/pages/LoginPage";
-import RegisterPage from "@/pages/RegisterPage";
-import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
-import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import RequireAuth from "@/components/Auth/RequireAuth";
-import AngebotDetails from "@/pages/AngebotDetails";
-import PricingPage from "@/features/billing/PricingPage";
-import LegalPage from "@/pages/LegalPage";
-import RecipientDocumentPage from "@/pages/RecipientDocumentPage";
 import { PublicLegalFooter } from "@/components/PublicLegalFooter";
-import { PositionCatalogPage } from "@/features/positions/PositionCatalogPage";
-import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
-import OfferEditPage from "@/features/documents/edit/OfferEditPage";
-import OnboardingPage from "@/features/onboarding/OnboardingPage";
-import { NotFoundPage } from "@/pages/NotFoundPage";
+
+const Dashboard = lazy(() => import("@/features/dashboard/Dashboard"));
+const Clients = lazy(() => import("@/features/clients/Clients"));
+const Projects = lazy(() => import("@/features/projects/Projects"));
+const DocumentsHubPage = lazy(() => import("@/features/documents/DocumentsHubPage"));
+const DocumentDetailRoute = lazy(() => import("@/features/documents/DocumentDetailRoute"));
+const OfferCreatePage = lazy(() => import("@/features/documents/create/OfferCreatePage"));
+const InvoiceCreatePage = lazy(() => import("@/features/documents/create/InvoiceCreatePage"));
+const CustomerCreatePage = lazy(() => import("@/features/clients/CustomerCreatePage"));
+const CustomerEditPage = lazy(() => import("@/features/clients/CustomerEditPage"));
+const ProjectCreatePage = lazy(() => import("@/features/projects/ProjectCreatePage"));
+const TodosPage = lazy(() => import("@/features/todos/TodosPage"));
+const MorePage = lazy(() => import("@/features/more/MorePage"));
+const SettingsView = lazy(() => import("@/features/settings/SettingsView"));
+const VerifyEmailResult = lazy(() => import("@/features/settings/VerifyEmailResult"));
+const HomePage = lazy(() => import("@/pages/HomePage"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
+const RegisterPage = lazy(() => import("@/pages/RegisterPage"));
+const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
+const AngebotDetails = lazy(() => import("@/pages/AngebotDetails"));
+const PricingPage = lazy(() => import("@/features/billing/PricingPage"));
+const LegalPage = lazy(() => import("@/pages/LegalPage"));
+const RecipientDocumentPage = lazy(() => import("@/pages/RecipientDocumentPage"));
+const InvoiceEditPage = lazy(() => import("@/features/documents/edit/InvoiceEditPage"));
+const OfferEditPage = lazy(() => import("@/features/documents/edit/OfferEditPage"));
+const OnboardingPage = lazy(() => import("@/features/onboarding/OnboardingPage"));
+const PositionCatalogPage = lazy(() =>
+  import("@/features/positions/PositionCatalogPage").then((module) => ({
+    default: module.PositionCatalogPage,
+  })),
+);
+const NotFoundPage = lazy(() =>
+  import("@/pages/NotFoundPage").then((module) => ({ default: module.NotFoundPage })),
+);
 
 const navItems: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -48,7 +56,7 @@ export default function App() {
   const backgroundLocation = state?.backgroundLocation;
 
   return (
-    <>
+    <Suspense fallback={<div role="status" className="grid min-h-screen-safe place-items-center bg-[var(--app-bg)] p-6 text-sm text-[var(--app-muted)]">Seite wird geladen …</div>}>
       <Routes location={backgroundLocation || location}>
         <Route path="/" element={<HomePage />} />
         <Route path="/demo/angebotdetails" element={<AngebotDetails />} />
@@ -114,6 +122,6 @@ export default function App() {
           <Route path="/app/projects/new" element={<ProjectCreatePage />} />
         </Routes>
       )}
-    </>
+    </Suspense>
   );
 }

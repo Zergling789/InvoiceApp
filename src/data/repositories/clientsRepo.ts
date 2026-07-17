@@ -1,10 +1,14 @@
 import type { Client } from "@/domain/types";
-import { normalizeClient } from "@/domain/models/Client";
-import { dbDeleteClient, dbGetClientById, dbListClients, dbUpsertClient } from "@/db/clientsDb";
+import { normalizeClient, type ClientSummary } from "@/domain/models/Client";
+import { dbDeleteClient, dbGetClientById, dbListClients, dbListClientSummaries, dbUpsertClient } from "@/db/clientsDb";
 
 export async function listClients(): Promise<Client[]> {
   const result = await dbListClients();
   return result.map(normalizeClient);
+}
+
+export async function listClientSummaries(): Promise<ClientSummary[]> {
+  return dbListClientSummaries();
 }
 
 export async function getClient(id: string): Promise<Client | null> {

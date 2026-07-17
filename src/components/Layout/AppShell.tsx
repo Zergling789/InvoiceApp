@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar, type NavItem } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -11,7 +12,7 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
     return (
       <div className="min-h-screen-safe bg-[var(--app-bg)] text-[var(--app-text)]">
         <main id="main-content" className="animate-enter">
-          <Outlet />
+          <Suspense fallback={<RouteLoadingFallback />}><Outlet /></Suspense>
         </main>
       </div>
     );
@@ -35,7 +36,7 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
           </div>
 
           <main id="main-content" className="min-w-0 animate-enter">
-            <Outlet />
+            <Suspense fallback={<RouteLoadingFallback />}><Outlet /></Suspense>
           </main>
         </div>
       </div>
@@ -45,6 +46,10 @@ export function AppShell({ navItems }: { navItems: NavItem[] }) {
       </div>
     </div>
   );
+}
+
+function RouteLoadingFallback() {
+  return <div role="status" className="app-card p-6 text-sm text-[var(--app-muted)]">Bereich wird geladen …</div>;
 }
 
 export default AppShell;

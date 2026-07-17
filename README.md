@@ -110,6 +110,8 @@ npm run build
 npm run test:ui
 ```
 
+`npm run build` prüft zusätzlich die festgelegten Bundle-Budgets. Dadurch werden unbeabsichtigte Verschlechterungen der initialen Ladegröße bereits in CI blockiert.
+
 ### Aktuell unterstützter Rechnungsumfang
 
 FreelanceFlow begrenzt die Finalisierung derzeit technisch auf einfache inländische B2B-Rechnungen: Verkäufer, Geschäftskunde und Leistungsort müssen in Deutschland liegen, die Währung ist EUR. Unterstützt werden ausschließlich Regelsteuersatz 19 %, ermäßigter Steuersatz 7 % und die Kleinunternehmerregelung mit 0 %. Reverse Charge, Steuerbefreiungen, sonstige Nullsteuersätze, B2C, Fremdwährungen und internationale Sachverhalte werden blockiert. Jede Rechnung muss vor dem Ausstellen manuell geprüft werden; die Anwendung ersetzt keine steuerliche oder rechtliche Beratung.

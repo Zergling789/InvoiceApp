@@ -1,9 +1,11 @@
 import type { Client } from "@/types";
+import type { ClientSummary } from "@/domain/models/Client";
 import * as repo from "@/data/repositories/clientsRepo";
 import { createEmptyClient as createClientTemplate } from "@/domain/models/Client";
 
 export const list = (): Promise<Client[]> => repo.listClients();
 export const listClients = list;
+export const listSummaries = (): Promise<ClientSummary[]> => repo.listClientSummaries();
 
 export const get = (id: string) => repo.getClient(id);
 export const getClient = get;

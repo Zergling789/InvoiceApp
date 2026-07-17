@@ -1,5 +1,10 @@
 import type { Client } from "../types";
 
+export type ClientSummary = Pick<
+  Client,
+  "id" | "companyName" | "firstName" | "lastName" | "contactPerson"
+>;
+
 export function getClientPersonName(
   client: Pick<Client, "firstName" | "lastName" | "contactPerson">,
 ): string {

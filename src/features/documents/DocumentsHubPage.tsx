@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, ListFilter, Plus } from "lucide-react";
 
-import type { Client, Invoice, Offer, UserSettings } from "@/types";
+import type { Invoice, Offer, UserSettings } from "@/types";
 import { formatDate } from "@/types";
 import { calculateDocumentTotal } from "@/utils/dashboard";
 import { formatMoney } from "@/utils/money";
@@ -25,7 +25,7 @@ import {
 } from "@/features/documents/state/formatPhaseLabel";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
-import { getClientDisplayName, getClientPersonName } from "@/domain/models/Client";
+import { getClientDisplayName, getClientPersonName, type ClientSummary } from "@/domain/models/Client";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 type FilterMode = "all" | "offer" | "invoice";
@@ -60,7 +60,7 @@ const splitPersonName = (name: string) => {
   };
 };
 
-const getClientColumns = (client: Client | undefined, fallbackName = "", fallbackCompany = "") => {
+const getClientColumns = (client: ClientSummary | undefined, fallbackName = "", fallbackCompany = "") => {
   const personName = client ? getClientPersonName(client) : fallbackName;
   const splitName = splitPersonName(personName);
   const companyName = client?.companyName.trim() || fallbackCompany.trim();
@@ -113,7 +113,7 @@ export default function DocumentsHubPage() {
   const [selectedStatuses, setSelectedStatuses] = useState<CombinedStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<ClientSummary[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -129,7 +129,7 @@ export default function DocumentsHubPage() {
     setError(null);
     try {
       const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
-        clientService.list(),
+        clientService.listSummaries(),
         offerService.listOffers(),
         invoiceService.listInvoices(),
         fetchSettings(),
@@ -152,7 +152,7 @@ export default function DocumentsHubPage() {
       setError(null);
       try {
         const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
-          clientService.list(),
+          clientService.listSummaries(),
           offerService.listOffers(),
           invoiceService.listInvoices(),
           fetchSettings(),
@@ -241,7 +241,7 @@ export default function DocumentsHubPage() {
   }, [newMenuOpen, statusMenuOpen]);
 
   const clientById = useMemo(() => {
-    const map = new Map<string, Client>();
+    const map = new Map<string, ClientSummary>();
     clients.forEach((client) => map.set(client.id, client));
     return map;
   }, [clients]);

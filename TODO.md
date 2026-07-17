@@ -86,3 +86,13 @@ Abschlusskriterium: Alle Routen laufen, Settings bearbeitbar, Angebote/Rechnunge
 4. ⏳ **Als Nächstes:** Dialoggrößen, Formabstände, Statusfarben und Aktionsbezeichnungen im vollständigen visuellen Seitenaudit weiter vereinheitlichen; anschließend reale Hell-/Dunkel- und Smartphone-Screenshots vergleichen.
 
 **Phase 7 begonnen:** Der erste Konsistenzblock entfernt technische Sprache und riskante Debugausgaben aus den wichtigsten Nutzerwegen. Der vollständige visuelle Audit ist noch nicht abgeschlossen.
+
+## Master-Roadmap Phase 8 – Performance
+
+1. ✅ **Routen bedarfsgerecht laden:** Öffentliche Seiten und geschützte Arbeitsbereiche werden per `React.lazy` erst geladen, wenn sie tatsächlich aufgerufen werden. Der rund 93 kB große Dokumenteditor gehört nicht mehr zum initialen Bundle.
+2. ✅ **Stabile Browser-Caches:** React, Supabase und die verwendeten Icons liegen in getrennten Vendor-Chunks. Unveränderte Bibliotheken können dadurch über neue App-Releases hinweg im Browser-Cache bleiben.
+3. ✅ **Bundle-Regressionen blockieren:** Der Produktionsbuild erzeugt ein Vite-Manifest und prüft feste Budgets für initiales JavaScript, CSS und den größten Einzel-Chunk. Ein Überschreiten lässt den Build und damit CI fehlschlagen.
+4. ✅ **Dokumentübersicht schlanker laden:** Statt vollständiger Kundenakten mit rund 40 Feldern lädt die Dokumentübersicht nur ID, Firma sowie Vor- und Nachname beziehungsweise Kontaktperson. RLS und der Eigentümerfilter bleiben unverändert aktiv.
+5. ⏳ **Als Nächstes:** Große Komponenten weiter zerlegen, Renderprofile für Dokumenteditor und -liste erfassen und Listenabfragen bei wachsendem Datenbestand paginieren.
+
+**Phase 8 begonnen:** Der erste messbare Meilenstein reduziert das initiale JavaScript von rund 243 kB auf rund 148 kB gzip (etwa 39 Prozent) und schützt diese Verbesserung durch CI-Budgets. Die tiefergehende Render- und Datenbankoptimierung bleibt offen.
