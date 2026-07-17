@@ -32,9 +32,9 @@ export function PositionEditorDialog({ template, duplicate, smallBusiness, categ
     else setForm((current) => ({ ...current, taxCategory: "STANDARD", taxRate: 19 }));
   };
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 sm:items-center sm:p-4">
-      <div className="app-card max-h-[96dvh] w-full max-w-xl overflow-y-auto rounded-b-none p-5 sm:max-h-[90dvh] sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="position-editor-title">
-        <div className="flex items-center justify-between gap-3"><h2 id="position-editor-title" className="text-xl font-semibold">{template && !duplicate ? "Eintrag bearbeiten" : "Neuer Eintrag"}</h2><button type="button" aria-label="Schließen" onClick={onClose}><X /></button></div>
+    <div className="app-visual-viewport fixed inset-x-0 z-[80] flex items-end justify-center bg-black/45 sm:items-center sm:p-4">
+      <div className="app-card max-h-[96%] w-full max-w-xl overflow-y-auto overscroll-contain rounded-b-none p-5 safe-bottom sm:max-h-[90%] sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="position-editor-title">
+        <div className="flex items-center justify-between gap-3"><h2 id="position-editor-title" className="text-xl font-semibold">{template && !duplicate ? `${template.kind === "PRODUCT" ? "Produkt" : "Leistung"} bearbeiten` : "Produkt oder Leistung anlegen"}</h2><button type="button" aria-label="Schließen" onClick={onClose}><X /></button></div>
         <div className="mt-5 grid grid-cols-2 gap-3">
           {(["SERVICE", "PRODUCT"] as const).map((kind) => <button key={kind} type="button" className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border p-3 ${form.kind === kind ? "border-[var(--app-primary)] bg-blue-500/10" : "border-[var(--app-border)]"}`} onClick={() => setForm({ ...form, kind })}>{kind === "SERVICE" ? <Wrench /> : <Package />}<span>{kind === "SERVICE" ? "Leistung" : "Produkt"}</span></button>)}
         </div>
@@ -46,7 +46,7 @@ export function PositionEditorDialog({ template, duplicate, smallBusiness, categ
         </div>
         <button type="button" className="mt-5 text-sm font-medium text-[var(--app-primary)]" onClick={() => setMore((value) => !value)} aria-expanded={more}>Weitere Angaben {more ? "ausblenden" : "anzeigen"}</button>
         {more && <div className="mt-3 grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2"><span className="mb-1 block text-sm">Beschreibung</span><textarea rows={3} maxLength={2000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label><label className="sm:col-span-2"><span className="mb-1 block text-sm">Kategorie</span><input list="position-categories" maxLength={100} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /><datalist id="position-categories">{categories.map((category) => <option key={category} value={category} />)}</datalist></label>{form.kind === "PRODUCT" && <><label><span className="mb-1 block text-sm">Produktnummer</span><input maxLength={100} value={form.productNumber} onChange={(event) => setForm({ ...form, productNumber: event.target.value })} /></label><label><span className="mb-1 block text-sm">Hersteller</span><input maxLength={200} value={form.manufacturer} onChange={(event) => setForm({ ...form, manufacturer: event.target.value })} /></label></>}</div>}
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><AppButton variant="secondary" onClick={onClose}>Abbrechen</AppButton><AppButton disabled={busy || !form.name.trim() || !form.unit.trim()} onClick={() => void onSave(toTemplateInput(form))}>{busy ? "Speichert …" : "Eintrag speichern"}</AppButton></div>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><AppButton className="w-full sm:w-auto" variant="secondary" onClick={onClose}>Abbrechen</AppButton><AppButton className="w-full sm:w-auto" disabled={busy || !form.name.trim() || !form.unit.trim()} onClick={() => void onSave(toTemplateInput(form))}>{busy ? "Speichert …" : `${form.kind === "PRODUCT" ? "Produkt" : "Leistung"} speichern`}</AppButton></div>
       </div>
     </div>, document.body,
   );

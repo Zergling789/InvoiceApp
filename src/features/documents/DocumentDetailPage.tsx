@@ -31,6 +31,7 @@ import { formatDocumentStatus, formatInvoiceDisplayStatus } from "@/features/doc
 import {
   getDocumentCapabilities,
   getInvoicePhase,
+  getNextDocumentAction,
   getOfferPhase,
 } from "@/features/documents/state/documentState";
 
@@ -66,6 +67,46 @@ export const getDocumentEditPath = (type: "invoice" | "offer", id: string) =>
   `/app/documents/${type}/${id}/edit`;
 
 type DetailActivityEvent = Awaited<ReturnType<typeof dbListDocumentActivity>>[number];
+type DetailAction = {
+  key: string;
+  label: string;
+  onSelect: () => void | Promise<void>;
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+};
+
+const secondaryActionPriority: Record<string, number> = {
+  EDIT: 10,
+  SEND_REMINDER: 20,
+  SEND_INVOICE: 30,
+  SEND_OFFER: 30,
+  MARK_SENT: 35,
+  MARK_INVOICE_PAID: 40,
+  ACCEPT_OFFER: 45,
+  REJECT_OFFER: 50,
+  COPY_RECIPIENT_LINK: 55,
+  DOWNLOAD_PDF: 70,
+  DOWNLOAD_EINVOICE: 71,
+  DOWNLOAD_XML: 72,
+  CANCEL_INVOICE: 90,
+};
+
+export const prioritizeDocumentActions = (
+  actions: DetailAction[],
+  preferredAction: DetailAction | null,
+) => {
+  if (!preferredAction) return actions;
+  return [
+    { ...preferredAction, variant: "primary" as const },
+    ...actions
+      .filter((action) => action.key !== preferredAction.key)
+      .sort(
+        (left, right) =>
+          (secondaryActionPriority[left.key] ?? 60) -
+          (secondaryActionPriority[right.key] ?? 60),
+      ),
+  ];
+};
 
 export const buildDocumentTimeline = (
   doc: Invoice | Offer,
@@ -122,6 +163,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     "reminder" | "dunning" | "followup" | undefined
   >(undefined);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
 
   const docType = forcedType ?? (type === "invoice" ? "invoice" : "offer");
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
@@ -156,7 +199,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     return () => {
       mounted = false;
     };
-  }, [docType, id]);
+  }, [docType, id, reloadToken]);
 
   useEffect(() => {
     if (!id || docType !== "offer") return;
@@ -228,12 +271,22 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
       : getDocumentCapabilities("offer", doc as Offer);
   }, [doc, docType]);
 
+  const runGuardedAction = async (key: string, action: () => void | Promise<void>) => {
+    if (pendingActionKey) return;
+    setPendingActionKey(key);
+    try {
+      await action();
+    } finally {
+      setPendingActionKey(null);
+    }
+  };
+
   const handleMarkPaid = async () => {
     if (!doc || docType !== "invoice") return;
     if (!capabilities?.canMarkPaid) return;
     const ok = await confirm({
-      title: "Als bezahlt markieren",
-      message: "Soll die Rechnung als bezahlt markiert werden?",
+      title: "Zahlung erfassen",
+      message: `Zahlungseingang für Rechnung ${(doc as Invoice).number ?? "Entwurf"} erfassen? Der offene Betrag wird danach als bezahlt angezeigt.`,
     });
     if (!ok) return;
     try {
@@ -285,7 +338,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     if (!capabilities?.canCancel) return;
     const ok = await confirm({
       title: "Rechnung stornieren",
-      message: "Soll die Rechnung storniert werden?",
+      message: "Die Rechnung wird storniert und bleibt unverändert erhalten. Eine Gutschrift wird dabei noch nicht erstellt.",
     });
     if (!ok) return;
     try {
@@ -311,14 +364,24 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     if (!capabilities?.canAccept) return;
     const offer = doc as Offer;
     const ok = await confirm({
-      title: "Angebot annehmen",
-      message: "Soll das Angebot als angenommen markiert werden?",
+      title: "Annahme eintragen",
+      message: "Nur bestätigen, wenn der Kunde außerhalb des Empfängerportals zugesagt hat. Das Angebot wird als angenommen angezeigt.",
     });
     if (!ok) return;
-    await offerService.saveOffer({ ...offer, status: OfferStatus.ACCEPTED });
-    setDoc({ ...offer, status: OfferStatus.ACCEPTED });
-    onDocumentsChange?.();
-    toast.success("Angebot als angenommen markiert.");
+    try {
+      const updated = await offerService.recordOfferDecision(offer.id, "ACCEPTED");
+      setDoc(updated);
+      setActivityEvents(await dbListDocumentActivity("offer", offer.id));
+      onDocumentsChange?.();
+      toast.success("Angebot als angenommen markiert.");
+    } catch (error) {
+      const workflowError = error as Error & { code?: string };
+      toast.error(formatErrorToast({
+        code: workflowError.code,
+        message: workflowError.message,
+        fallback: "Annahme konnte nicht gespeichert werden.",
+      }));
+    }
   };
 
   const handleOfferRejected = async () => {
@@ -326,14 +389,24 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     if (!capabilities?.canReject) return;
     const offer = doc as Offer;
     const ok = await confirm({
-      title: "Angebot ablehnen",
-      message: "Soll das Angebot als abgelehnt markiert werden?",
+      title: "Ablehnung eintragen",
+      message: "Nur bestätigen, wenn der Kunde außerhalb des Empfängerportals abgesagt hat. Das Angebot wird als abgelehnt angezeigt.",
     });
     if (!ok) return;
-    await offerService.saveOffer({ ...offer, status: OfferStatus.REJECTED });
-    setDoc({ ...offer, status: OfferStatus.REJECTED });
-    onDocumentsChange?.();
-    toast.success("Angebot als abgelehnt markiert.");
+    try {
+      const updated = await offerService.recordOfferDecision(offer.id, "REJECTED");
+      setDoc(updated);
+      setActivityEvents(await dbListDocumentActivity("offer", offer.id));
+      onDocumentsChange?.();
+      toast.success("Angebot als abgelehnt markiert.");
+    } catch (error) {
+      const workflowError = error as Error & { code?: string };
+      toast.error(formatErrorToast({
+        code: workflowError.code,
+        message: workflowError.message,
+        fallback: "Ablehnung konnte nicht gespeichert werden.",
+      }));
+    }
   };
 
   const handleConvertToInvoice = async () => {
@@ -342,25 +415,21 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     const offer = doc as Offer;
     const ok = await confirm({
       title: "Rechnung erstellen",
-      message: "Angebot in Rechnung umwandeln?",
+      message: "Aus dem angenommenen Angebot wird ein neuer Rechnungsentwurf erstellt. Kunde, Positionen und Konditionen werden automatisch übernommen.",
     });
     if (!ok) return;
-    const { data, error: rpcError } = await supabase.rpc("convert_offer_to_invoice", {
-      offer_id: offer.id,
-    });
-    if (rpcError) {
+    let invoiceId: string;
+    try {
+      invoiceId = await offerService.convertOfferToInvoice(offer.id);
+    } catch (error) {
+      const workflowError = error as Error & { code?: string };
       toast.error(
         formatErrorToast({
-          code: rpcError.code,
-          message: rpcError.message,
+          code: workflowError.code,
+          message: workflowError.message,
           fallback: "Angebot konnte nicht umgewandelt werden.",
         })
       );
-      return;
-    }
-    const invoiceId = data?.id;
-    if (!invoiceId) {
-      toast.error("Rechnung konnte nicht erstellt werden.");
       return;
     }
     onDocumentsChange?.();
@@ -443,7 +512,11 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   };
 
   const recipientLinkAction = canCreateRecipientLink(doc, docType)
-      ? [{ label: "Empfänger-Link kopieren", onSelect: () => void handleCreateRecipientLink() }]
+      ? [{
+          key: "COPY_RECIPIENT_LINK",
+          label: "Empfänger-Link kopieren",
+          onSelect: () => runGuardedAction("COPY_RECIPIENT_LINK", handleCreateRecipientLink),
+        }]
       : [];
 
   const actions =
@@ -453,26 +526,30 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...((doc as Invoice | null)?.finalizedAt
             ? [
                 {
+                  key: "DOWNLOAD_PDF",
                   label: "PDF herunterladen",
-                  onSelect: () => void handleDownloadInvoice("pdf"),
+                  onSelect: () => runGuardedAction("DOWNLOAD_PDF", () => handleDownloadInvoice("pdf")),
                 },
                 {
+                  key: "DOWNLOAD_EINVOICE",
                   label: "E-Rechnung herunterladen",
-                  onSelect: () => void handleDownloadInvoice("zugferd"),
+                  onSelect: () => runGuardedAction("DOWNLOAD_EINVOICE", () => handleDownloadInvoice("zugferd")),
                 },
                 {
+                  key: "DOWNLOAD_XML",
                   label: "XML herunterladen (EN 16931)",
-                  onSelect: () => void handleDownloadInvoice("xml"),
+                  onSelect: () => runGuardedAction("DOWNLOAD_XML", () => handleDownloadInvoice("xml")),
                 },
               ]
             : []),
           ...(capabilities?.canFinalize
             ? [
                 {
-                  label: "Finalisieren",
+                  key: "FINALIZE_INVOICE",
+                  label: "Rechnung finalisieren",
                   onSelect: () => {
                     setShowActionSheet(false);
-                    void handleFinalizeInvoice();
+                    return runGuardedAction("FINALIZE_INVOICE", handleFinalizeInvoice);
                   },
                 },
               ]
@@ -480,7 +557,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canSend
             ? [
                 {
-                  label: "Senden",
+                  key: "SEND_INVOICE",
+                  label: phase === "issued" ? "Rechnung senden" : "Erneut senden",
                   onSelect: () => {
                     setShowActionSheet(false);
                     handleOpenSend();
@@ -491,10 +569,11 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canMarkSent
             ? [
                 {
+                  key: "MARK_SENT",
                   label: "Als gesendet markieren",
                   onSelect: () => {
                     setShowActionSheet(false);
-                    void handleMarkSent();
+                    return runGuardedAction("MARK_SENT", handleMarkSent);
                   },
                 },
               ]
@@ -502,6 +581,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canSendReminder
             ? [
                 {
+                  key: "SEND_REMINDER",
                   label: "Erinnerung senden",
                   onSelect: () => {
                     setShowActionSheet(false);
@@ -513,6 +593,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canSendDunning
             ? [
                 {
+                  key: "SEND_DUNNING",
                   label: "Mahnung senden",
                   onSelect: () => {
                     setShowActionSheet(false);
@@ -524,10 +605,11 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canMarkPaid
             ? [
                 {
-                  label: "Als bezahlt markieren",
+                  key: "MARK_INVOICE_PAID",
+                  label: "Zahlung erfassen",
                   onSelect: () => {
                     setShowActionSheet(false);
-                    void handleMarkPaid();
+                    return runGuardedAction("MARK_INVOICE_PAID", handleMarkPaid);
                   },
                 },
               ]
@@ -535,10 +617,11 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canCancel
             ? [
                 {
+                  key: "CANCEL_INVOICE",
                   label: "Stornieren",
                   onSelect: () => {
                     setShowActionSheet(false);
-                    void handleCancelInvoice();
+                    return runGuardedAction("CANCEL_INVOICE", handleCancelInvoice);
                   },
                 },
               ]
@@ -546,6 +629,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canEdit
             ? [
                 {
+                  key: "EDIT",
                   label: "Bearbeiten",
                   onSelect: () => {
                     setShowActionSheet(false);
@@ -560,7 +644,8 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canSend
             ? [
                 {
-                  label: "Senden",
+                  key: "SEND_OFFER",
+                  label: phase === "draft" ? "Angebot senden" : "Erneut senden",
                   onSelect: () => {
                     setShowActionSheet(false);
                     handleOpenSend();
@@ -571,10 +656,23 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canReject
             ? [
                 {
-                  label: "Ablehnen",
+                  key: "REJECT_OFFER",
+                  label: "Als abgelehnt markieren",
                   onSelect: () => {
                     setShowActionSheet(false);
-                    void handleOfferRejected();
+                    return runGuardedAction("REJECT_OFFER", handleOfferRejected);
+                  },
+                },
+              ]
+            : []),
+          ...(capabilities?.canAccept
+            ? [
+                {
+                  key: "ACCEPT_OFFER",
+                  label: "Als angenommen markieren",
+                  onSelect: () => {
+                    setShowActionSheet(false);
+                    return runGuardedAction("ACCEPT_OFFER", handleOfferAccepted);
                   },
                 },
               ]
@@ -582,10 +680,11 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canConvertToInvoice
             ? [
                 {
-                  label: "In Rechnung wandeln",
+                  key: "CONVERT_OFFER",
+                  label: "Rechnung aus Angebot erstellen",
                   onSelect: () => {
                     setShowActionSheet(false);
-                    void handleConvertToInvoice();
+                    return runGuardedAction("CONVERT_OFFER", handleConvertToInvoice);
                   },
                 },
               ]
@@ -593,6 +692,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           ...(capabilities?.canEdit
             ? [
                 {
+                  key: "EDIT",
                   label: "Bearbeiten",
                   onSelect: () => {
                     setShowActionSheet(false);
@@ -622,19 +722,16 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   };
 
   if (loading) {
-    return <div className="text-sm text-gray-500">Lade Dokument...</div>;
+    return <AppCard className="p-6 text-sm text-[var(--app-muted)]">Dokument wird geladen …</AppCard>;
   }
 
   if (error || !doc || !settings) {
     return (
-      <div className="space-y-3">
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {error ?? "Dokument konnte nicht geladen werden."}
-        </div>
-        <Link to={docType === "invoice" ? "/app/invoices" : "/app/offers"}>
-          <AppButton variant="secondary">Zurück zu Dokumenten</AppButton>
-        </Link>
-      </div>
+      <AppCard className="p-6">
+        <h1 className="font-semibold">Dokument konnte nicht geöffnet werden</h1>
+        <p className="mt-1 text-sm text-[var(--app-muted)]">Das Dokument ist nicht mehr verfügbar oder die Verbindung wurde unterbrochen.</p>
+        <div className="mt-4 flex flex-wrap gap-2"><AppButton onClick={() => setReloadToken((current) => current + 1)}>Erneut versuchen</AppButton><Link to="/app/documents"><AppButton variant="secondary">Zur Dokumentübersicht</AppButton></Link></div>
+      </AppCard>
     );
   }
 
@@ -643,23 +740,19 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   const locale = settings.locale ?? "de-DE";
   const documentCurrency =
     docType === "offer" ? (doc as Offer).currency ?? settings.currency ?? "EUR" : settings.currency ?? "EUR";
-  const statusAction =
-    docType === "invoice" && capabilities?.canMarkPaid
-      ? {
-          label: "Als bezahlt markieren",
-          onSelect: () => void handleMarkPaid(),
-          variant: "primary" as const,
-        }
-      : docType === "offer" && capabilities?.canAccept
-        ? {
-            label: "Als angenommen markieren",
-            onSelect: () => void handleOfferAccepted(),
-            variant: "primary" as const,
-          }
-        : null;
-  const availableActions = statusAction
-    ? [statusAction, ...actions.filter((action) => action.label !== statusAction.label)]
-    : actions;
+  const nextStep = docType === "invoice"
+    ? getNextDocumentAction("invoice", doc as Invoice)
+    : getNextDocumentAction("offer", doc as Offer);
+  const matchingWorkflowAction = nextStep
+    ? actions.find((action) => action.key === nextStep.key) ?? null
+    : null;
+  const workflowAction: DetailAction | null = matchingWorkflowAction && nextStep
+    ? { ...matchingWorkflowAction, label: nextStep.label }
+    : null;
+  const availableActions = prioritizeDocumentActions(actions, workflowAction).map((action) => ({
+    ...action,
+    disabled: Boolean(pendingActionKey),
+  }));
   const directActions = availableActions.slice(0, 2);
   const overflowActions = availableActions.slice(2);
 
@@ -696,6 +789,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           timeline={timeline}
           canConvert={false}
           directActions={directActions}
+          nextStepHint={nextStep?.hint}
           hasMoreActions={overflowActions.length > 0}
           onConvert={() => void handleConvertToInvoice()}
           onMore={() => setShowActionSheet(true)}
@@ -744,6 +838,7 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
         totals={totals}
         timeline={timeline}
         directActions={directActions}
+        nextStepHint={nextStep?.hint}
         hasMoreActions={overflowActions.length > 0}
         onMore={() => setShowActionSheet(true)}
       />

@@ -20,25 +20,71 @@ type SendDocumentEmailPayload = {
   senderIdentityId: string;
 };
 
+type EmailApiFetch = (
+  input: RequestInfo,
+  init?: RequestInit,
+  opts?: { auth?: boolean },
+) => Promise<Response>;
+
+type SendDocumentEmailOptions = {
+  timeoutMs?: number;
+  apiFetchImpl?: EmailApiFetch;
+  delayImpl?: (ms: number) => Promise<unknown>;
+};
+
+const EMAIL_REQUEST_TIMEOUT_MS = 60_000;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const shouldRetryEmailSend = (status: number, code?: string) =>
-  status === 503 || code === "PDF_ENGINE_RESET";
+const createEmailError = (message: string, code?: string, requestId?: string) => {
+  const error = new Error(message) as Error & { code?: string; requestId?: string };
+  if (code) error.code = code;
+  if (requestId) error.requestId = requestId;
+  return error;
+};
 
-export async function sendDocumentEmail(payload: SendDocumentEmailPayload): Promise<SendDocumentEmailResult> {
+const createUnknownDeliveryError = () =>
+  createEmailError(
+    "Der Versandstatus ist unklar. Bitte nicht sofort erneut senden und den Dokumentstatus prüfen.",
+    "EMAIL_SEND_STATUS_UNKNOWN",
+  );
+
+export const shouldRetryEmailSend = (_status: number, code?: string) =>
+  code === "PDF_ENGINE_RESET";
+
+export async function sendDocumentEmail(
+  payload: SendDocumentEmailPayload,
+  options: SendDocumentEmailOptions = {},
+): Promise<SendDocumentEmailResult> {
+  const apiFetchImpl = options.apiFetchImpl ?? apiFetch;
+  const delayImpl = options.delayImpl ?? delay;
+  const timeoutMs = options.timeoutMs ?? EMAIL_REQUEST_TIMEOUT_MS;
   let attempt = 0;
   let lastError: unknown = null;
 
   while (attempt < 2) {
     attempt += 1;
-    const res = await apiFetch(
-      "/api/email",
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      },
-      { auth: true }
-    );
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await apiFetchImpl(
+        "/api/email",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        },
+        { auth: true },
+      );
+    } catch (error) {
+      const isAbortError = error instanceof DOMException && error.name === "AbortError";
+      if (controller.signal.aborted || isAbortError || error instanceof TypeError) {
+        throw createUnknownDeliveryError();
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
 
     if (res.ok) {
       return { ok: true };
@@ -51,17 +97,15 @@ export async function sendDocumentEmail(payload: SendDocumentEmailPayload): Prom
     }
 
     if (shouldRetryEmailSend(res.status, code) && attempt === 1) {
-      await delay(500);
+      await delayImpl(500);
       continue;
     }
 
-    const error = new Error(message || "E-Mail konnte nicht gesendet werden.");
-    if (code) {
-      (error as Error & { code?: string }).code = code;
-    }
-    if (requestId) {
-      (error as Error & { requestId?: string }).requestId = requestId;
-    }
+    const error = createEmailError(
+      message || "E-Mail konnte nicht gesendet werden.",
+      code,
+      requestId,
+    );
     lastError = error;
     break;
   }

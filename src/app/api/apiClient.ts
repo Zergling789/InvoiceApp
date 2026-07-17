@@ -1,8 +1,13 @@
 import { requireAccessToken } from "@/lib/auth";
+import { notifySessionExpired } from "@/app/api/apiEvents";
+import { ApiRequestError } from "@/utils/errors";
 
 type ApiFetchOptions = {
   auth?: boolean;
+  timeoutMs?: number;
 };
+
+const DEFAULT_API_TIMEOUT_MS = 60_000;
 
 // VITE_API_PROXY configures only Vite's development proxy (vite.config.ts).
 // Browser requests must remain same-origin in development so Vite can proxy /api.
@@ -26,7 +31,15 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: Ap
   const headers = new Headers(init?.headers ?? {});
 
   if (opts?.auth) {
-    const token = await requireAccessToken();
+    let token: string;
+    try {
+      token = await requireAccessToken();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === "NOT_AUTHENTICATED") {
+        notifySessionExpired();
+      }
+      throw error;
+    }
     headers.set("Authorization", `Bearer ${token}`);
   }
 
@@ -34,27 +47,73 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, opts?: Ap
     headers.set("Content-Type", "application/json");
   }
 
-  return fetch(resolveApiUrl(input), { ...init, headers });
+  const controller = new AbortController();
+  let timedOut = false;
+  const handleExternalAbort = () => controller.abort(init?.signal?.reason);
+  if (init?.signal?.aborted) handleExternalAbort();
+  else init?.signal?.addEventListener("abort", handleExternalAbort, { once: true });
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, opts?.timeoutMs ?? DEFAULT_API_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(resolveApiUrl(input), {
+      ...init,
+      headers,
+      signal: controller.signal,
+    });
+    if (opts?.auth && response.status === 401) {
+      notifySessionExpired({ requestId: response.headers.get("x-request-id") ?? undefined });
+    }
+    return response;
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiRequestError(
+        "Der Server antwortet nicht rechtzeitig. Bitte prüfe den Status der Aktion, bevor du sie erneut ausführst.",
+        408,
+        "NETWORK_TIMEOUT",
+      );
+    }
+    if (error instanceof TypeError) {
+      const offline = typeof navigator !== "undefined" && !navigator.onLine;
+      throw new ApiRequestError(
+        offline
+          ? "Keine Internetverbindung. Bitte versuche es erneut, sobald du wieder online bist."
+          : "Der Server ist derzeit nicht erreichbar. Bitte prüfe deine Verbindung und versuche es erneut.",
+        0,
+        offline ? "OFFLINE" : "NETWORK_UNAVAILABLE",
+      );
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    init?.signal?.removeEventListener("abort", handleExternalAbort);
+  }
 }
 
 export async function readJsonResponse<T>(res: Response): Promise<T> {
   const contentType = res.headers.get("content-type") ?? "unknown";
   const raw = await res.text().catch(() => "");
-  const preview = raw.trim().slice(0, 200);
+  const requestId = res.headers.get("x-request-id") ?? undefined;
 
   if (!contentType.includes("application/json")) {
-    const message = preview
-      ? `Unexpected response format. Expected JSON. Status: ${res.status}. Content-Type: ${contentType}. Body starts with: ${preview}`
-      : `Unexpected response format. Expected JSON. Status: ${res.status}. Content-Type: ${contentType}.`;
-    throw new Error(message);
+    throw new ApiRequestError(
+      "Die Serverantwort konnte nicht verarbeitet werden.",
+      res.status,
+      "INVALID_SERVER_RESPONSE",
+      requestId,
+    );
   }
 
   try {
     return JSON.parse(raw) as T;
   } catch {
-    const message = preview
-      ? `Failed to parse JSON response. Status: ${res.status}. Content-Type: ${contentType}. Body starts with: ${preview}`
-      : `Failed to parse JSON response. Status: ${res.status}. Content-Type: ${contentType}.`;
-    throw new Error(message);
+    throw new ApiRequestError(
+      "Die Serverantwort konnte nicht verarbeitet werden.",
+      res.status,
+      "INVALID_SERVER_RESPONSE",
+      requestId,
+    );
   }
 }

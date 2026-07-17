@@ -3,12 +3,12 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { Client, Offer, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
-import { useToast } from "@/ui/FeedbackProvider";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import type { DocumentFormData } from "@/features/documents/documentEditorModel";
 import * as clientService from "@/app/clients/clientService";
 import * as offerService from "@/app/offers/offerService";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 const buildEditorSeed = (doc: Offer): EditorSeed => ({
   id: doc.id,
@@ -46,7 +46,6 @@ export default function OfferEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +54,7 @@ export default function OfferEditPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
   const [editorInitial, setEditorInitial] = useState<Partial<DocumentFormData> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? "/app/documents";
 
   useEffect(() => {
@@ -88,7 +88,6 @@ export default function OfferEditPage() {
         if (mounted) {
           const message = e instanceof Error ? e.message : String(e);
           setError(message);
-          toast.error(message);
         }
       } finally {
         if (mounted) setLoading(false);
@@ -97,7 +96,7 @@ export default function OfferEditPage() {
     return () => {
       mounted = false;
     };
-  }, [id, toast]);
+  }, [id, reloadToken]);
 
   const handleSaved = async () => {
     if (!id) return;
@@ -112,9 +111,10 @@ export default function OfferEditPage() {
   if (error || !doc || !settings || !editorSeed) {
     return (
       <div className="space-y-3">
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {error ?? "Angebot konnte nicht geladen werden."}
-        </div>
+        <LoadErrorCard
+          title="Angebot konnte nicht geladen werden"
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
         <Link to="/app/documents">
           <AppButton variant="secondary">Zurück zu Dokumenten</AppButton>
         </Link>

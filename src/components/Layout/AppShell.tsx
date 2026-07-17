@@ -1,9 +1,22 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar, type NavItem } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { BetaFeedback } from "@/components/BetaFeedback";
 
 export function AppShell({ navItems }: { navItems: NavItem[] }) {
+  const location = useLocation();
+  const isOnboarding = location.pathname === "/app/onboarding";
+
+  if (isOnboarding) {
+    return (
+      <div className="min-h-screen-safe bg-[var(--app-bg)] text-[var(--app-text)]">
+        <main id="main-content" className="animate-enter">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen-safe bg-[var(--app-bg)]">
       <a

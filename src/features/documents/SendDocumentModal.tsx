@@ -25,6 +25,19 @@ type SendDocumentModalProps = {
   onSent: (nextData: Offer | Invoice) => Promise<void>;
 };
 
+type SendFailure = {
+  message: string;
+  statusUnknown: boolean;
+};
+
+const AMBIGUOUS_EMAIL_CODES = new Set([
+  "EMAIL_SEND_STATUS_UNKNOWN",
+  "EMAIL_SENT_STATUS_UPDATE_FAILED",
+]);
+
+export const isEmailDeliveryStatusUnknown = (code?: string | null) =>
+  Boolean(code && AMBIGUOUS_EMAIL_CODES.has(code));
+
 const parseEmails = (value: string) =>
   value
     .split(/[;,]/)
@@ -32,6 +45,65 @@ const parseEmails = (value: string) =>
     .filter(Boolean);
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+export const getSendDialogCopy = (
+  documentType: "offer" | "invoice",
+  templateType?: SendDocumentModalProps["templateType"],
+) => {
+  if (templateType === "reminder" && documentType === "invoice") {
+    return { title: "Zahlungserinnerung senden", action: "Erinnerung senden", success: "Zahlungserinnerung wurde versendet." };
+  }
+  if (templateType === "dunning" && documentType === "invoice") {
+    return { title: "Mahnung senden", action: "Mahnung senden", success: "Mahnung wurde versendet." };
+  }
+  if (templateType === "followup" && documentType === "offer") {
+    return { title: "Angebot nachfassen", action: "Nachfrage senden", success: "Nachfrage wurde versendet." };
+  }
+  const documentLabel = documentType === "invoice" ? "Rechnung" : "Angebot";
+  return { title: `${documentLabel} senden`, action: "Senden", success: `${documentLabel} wurde versendet.` };
+};
+
+export const getSendEmailErrors = ({
+  to,
+  cc,
+  bcc,
+  subject,
+  senderIdentityId,
+  documentType,
+  documentStatus,
+  allowDraftInvoice = false,
+}: {
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  senderIdentityId?: string | null;
+  documentType: "offer" | "invoice";
+  documentStatus: string;
+  allowDraftInvoice?: boolean;
+}) => {
+  const errors: string[] = [];
+  if (!to.trim()) errors.push("Empfänger fehlt.");
+  if (to.trim() && parseEmails(to).some((entry) => !isValidEmail(entry))) {
+    errors.push("Empfängeradresse ist ungültig.");
+  }
+  if (cc.trim() && parseEmails(cc).some((entry) => !isValidEmail(entry))) {
+    errors.push("CC enthält ungültige Adressen.");
+  }
+  if (bcc.trim() && parseEmails(bcc).some((entry) => !isValidEmail(entry))) {
+    errors.push("BCC enthält ungültige Adressen.");
+  }
+  if (!subject.trim()) errors.push("Betreff fehlt.");
+  if (!senderIdentityId) errors.push("Bitte eine verifizierte Absenderadresse hinterlegen.");
+  if (
+    !allowDraftInvoice &&
+    documentType === "invoice" &&
+    documentStatus === InvoiceStatus.DRAFT
+  ) {
+    errors.push("Rechnung muss vor dem Versand finalisiert werden.");
+  }
+  return errors;
+};
 
 const buildTemplate = ({
   templateType,
@@ -93,7 +165,9 @@ export function SendDocumentModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [sendFailure, setSendFailure] = useState<SendFailure | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -109,6 +183,7 @@ export function SendDocumentModal({
     });
     setSubject(template?.subject ?? defaultSubject);
     setMessage(template?.message ?? defaultMessage);
+    setSendFailure(null);
   }, [client, defaultMessage, defaultSubject, document, documentType, isOpen, templateType]);
 
   useEffect(() => {
@@ -139,32 +214,26 @@ export function SendDocumentModal({
     [client, document, documentType, invoices, settings]
   );
 
-  const emailList = (value: string) => parseEmails(value);
-  const emailErrors = useMemo(() => {
-    const errors: string[] = [];
-    if (!to.trim()) {
-      errors.push("Empfänger fehlt.");
-    }
-    if (to.trim() && emailList(to).some((entry) => !isValidEmail(entry))) {
-      errors.push("Empfängeradresse ist ungültig.");
-    }
-    if (cc.trim() && emailList(cc).some((entry) => !isValidEmail(entry))) {
-      errors.push("CC enthält ungültige Adressen.");
-    }
-    if (bcc.trim() && emailList(bcc).some((entry) => !isValidEmail(entry))) {
-      errors.push("BCC enthält ungültige Adressen.");
-    }
-    if (!subject.trim()) {
-      errors.push("Betreff fehlt.");
-    }
-    if (!settings.defaultSenderIdentityId) {
-      errors.push("Bitte eine verifizierte Absenderadresse hinterlegen.");
-    }
-    if (documentType === "invoice" && localDocument.status === InvoiceStatus.DRAFT) {
-      errors.push("Rechnung muss vor dem Versand finalisiert werden.");
-    }
-    return errors;
-  }, [bcc, cc, documentType, localDocument.status, settings.defaultSenderIdentityId, subject, to]);
+  const buildEmailErrors = (activeDocument: Offer | Invoice, allowDraftInvoice = false) =>
+    getSendEmailErrors({
+      to,
+      cc,
+      bcc,
+      subject,
+      senderIdentityId: settings.defaultSenderIdentityId,
+      documentType,
+      documentStatus: activeDocument.status,
+      allowDraftInvoice,
+    });
+  const emailErrors = useMemo(
+    () => buildEmailErrors(localDocument),
+    [bcc, cc, documentType, localDocument, settings.defaultSenderIdentityId, subject, to],
+  );
+  const preFinalizeEmailErrors = useMemo(
+    () => buildEmailErrors(localDocument, true),
+    [bcc, cc, documentType, localDocument, settings.defaultSenderIdentityId, subject, to],
+  );
+  const dialogCopy = getSendDialogCopy(documentType, templateType);
 
   const loadPreview = async () => {
     setPreviewLoading(true);
@@ -188,14 +257,15 @@ export function SendDocumentModal({
   };
 
   const handleSend = async (docOverride?: Offer | Invoice) => {
-    if (sending) return;
-    if (emailErrors.length > 0) return;
+    if (sending || sendFailure?.statusUnknown) return;
+    const activeDocument = docOverride ?? localDocument;
+    if (buildEmailErrors(activeDocument).length > 0) return;
+    setSendFailure(null);
     setSending(true);
     try {
-      const activeDocument = docOverride ?? localDocument;
-      const toList = emailList(to);
-      const ccList = emailList(cc);
-      const bccList = emailList(bcc);
+      const toList = parseEmails(to);
+      const ccList = parseEmails(cc);
+      const bccList = parseEmails(bcc);
 
       const result = await sendDocumentEmail({
         documentId: activeDocument.id,
@@ -209,18 +279,22 @@ export function SendDocumentModal({
       });
 
       if (!result.ok) {
-        toast.error(
-          formatErrorToast({
-            code: result.code,
-            fallback: "E-Mail konnte nicht gesendet werden.",
-          })
-        );
+        const failureMessage = formatErrorToast({
+          code: result.code,
+          message: result.message,
+          fallback: "E-Mail konnte nicht gesendet werden.",
+        });
+        setSendFailure({
+          message: failureMessage,
+          statusUnknown: isEmailDeliveryStatusUnknown(result.code),
+        });
+        toast.error(failureMessage);
         return;
       }
 
       const nowIso = new Date().toISOString();
       const nextData = {
-        ...document,
+        ...activeDocument,
         status:
           documentType === "invoice" && activeDocument.status === InvoiceStatus.ISSUED
             ? InvoiceStatus.SENT
@@ -233,41 +307,61 @@ export function SendDocumentModal({
       } as Offer | Invoice;
 
       await onSent(nextData);
-      toast.success("E-Mail wurde erfolgreich versendet.");
+      toast.success(dialogCopy.success);
       onClose();
     } catch (error) {
       const errAny = error as { code?: string; message?: string; requestId?: string } | null;
-      toast.error(
-        formatErrorToast({
-          code: errAny?.code,
-          message: errAny?.message,
-          requestId: errAny?.requestId,
-          fallback: "E-Mail konnte nicht gesendet werden.",
-        })
-      );
+      const failureMessage = formatErrorToast({
+        code: errAny?.code,
+        message: errAny?.message,
+        requestId: errAny?.requestId,
+        fallback: "E-Mail konnte nicht gesendet werden.",
+      });
+      setSendFailure({
+        message: failureMessage,
+        statusUnknown: isEmailDeliveryStatusUnknown(errAny?.code),
+      });
+      toast.error(failureMessage);
     } finally {
       setSending(false);
     }
   };
 
   const handleFinalizeAndSend = async () => {
-    if (sending) return;
+    if (sending || finalizing || sendFailure?.statusUnknown || preFinalizeEmailErrors.length > 0) return;
     if (!onFinalize) return;
-    const next = await onFinalize();
-    if (next) {
-      setLocalDocument(next);
-      await handleSend(next);
+    setFinalizing(true);
+    try {
+      const next = await onFinalize();
+      if (next) {
+        setLocalDocument(next);
+        setFinalizing(false);
+        await handleSend(next);
+      }
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
+  const handleFinalizeOnly = async () => {
+    if (!onFinalize || finalizing || sending) return;
+    setFinalizing(true);
+    try {
+      const next = await onFinalize();
+      if (next) setLocalDocument(next);
+    } finally {
+      setFinalizing(false);
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
-      <div className="flex max-h-[100dvh] w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:max-h-[90dvh] sm:rounded-xl">
+    <div className="app-visual-viewport fixed inset-x-0 z-[70] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
+      <div className="flex max-h-full w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:max-h-[90%] sm:rounded-xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Dokument senden</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{dialogCopy.title}</h3>
             <p className="text-sm text-gray-500">
               {documentType === "invoice" ? "Rechnung" : "Angebot"}{" "}
               {documentType === "invoice" ? localDocument.number ?? "Entwurf" : localDocument.number}
@@ -278,7 +372,7 @@ export function SendDocumentModal({
           </AppButton>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 space-y-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-32 px-4 py-5 sm:px-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -286,22 +380,22 @@ export function SendDocumentModal({
                 <div className="flex items-center gap-2">
                   {previewUrl && (
                     <a
-                      className="text-sm text-blue-600 underline"
+                      className="text-sm text-[var(--app-primary)] underline"
                       href={previewUrl}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Preview öffnen
+                      Vorschau öffnen
                     </a>
                   )}
                   <AppButton variant="secondary" onClick={loadPreview} disabled={previewLoading}>
-                    <FileDown size={16} /> {previewLoading ? "Lädt..." : "Preview laden"}
+                    <FileDown size={16} /> {previewLoading ? "Wird geladen …" : "Vorschau laden"}
                   </AppButton>
                 </div>
               </div>
               {previewUrl ? (
                 <iframe
-                  title="PDF Preview"
+                  title="PDF-Vorschau"
                   src={previewUrl}
                   className="w-full h-[360px] border rounded"
                 />
@@ -383,10 +477,27 @@ export function SendDocumentModal({
               </ul>
             </div>
           )}
+
+          {sendFailure && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className={`rounded border px-4 py-3 text-sm ${
+                sendFailure.statusUnknown
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
+              <div className="mb-1 font-semibold">
+                {sendFailure.statusUnknown ? "Versandstatus prüfen" : "Versand fehlgeschlagen"}
+              </div>
+              <p>{sendFailure.message}</p>
+            </div>
+          )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t bg-gray-50 px-4 py-3 sm:px-6 sm:py-4">
-          <AppButton variant="secondary" onClick={onClose}>
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t bg-gray-50 px-4 py-3 safe-bottom sm:flex-row sm:flex-wrap sm:justify-end sm:px-6 sm:py-4">
+          <AppButton className="w-full sm:w-auto" variant="secondary" onClick={onClose}>
             Abbrechen
           </AppButton>
 
@@ -394,30 +505,32 @@ export function SendDocumentModal({
             <>
               {onFinalize && (
                 <AppButton
+                  className="w-full sm:w-auto"
                   variant="secondary"
-                  onClick={async () => {
-                    const next = await onFinalize();
-                    if (next) setLocalDocument(next);
-                  }}
+                  onClick={() => void handleFinalizeOnly()}
+                  disabled={finalizing || sending || sendFailure?.statusUnknown}
                 >
-                  Finalisieren
+                  {finalizing ? "Finalisiere ..." : "Nur finalisieren"}
                 </AppButton>
               )}
               {onFinalize && (
-                <AppButton onClick={() => void handleFinalizeAndSend()} disabled={sending}>
-                  Finalisieren & Senden
+                <AppButton className="w-full sm:w-auto" onClick={() => void handleFinalizeAndSend()} disabled={sending || finalizing || sendFailure?.statusUnknown || preFinalizeEmailErrors.length > 0}>
+                  {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} Finalisieren & senden
                 </AppButton>
               )}
             </>
           )}
 
-          <AppButton
-            onClick={() => void handleSend()}
-            disabled={sending || emailErrors.length > 0}
-          >
-            {sending ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}{" "}
-            {sending ? "Sende..." : "Senden"}
-          </AppButton>
+          {!(documentType === "invoice" && localDocument.status === InvoiceStatus.DRAFT) && (
+            <AppButton
+              className="w-full sm:w-auto"
+              onClick={() => void handleSend()}
+              disabled={sending || finalizing || sendFailure?.statusUnknown || emailErrors.length > 0}
+            >
+              {sending ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}{" "}
+              {sending ? "Wird gesendet ..." : dialogCopy.action}
+            </AppButton>
+          )}
         </div>
       </div>
     </div>

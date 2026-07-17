@@ -9,6 +9,7 @@ import DocumentDetailRoute from "@/features/documents/DocumentDetailRoute";
 import OfferCreatePage from "@/features/documents/create/OfferCreatePage";
 import InvoiceCreatePage from "@/features/documents/create/InvoiceCreatePage";
 import CustomerCreatePage from "@/features/clients/CustomerCreatePage";
+import CustomerEditPage from "@/features/clients/CustomerEditPage";
 import ProjectCreatePage from "@/features/projects/ProjectCreatePage";
 import TodosPage from "@/features/todos/TodosPage";
 import MorePage from "@/features/more/MorePage";
@@ -30,6 +31,8 @@ import { PublicLegalFooter } from "@/components/PublicLegalFooter";
 import { PositionCatalogPage } from "@/features/positions/PositionCatalogPage";
 import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
 import OfferEditPage from "@/features/documents/edit/OfferEditPage";
+import OnboardingPage from "@/features/onboarding/OnboardingPage";
+import { NotFoundPage } from "@/pages/NotFoundPage";
 
 const navItems: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -71,9 +74,11 @@ export default function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="todos" element={<TodosPage />} />
           <Route path="documents" element={<DocumentsHubPage />} />
           <Route path="clients" element={<Clients />} />
+          <Route path="clients/:id/edit" element={<CustomerEditPage />} />
           <Route path="projects" element={<Projects />} />
           <Route path="offers" element={<Navigate to="/app/documents?type=offer" replace />} />
           <Route path="offers/new" element={<OfferCreatePage />} />
@@ -92,10 +97,10 @@ export default function App() {
           <Route path="plans" element={<PricingPage />} />
           <Route path="settings/email/verify" element={<VerifyEmailResult />} />
 
-          <Route path="*" element={<Navigate to="/app" replace />} />
+          <Route path="*" element={<NotFoundPage authenticated />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
       {!location.pathname.startsWith("/app") && !location.pathname.startsWith("/recipient/") && <PublicLegalFooter />}
 

@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/renderWithProviders";
-import { PositionCatalogPage } from "./PositionCatalogPage";
+import { matchesPositionTemplateSearch, PositionCatalogPage } from "./PositionCatalogPage";
 
 const service = vi.hoisted(() => ({
   loadPositionTemplates: vi.fn(), loadPositionGroups: vi.fn(), createPositionTemplate: vi.fn(),
@@ -16,16 +16,16 @@ const template = { id: "p1", kind: "PRODUCT" as const, name: "Pflasterstein", de
 
 describe("PositionCatalogPage", () => {
   beforeEach(() => { vi.clearAllMocks(); service.loadPositionTemplates.mockResolvedValue([]); service.loadPositionGroups.mockResolvedValue([]); });
-  it("zeigt den leeren Zustand und öffnet den Dialog für einen neuen Eintrag", async () => {
+  it("zeigt den leeren Zustand und öffnet den Dialog für ein neues Produkt oder eine Leistung", async () => {
     const user = userEvent.setup(); renderWithProviders(<PositionCatalogPage />);
     expect(await screen.findByText("Noch keine Produkte oder Leistungen gespeichert")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Ersten Eintrag anlegen" }));
-    expect(screen.getByRole("dialog", { name: "Neuer Eintrag" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Erstes Produkt oder erste Leistung anlegen" }));
+    expect(screen.getByRole("dialog", { name: "Produkt oder Leistung anlegen" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Produktnummer")).not.toBeInTheDocument();
   });
   it("zeigt Produktfelder erst nach Produktauswahl und lässt den Preis leer", async () => {
     const user = userEvent.setup(); renderWithProviders(<PositionCatalogPage />);
-    await user.click(await screen.findByRole("button", { name: "Ersten Eintrag anlegen" }));
+    await user.click(await screen.findByRole("button", { name: "Erstes Produkt oder erste Leistung anlegen" }));
     await user.click(screen.getByRole("button", { name: "Produkt" }));
     await user.click(screen.getByRole("button", { name: /Weitere Angaben/ }));
     expect(screen.getByText("Produktnummer")).toBeInTheDocument();
@@ -45,10 +45,11 @@ describe("PositionCatalogPage", () => {
     await screen.findByText("Pflasterstein");
     await user.click(screen.getByRole("button", { name: "Aktionen für Pflasterstein" }));
     await user.click(screen.getByRole("button", { name: "Bearbeiten" }));
-    expect(screen.getByRole("dialog", { name: "Eintrag bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Produkt bearbeiten" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Schließen" }));
+    await user.click(screen.getByRole("button", { name: "Aktionen für Pflasterstein" }));
     await user.click(screen.getByRole("button", { name: "Löschen" }));
-    expect(screen.getByText("Eintrag löschen?")).toBeInTheDocument();
+    expect(screen.getByText("Produkt oder Leistung löschen?")).toBeInTheDocument();
     expect(service.deletePositionTemplate).not.toHaveBeenCalled();
   });
   it("fügt einen Eintrag zum Paket hinzu und markiert ihn optional", async () => {
@@ -62,5 +63,21 @@ describe("PositionCatalogPage", () => {
     await user.type(screen.getByLabelText("Paketname *"), "Terrasse");
     await user.click(screen.getByRole("button", { name: "Paket speichern" }));
     await waitFor(() => expect(service.createPositionGroup).toHaveBeenCalledWith(expect.objectContaining({ name: "Terrasse", items: [expect.objectContaining({ optional: true })] })));
+  });
+
+  it("sucht auch nach Kategorie und Produktnummer", () => {
+    expect(matchesPositionTemplateSearch(template, "baustoff")).toBe(true);
+    expect(matchesPositionTemplateSearch(template, "pf-1")).toBe(true);
+    expect(matchesPositionTemplateSearch(template, "reinigung")).toBe(false);
+  });
+
+  it("zeigt bei Ladefehlern keinen falschen Leerzustand und kann erneut laden", async () => {
+    const user = userEvent.setup();
+    service.loadPositionTemplates.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce([]);
+    renderWithProviders(<PositionCatalogPage />);
+    expect(await screen.findByText("Produkte und Leistungen konnten nicht geladen werden")).toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Produkte oder Leistungen gespeichert")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    expect(await screen.findByText("Noch keine Produkte oder Leistungen gespeichert")).toBeInTheDocument();
   });
 });

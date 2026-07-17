@@ -4,6 +4,7 @@ import { useLocation, useNavigate, type Location } from "react-router-dom";
 import ModalSheet from "@/components/ui/ModalSheet";
 import OfferForm from "@/features/documents/create/OfferForm";
 import type { CreatedDocumentTarget } from "@/features/documents/createdDocumentNavigation";
+import { completeOnboarding } from "@/app/onboarding/onboardingService";
 
 export default function OfferCreatePage() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ export default function OfferCreatePage() {
   const backgroundLocation = state?.backgroundLocation;
   const returnTo = state?.returnTo;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
+  const isOnboarding = new URLSearchParams(location.search).get("onboarding") === "1";
+  const onboardingClientId = new URLSearchParams(location.search).get("clientId");
 
   const handleClose = (force?: boolean) => {
     const shouldSkipConfirm = force || skipConfirmRef.current;
@@ -33,6 +36,11 @@ export default function OfferCreatePage() {
         refreshDocuments,
       };
     };
+
+    if (returnUrl) {
+      navigate(returnUrl, { replace: true, state: buildState(undefined) });
+      return;
+    }
 
     if (refreshDocuments && createdDocumentRef.current) {
       navigate("/app/documents", {
@@ -55,11 +63,6 @@ export default function OfferCreatePage() {
       return;
     }
 
-    if (returnUrl) {
-      navigate(returnUrl, { replace: true, state: buildState(undefined) });
-      return;
-    }
-
     if (window.history.length > 1) {
       navigate(-1);
     } else {
@@ -72,11 +75,12 @@ export default function OfferCreatePage() {
       <OfferForm
         onClose={handleClose}
         onDirtyChange={setIsDirty}
-        onSaved={(document) => {
+        onSaved={async (document) => {
           skipConfirmRef.current = true;
           refreshTokenRef.current = Date.now();
           createdDocumentRef.current = document;
           setIsDirty(false);
+          if (isOnboarding) await completeOnboarding(onboardingClientId);
         }}
       />
     </ModalSheet>

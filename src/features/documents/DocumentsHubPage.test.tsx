@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DocumentsHubPage from "./DocumentsHubPage";
@@ -82,5 +82,19 @@ describe("DocumentsHubPage table view", () => {
     const row = await screen.findByRole("row", { name: /ANG-0154.*Fabian.*Heimlich.*Beispiel GmbH/i });
     expect(row).toHaveClass("document-created-highlight");
     expect(row).toHaveAttribute("data-document-key", "offer-offer-1");
+  });
+
+  it("shows one retry state instead of an empty document list after a load failure", async () => {
+    listClientsMock.mockRejectedValueOnce(new Error("private database detail"));
+    renderWithProviders(<DocumentsHubPage />, { route: "/app/documents" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Dokumente konnten nicht geladen werden");
+    expect(screen.queryByText("private database detail")).not.toBeInTheDocument();
+    expect(screen.queryByText("Keine Dokumente gefunden.")).not.toBeInTheDocument();
+
+    const callsBeforeRetry = listClientsMock.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    await waitFor(() => expect(listClientsMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry));
+    expect(await screen.findByRole("row", { name: /ANG-0154.*Fabian.*Heimlich/i })).toBeVisible();
   });
 });

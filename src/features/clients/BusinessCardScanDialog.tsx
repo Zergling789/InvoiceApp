@@ -31,8 +31,8 @@ export function BusinessCardScanDialog({ onClose, onApply }: Props) {
   const field = (label: string, key: keyof BusinessCardContact, multiline = false) => <label className="text-sm font-medium">{label}{multiline ? <textarea rows={3} className="mt-1 w-full p-2.5" value={String(contact[key])} onChange={(event) => setContact({ ...contact, [key]: event.target.value })} /> : <input className="mt-1 w-full p-2.5" value={String(contact[key])} onChange={(event) => setContact({ ...contact, [key]: event.target.value })} />}</label>;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 backdrop-blur-sm sm:items-center sm:p-4" role="presentation">
-      <div className="flex max-h-[100dvh] w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-[var(--app-surface-solid)] shadow-2xl sm:max-h-[92dvh] sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="card-scan-title">
+    <div className="app-visual-viewport fixed inset-x-0 z-[90] flex items-end justify-center bg-black/45 backdrop-blur-sm sm:items-center sm:p-4" role="presentation">
+      <div className="flex max-h-full w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-[var(--app-surface-solid)] shadow-2xl sm:max-h-[92%] sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="card-scan-title">
         <header className="flex items-start justify-between border-b border-[var(--app-border)] p-5 sm:px-7"><div><div className="app-eyebrow">KI-Erkennung</div><h2 id="card-scan-title" className="mt-1 text-2xl font-semibold">Visitenkarte scannen</h2><p className="mt-2 text-sm text-[var(--app-muted)]">Das Bild wird nur zur Erkennung übertragen und nicht dauerhaft gespeichert.</p></div><button type="button" onClick={onClose} aria-label="Schließen" className="grid h-11 w-11 place-items-center rounded-full hover:bg-black/5 dark:hover:bg-white/10"><X size={18} /></button></header>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:px-7">
           <input id={inputId} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={(event) => { void processFile(event.target.files?.[0]); event.target.value = ""; }} />
@@ -42,7 +42,7 @@ export function BusinessCardScanDialog({ onClose, onApply }: Props) {
           {error && <div role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
           {contact.warnings.length > 0 && <div className="mt-4 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200"><div className="flex gap-2 font-semibold"><AlertTriangle size={17} />Bitte prüfen</div><ul className="mt-2 list-disc pl-5">{contact.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
         </div>
-        <footer className="flex justify-end gap-2 border-t border-[var(--app-border)] p-4 sm:px-7"><AppButton type="button" variant="ghost" onClick={onClose}>Abbrechen</AppButton><AppButton type="button" disabled={!hasResult || !contact.companyName.trim() || loading} onClick={() => onApply(contact)}>Daten übernehmen</AppButton></footer>
+        <footer className="flex flex-col-reverse gap-2 border-t border-[var(--app-border)] p-4 safe-bottom sm:flex-row sm:justify-end sm:px-7"><AppButton className="w-full sm:w-auto" type="button" variant="ghost" onClick={onClose}>Abbrechen</AppButton><AppButton className="w-full sm:w-auto" type="button" disabled={!hasResult || !contact.companyName.trim() || loading} onClick={() => onApply(contact)}>Daten übernehmen</AppButton></footer>
       </div>
     </div>
   );

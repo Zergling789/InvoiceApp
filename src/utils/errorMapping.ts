@@ -15,8 +15,24 @@ export const mapErrorCodeToToast = (code?: string | null) => {
   switch (normalized) {
     case "NOT_AUTHENTICATED":
       return "Bitte melde dich erneut an.";
+    case "NETWORK_TIMEOUT":
+      return "Der Server antwortet nicht rechtzeitig. Bitte prüfe den Status der Aktion, bevor du sie erneut ausführst.";
+    case "NETWORK_UNAVAILABLE":
+      return "Der Server ist derzeit nicht erreichbar. Bitte prüfe deine Verbindung und versuche es erneut.";
+    case "OFFLINE":
+      return "Keine Internetverbindung. Bitte versuche es erneut, sobald du wieder online bist.";
+    case "INVALID_SERVER_RESPONSE":
+      return "Die Serverantwort konnte nicht verarbeitet werden. Bitte versuche es erneut.";
     case "FORBIDDEN":
       return "Keine Berechtigung für diese Aktion.";
+    case "OFFER_NOT_FOUND":
+      return "Das Angebot wurde nicht gefunden oder gehört nicht zu deinem Konto.";
+    case "OFFER_NOT_RESPONDABLE":
+      return "Nur ein gesendetes Angebot kann angenommen oder abgelehnt werden.";
+    case "OFFER_NOT_ACCEPTED":
+      return "Das Angebot muss vor der Rechnungserstellung angenommen werden.";
+    case "OFFER_ALREADY_CONVERTED":
+      return "Für dieses Angebot wurde bereits eine Rechnung erstellt.";
     case "INVOICE_LOCKED_CONTENT":
       return "Diese Rechnung ist finalisiert und kann nicht geändert werden.";
     case "INVOICE_LOCK_INVALID_STATUS":
@@ -27,6 +43,22 @@ export const mapErrorCodeToToast = (code?: string | null) => {
       return "Statuswechsel ist nicht erlaubt.";
     case "EMAIL_NOT_CONFIGURED":
       return "E-Mail Versand ist nicht konfiguriert.";
+    case "EMAIL_SEND_STATUS_UNKNOWN":
+      return "Der Versandstatus ist unklar. Bitte nicht sofort erneut senden. Schließe den Dialog und prüfe den Dokumentstatus sowie die Aktivitäten.";
+    case "EMAIL_SENT_STATUS_UPDATE_FAILED":
+      return "Die E-Mail wurde vom Mailserver angenommen, aber der Versand konnte in FreelanceFlow nicht vollständig abgeschlossen werden. Bitte nicht erneut senden und den Status prüfen.";
+    case "EMAIL_PROVIDER_AUTH_FAILED":
+      return "Die Verbindung zur Absenderadresse konnte nicht authentifiziert werden. Bitte E-Mail-Einstellungen prüfen.";
+    case "EMAIL_RECIPIENT_REJECTED":
+      return "Der Mailserver hat mindestens eine Empfängeradresse abgelehnt. Bitte Empfänger prüfen.";
+    case "EMAIL_SEND_FAILED":
+      return "E-Mail konnte nicht gesendet werden.";
+    case "AI_SOURCE_INVALID":
+      return "Die gewählte Eingabequelle ist ungültig.";
+    case "AI_SOURCE_NOT_SUPPORTED":
+      return "Diese Eingabequelle wird derzeit noch nicht unterstützt.";
+    case "AI_INVALID_RESPONSE":
+      return "Der KI-Vorschlag hatte ein ungültiges Format. Bitte versuche es erneut.";
     case "CLIENT_REQUIRED":
     case "CLIENT_NAME_REQUIRED":
     case "CLIENT_SNAPSHOT_MISSING":

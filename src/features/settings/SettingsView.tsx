@@ -21,6 +21,16 @@ import { trackEvent } from "@/lib/track";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
 import { BrandingSettingsSection } from "@/features/settings/BrandingSettingsSection";
 import { cancelAccountDeletion, downloadAccountData, getAccountDeletionStatus, requestAccountDeletion, type AccountDeletionRequest } from "@/app/account/accountDataService";
+import { logError } from "@/utils/errors";
+
+const SETTINGS_SECTIONS = [
+  { id: "company", label: "Firma & Steuer" },
+  { id: "documents", label: "Dokumente" },
+  { id: "email", label: "E-Mail" },
+  { id: "account", label: "Konto & Datenschutz" },
+] as const;
+
+type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];
 
 const defaultSettings: UserSettings = {
   name: "",
@@ -70,6 +80,9 @@ export default function SettingsView() {
   const toast = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>("company");
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [senderIdentities, setSenderIdentities] = useState<SenderIdentity[]>([]);
@@ -106,18 +119,19 @@ export default function SettingsView() {
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setLoadError(false);
       try {
         const s = await fetchSettings();
         setSettings({ ...defaultSettings, ...(s ?? {}) });
       } catch (e) {
-        console.error("Failed to load settings:", e);
+        logError(e);
         toast.error(e instanceof Error ? e.message : "Fehler beim Laden der Einstellungen.");
-        setSettings(defaultSettings);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [reloadToken]);
 
   useEffect(() => { getAccountDeletionStatus().then(({ request }) => setDeletionStatus(request)).catch(() => undefined); }, []);
 
@@ -129,7 +143,7 @@ export default function SettingsView() {
         const items = await listSenderIdentities();
         if (mounted) setSenderIdentities(items);
       } catch (e) {
-        console.error("Failed to load sender identities:", e);
+        logError(e);
         if (mounted) setSenderIdentities([]);
       } finally {
         if (mounted) setSenderLoading(false);
@@ -171,7 +185,7 @@ export default function SettingsView() {
       await reloadSenderIdentities();
       toast.success("Bestaetigungslink wurde gesendet.");
     } catch (e) {
-      console.error(e);
+      logError(e);
       toast.error(e instanceof Error ? e.message : "Versand fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
@@ -186,7 +200,7 @@ export default function SettingsView() {
       await reloadSenderIdentities();
       toast.success("Bestaetigungslink erneut gesendet.");
     } catch (e) {
-      console.error(e);
+      logError(e);
       toast.error(e instanceof Error ? e.message : "Resend fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
@@ -204,7 +218,7 @@ export default function SettingsView() {
       await disableSenderIdentity(id);
       await reloadSenderIdentities();
     } catch (e) {
-      console.error(e);
+      logError(e);
       toast.error(e instanceof Error ? e.message : "Deaktivieren fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
@@ -218,7 +232,7 @@ export default function SettingsView() {
       trackEvent("sender_identity_test_email_sent");
       toast.success("Testmail wurde gesendet.");
     } catch (e) {
-      console.error(e);
+      logError(e);
       toast.error(e instanceof Error ? e.message : "Testmail fehlgeschlagen.");
     } finally {
       setSenderBusyId(null);
@@ -232,7 +246,7 @@ export default function SettingsView() {
       setSettings((prev) => ({ ...prev, defaultSenderIdentityId: next }));
       trackEvent("default_sender_identity_updated");
     } catch (e) {
-      console.error(e);
+      logError(e);
       toast.error(e instanceof Error ? e.message : "Konnte Standard nicht setzen.");
     }
   };
@@ -259,7 +273,7 @@ export default function SettingsView() {
       setSettings(payload);
       toast.success("Einstellungen gespeichert!");
     } catch (e) {
-      console.error("Failed to save settings:", e);
+      logError(e);
       toast.error(e instanceof Error ? e.message : "Fehler beim Speichern der Einstellungen.");
     } finally {
       setSaving(false);
@@ -327,6 +341,8 @@ export default function SettingsView() {
 
   if (loading) return <div className="text-sm text-gray-500">Lade Einstellungen...</div>;
 
+  if (loadError) return <AppCard className="p-6"><h1 className="font-semibold">Einstellungen konnten nicht geladen werden</h1><p className="mt-1 text-sm text-[var(--app-muted)]">Deine gespeicherten Angaben wurden nicht verändert. Prüfe die Verbindung und versuche es erneut.</p><AppButton className="mt-4" onClick={() => setReloadToken((current) => current + 1)}>Erneut versuchen</AppButton></AppCard>;
+
   return (
     <div className="space-y-6 bottom-action-spacer">
       {/* Settings follow the same card/grid rhythm as other pages to avoid mismatched spacing, typography, and action placement. */}
@@ -341,6 +357,11 @@ export default function SettingsView() {
         </div>
       )}
 
+      <nav aria-label="Einstellungsbereiche" className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] p-2 lg:grid-cols-4">
+        {SETTINGS_SECTIONS.map((section) => <button key={section.id} type="button" aria-current={activeSection === section.id ? "page" : undefined} onClick={() => setActiveSection(section.id)} className={`min-h-11 rounded-xl px-3 py-2 text-sm font-semibold transition ${activeSection === section.id ? "bg-[var(--app-primary)] text-white shadow-sm" : "text-[var(--app-muted)] hover:bg-black/5 hover:text-[var(--app-text)] dark:hover:bg-white/10"}`}>{section.label}</button>)}
+      </nav>
+
+      {activeSection === "company" && <>
       <AppCard className="space-y-4">
         <div className="border-b pb-3">
           <h2 className="text-sm font-semibold text-gray-700">Profil & Account</h2>
@@ -483,6 +504,9 @@ export default function SettingsView() {
         </div>
       </AppCard>
 
+      </>}
+
+      {activeSection === "documents" && <>
       <AppCard className="space-y-4">
         <div className="border-b pb-3">
           <h2 className="text-sm font-semibold text-gray-700">Zahlungsbedingungen</h2>
@@ -657,6 +681,9 @@ export default function SettingsView() {
 
       </AppCard>
 
+      </>}
+
+      {activeSection === "email" && <>
       <AppCard className="space-y-4">
         <div className="border-b pb-3">
           <h2 className="text-sm font-semibold text-gray-700">E-Mail Versand</h2>
@@ -718,7 +745,7 @@ export default function SettingsView() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">Verknüpfte Absenderadressen</h3>
-            {senderLoading && <span className="text-xs text-gray-500">Lade...</span>}
+            {senderLoading && <span className="text-xs text-gray-500">Wird geladen …</span>}
           </div>
 
           {!senderLoading && senderIdentities.length === 0 && (
@@ -783,6 +810,9 @@ export default function SettingsView() {
         </div>
       </AppCard>
 
+      </>}
+
+      {activeSection === "account" && <>
       <AppCard className="space-y-5">
         <div className="border-b pb-3">
           <h2 className="text-sm font-semibold text-gray-700">Account und Daten</h2>
@@ -833,12 +863,13 @@ export default function SettingsView() {
       </AppCard>
 
       <AppCard className="space-y-3"><h2 className="text-sm font-semibold">Rechtliches und Datenschutz</h2><div className="flex flex-wrap gap-4 text-sm text-[var(--app-primary)]"><Link to="/terms">Bedingungen</Link><Link to="/privacy">Datenschutz</Link><Link to="/dpa">AVV</Link><Link to="/subprocessors">Unterauftragnehmer</Link><Link to="/ai-notice">KI-Hinweise</Link><Link to="/contact">Kontakt</Link></div></AppCard>
+      </>}
 
       <div className="bottom-action-bar safe-area-container">
         <div className="app-container">
           <div className="flex justify-end">
-            <AppButton onClick={() => void handleSave()} disabled={saving}>
-              {saving ? "Speichere..." : "Einstellungen speichern"}
+            <AppButton className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? "Wird gespeichert …" : "Einstellungen speichern"}
             </AppButton>
           </div>
         </div>

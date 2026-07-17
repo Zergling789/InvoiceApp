@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { AppButton } from "@/ui/AppButton";
@@ -24,6 +24,7 @@ export function ModalSheet({
   contentMode = "scroll",
   width = "default",
 }: ModalSheetProps) {
+  const titleId = useId();
   useEffect(() => {
     if (!isOpen) return;
 
@@ -42,7 +43,7 @@ export function ModalSheet({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="app-visual-viewport fixed inset-x-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
       {showBackdrop && (
         <button
           type="button"
@@ -51,18 +52,23 @@ export function ModalSheet({
           onClick={closeOnBackdrop ? onClose : undefined}
         />
       )}
-      <div className={`relative z-10 flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[92dvh] sm:rounded-xl ${width === "wide" ? "sm:max-w-6xl" : "sm:max-w-4xl"}`}>
-        <div className="flex shrink-0 items-center gap-3 border-b px-4 py-4 sm:px-6">
+      <div
+        className={`relative z-10 flex h-full w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[92%] sm:rounded-xl ${width === "wide" ? "sm:max-w-6xl" : "sm:max-w-4xl"}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <div className="flex shrink-0 items-center gap-3 border-b px-4 py-4 safe-top sm:px-6">
           <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
             <ArrowLeft size={18} />
           </AppButton>
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h2>
         </div>
         <div
           className={
             contentMode === "contained"
               ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-              : "min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              : "min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-32"
           }
         >
           {children}

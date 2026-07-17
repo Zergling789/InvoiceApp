@@ -7,6 +7,7 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useToast } from "@/ui/FeedbackProvider";
 import { createBillingPortal, createCheckout, getBillingStatus, type BillingStatus } from "@/app/billing/billingService";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 type BillingCycle = "monthly" | "yearly";
 const statusLabels: Record<string, string> = { ACTIVE: "Aktiv", TRIALING: "Testphase", PAST_DUE: "Zahlung überfällig", UNPAID: "Nicht bezahlt", PAUSED: "Pausiert", CANCELED: "Gekündigt", INCOMPLETE: "Unvollständig", INCOMPLETE_EXPIRED: "Abgelaufen", INACTIVE: "Inaktiv" };
@@ -41,23 +42,39 @@ export default function PricingPage() {
   const [cycle, setCycle] = useState<BillingCycle>("yearly");
   const [billing, setBilling] = useState<BillingStatus["subscription"] | null>(null);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingError, setBillingError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const toast = useToast();
 
   useEffect(() => {
     let canceled = false;
     let attempts = new URLSearchParams(window.location.search).get("checkout") === "success" ? 5 : 1;
-    const refresh = () => getBillingStatus().then(result => { if (!canceled) setBilling(result.subscription); }).catch(error => toast.error(error instanceof Error ? error.message : "Abrechnungsstatus konnte nicht geladen werden."));
+    setBillingLoading(true);
+    setBillingError(false);
+    const refresh = () => getBillingStatus()
+      .then((result) => {
+        if (canceled) return;
+        setBilling(result.subscription);
+        setBillingError(false);
+      })
+      .catch(() => {
+        if (!canceled) setBillingError(true);
+      })
+      .finally(() => {
+        if (!canceled) setBillingLoading(false);
+      });
     void refresh();
     const timer = attempts > 1 ? window.setInterval(() => { attempts -= 1; void refresh(); if (attempts <= 1) window.clearInterval(timer); }, 2000) : undefined;
     return () => { canceled = true; if (timer) window.clearInterval(timer); };
-  }, [toast]);
+  }, [reloadToken]);
 
   const handleUpgrade = async (plan: "SOLO" | "PRO") => {
     setLoadingPlan(plan);
     try {
       window.location.assign((await createCheckout(plan, cycle)).url);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Checkout konnte nicht gestartet werden.");
+      toast.error(error instanceof Error ? error.message : "Die Zahlungsseite konnte nicht geöffnet werden.");
       setLoadingPlan(null);
     }
   };
@@ -80,6 +97,18 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {billingLoading && (
+        <AppCard className="p-5 text-center text-sm text-[var(--app-muted)]">
+          <div role="status">Tarifstatus wird geladen …</div>
+        </AppCard>
+      )}
+      {!billingLoading && billingError && (
+        <LoadErrorCard
+          title="Tarifstatus konnte nicht geladen werden"
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
+      )}
+
       <section className="grid items-stretch gap-5 lg:grid-cols-3" aria-label="Tarife">
         {plans.map((plan) => {
           const price = cycle === "yearly" ? plan.yearly : plan.monthly;
@@ -91,7 +120,7 @@ export default function PricingPage() {
               <div className="mt-6"><span className="text-4xl font-semibold tracking-[-0.04em]">{monthlyEquivalent.toLocaleString("de-DE", { maximumFractionDigits: 2 })} €</span><span className="text-sm text-[var(--app-muted)]"> / Monat</span>{cycle === "yearly" && price > 0 && <div className="mt-1 text-xs text-[var(--app-muted)]">{price} € jährlich · zzgl. MwSt.</div>}{price === 0 && <div className="mt-1 text-xs text-[var(--app-muted)]">dauerhaft kostenlos</div>}</div>
               <div className="my-6 h-px bg-[var(--app-border)]" />
               <ul className="flex-1 space-y-3">{plan.features.map((feature) => <li key={feature} className="flex gap-3 text-sm"><Check size={17} className="mt-0.5 shrink-0 text-emerald-500" /><span>{feature}</span></li>)}</ul>
-              <AppButton type="button" variant={"recommended" in plan && plan.recommended ? "primary" : "secondary"} className="mt-7 w-full" disabled={loadingPlan !== null || billing?.plan_key === plan.name.toUpperCase() || plan.name === "Basis"} onClick={() => plan.name !== "Basis" && void handleUpgrade(plan.name.toUpperCase() as "SOLO" | "PRO")}>{billing?.plan_key === plan.name.toUpperCase() || (plan.name === "Basis" && billing?.plan_key === "BASIS") ? "Aktueller Tarif" : loadingPlan === plan.name.toUpperCase() ? "Weiterleitung…" : `${plan.name} wählen`}</AppButton>
+              <AppButton type="button" variant={"recommended" in plan && plan.recommended ? "primary" : "secondary"} className="mt-7 w-full" disabled={billingLoading || billingError || loadingPlan !== null || billing?.plan_key === plan.name.toUpperCase() || plan.name === "Basis"} onClick={() => plan.name !== "Basis" && void handleUpgrade(plan.name.toUpperCase() as "SOLO" | "PRO")}>{billing?.plan_key === plan.name.toUpperCase() || (plan.name === "Basis" && billing?.plan_key === "BASIS") ? "Aktueller Tarif" : loadingPlan === plan.name.toUpperCase() ? "Weiterleitung…" : `${plan.name} wählen`}</AppButton>
             </AppCard>
           );
         })}
@@ -100,12 +129,12 @@ export default function PricingPage() {
       {billing && billing.plan_key !== "BASIS" && <div className="text-center"><AppButton variant="secondary" disabled={loadingPlan !== null} onClick={() => void handlePortal()}>Abonnement verwalten</AppButton><p className="mt-2 text-xs text-[var(--app-muted)]">Status: {statusLabels[billing.status] ?? billing.status}{billing.current_period_end ? ` · Verlängerung/Ende: ${new Date(billing.current_period_end).toLocaleDateString("de-DE")}` : ""}{billing.cancel_at_period_end ? " · Kündigung zum Periodenende vorgemerkt" : ""}{billing.payment_failed_at ? " · Zahlung fehlgeschlagen" : ""}</p></div>}
 
       <section className="grid gap-4 md:grid-cols-3">
-        <AppCard className="p-5"><ShieldCheck size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Sicher bezahlen</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Der Checkout wird über Stripe abgewickelt; Zahlungsdaten werden nicht in FreelanceFlow gespeichert.</p></AppCard>
+        <AppCard className="p-5"><ShieldCheck size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Sicher bezahlen</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Die Zahlung wird auf einer sicheren Stripe-Seite abgewickelt; Zahlungsdaten werden nicht in FreelanceFlow gespeichert.</p></AppCard>
         <AppCard className="p-5"><Zap size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Sofort wechseln</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Upgrades gelten sofort. Downgrades werden zum Ende des Abrechnungszeitraums wirksam.</p></AppCard>
         <AppCard className="p-5"><Sparkles size={21} className="text-[var(--app-primary)]" /><h2 className="mt-3 font-semibold">Faire KI-Limits</h2><p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">Planbare Kontingente schützen vor überraschenden Kosten und können später erweitert werden.</p></AppCard>
       </section>
 
-      <p className="text-center text-xs leading-5 text-[var(--app-muted)]">Buchungen werden über Stripe Checkout abgeschlossen. Der angezeigte Abonnementstatus wird ausschließlich aus signierten Stripe-Webhooks übernommen.</p>
+      <p className="text-center text-xs leading-5 text-[var(--app-muted)]">Buchungen werden auf der sicheren Stripe-Zahlungsseite abgeschlossen. FreelanceFlow übernimmt nur den von Stripe bestätigten Abonnementstatus.</p>
       <p className="flex flex-wrap justify-center gap-4 text-xs text-[var(--app-muted)]"><Link to="/terms">Bedingungen</Link><Link to="/privacy">Datenschutz</Link><Link to="/dpa">AVV</Link><Link to="/subprocessors">Unterauftragnehmer</Link></p>
     </div>
   );

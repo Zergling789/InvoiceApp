@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Invoice, InvoiceStatus, Offer, OfferStatus } from "@/types";
-import { getDocumentCapabilities, getInvoicePhase, getOfferPhase } from "./documentState";
+import {
+  getDocumentCapabilities,
+  getInvoicePhase,
+  getNextDocumentAction,
+  getOfferPhase,
+} from "./documentState";
 
 const baseInvoice: Invoice = {
   id: "inv-1",
@@ -85,5 +90,52 @@ describe("documentState", () => {
     const sentCaps = getDocumentCapabilities("offer", { ...baseOffer, status: OfferStatus.SENT });
     expect(sentCaps.canAccept).toBe(true);
     expect(sentCaps.canReject).toBe(true);
+  });
+
+  it("selects one clear next step for every supported invoice phase", () => {
+    expect(getNextDocumentAction("invoice", baseInvoice)?.key).toBe("FINALIZE_INVOICE");
+    expect(
+      getNextDocumentAction("invoice", { ...baseInvoice, status: InvoiceStatus.ISSUED })?.key,
+    ).toBe("SEND_INVOICE");
+    expect(
+      getNextDocumentAction("invoice", {
+        ...baseInvoice,
+        status: InvoiceStatus.SENT,
+        sentAt: "2026-07-01",
+        dueDate: "2026-08-01",
+      }, new Date("2026-07-17"))?.key,
+    ).toBe("MARK_INVOICE_PAID");
+    expect(
+      getNextDocumentAction("invoice", {
+        ...baseInvoice,
+        status: InvoiceStatus.SENT,
+        dueDate: "2026-07-01",
+      }, new Date("2026-07-17"))?.key,
+    ).toBe("SEND_DUNNING");
+    expect(
+      getNextDocumentAction("invoice", { ...baseInvoice, status: InvoiceStatus.PAID }),
+    ).toBeNull();
+  });
+
+  it("selects the send, response and conversion steps for offers", () => {
+    expect(getNextDocumentAction("offer", baseOffer)).toEqual(expect.objectContaining({
+      key: "SEND_OFFER",
+      label: "Angebot senden",
+    }));
+    expect(getNextDocumentAction("offer", { ...baseOffer, status: OfferStatus.SENT })).toEqual(
+      expect.objectContaining({
+        key: "COPY_RECIPIENT_LINK",
+        label: "Empfänger-Link kopieren",
+      }),
+    );
+    expect(getNextDocumentAction("offer", { ...baseOffer, status: OfferStatus.ACCEPTED })).toEqual(
+      expect.objectContaining({
+        key: "CONVERT_OFFER",
+        label: "Rechnung aus Angebot erstellen",
+      }),
+    );
+    expect(
+      getNextDocumentAction("offer", { ...baseOffer, status: OfferStatus.REJECTED }),
+    ).toBeNull();
   });
 });

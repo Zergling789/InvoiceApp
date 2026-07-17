@@ -120,7 +120,7 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await offerRow.click();
     await expect(page).toHaveURL(/\/app\/offers\//);
     await expect(page.getByText(offerNumber, { exact: true }).first()).toBeVisible();
-    await page.getByRole("button", { name: "Senden" }).click();
+    await page.getByRole("button", { name: "Angebot senden" }).click();
     const sendDialog = page.locator("div.fixed.inset-0").filter({
       has: page.getByRole("heading", { name: "Dokument senden" }),
     }).last();
@@ -130,10 +130,11 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await expect(page.getByText("E-Mail wurde erfolgreich versendet.")).toBeVisible();
 
     await expect(page.getByText("Gesendet", { exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Mehr", exact: true }).click();
     await page.getByRole("button", { name: "Als angenommen markieren" }).click();
     await page.getByRole("button", { name: "Bestaetigen" }).click();
     await expect(page.getByText("Angenommen", { exact: true }).first()).toBeVisible();
-    await page.getByRole("button", { name: "In Rechnung wandeln" }).click();
+    await page.getByRole("button", { name: "Rechnung aus Angebot erstellen" }).click();
     await page.getByRole("button", { name: "Bestaetigen" }).click();
     await expect(page).toHaveURL(/\/app\/invoices\//);
 

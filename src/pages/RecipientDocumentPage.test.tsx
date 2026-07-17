@@ -1,92 +1,43 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import userEvent from "@testing-library/user-event";
 
-import RecipientDocumentPage from "@/pages/RecipientDocumentPage";
+import RecipientDocumentPage, { formatRecipientDate } from "./RecipientDocumentPage";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
-const loadRecipientDocument = vi.fn();
-const respondToOffer = vi.fn();
+const loadMock = vi.fn();
+const respondMock = vi.fn();
 
-vi.mock("@/app/recipient/recipientService", () => ({
-  loadRecipientDocument: (token: string) => loadRecipientDocument(token),
-  respondToOffer: (...args: unknown[]) => respondToOffer(...args),
-}));
+vi.mock("@/app/recipient/recipientService", () => ({ loadRecipientDocument: (...args: unknown[]) => loadMock(...args), respondToOffer: (...args: unknown[]) => respondMock(...args) }));
+
+const recipientData = { type: "offer" as const, doc: { number: "ANG-1", date: "2026-07-17", validUntil: "2026-07-31", positions: [{ id: "p-1", description: "Montage", quantity: 2, unit: "Std", price: 50 }], vatRate: 19 }, client: { companyName: "Kunde GmbH" }, settings: { companyName: "Musterbetrieb", currency: "EUR" }, response: null, responseReason: null, expiresAt: "2026-08-31T00:00:00Z" };
+
+const renderPage = () => renderWithProviders(<Routes><Route path="/recipient/:token" element={<RecipientDocumentPage />} /></Routes>, { route: "/recipient/test-token" });
 
 describe("RecipientDocumentPage", () => {
-  beforeEach(() => {
-    respondToOffer.mockReset();
-    respondToOffer.mockResolvedValue({ response: "REJECTED" });
-    loadRecipientDocument.mockResolvedValue({
-      type: "offer",
-      doc: {
-        number: "ANG-2026-0042",
-        date: "2026-07-14",
-        validUntil: "2026-07-31",
-        introText: "Vielen Dank für Ihre Anfrage.",
-        footerText: "Wir freuen uns auf die Zusammenarbeit.",
-        positions: [{ description: "Beratung", quantity: 2, price: 100 }],
-        vatRate: 19,
-      },
-      client: { companyName: "Beispiel GmbH" },
-      settings: { companyName: "Muster Consulting", currency: "EUR" },
-      response: null,
-      responseReason: null,
-      expiresAt: "2026-08-14T00:00:00.000Z",
-    });
+  beforeEach(() => { loadMock.mockReset(); respondMock.mockReset(); loadMock.mockResolvedValue(recipientData); });
+
+  it("formats document dates for German recipients", () => {
+    expect(formatRecipientDate("2026-07-17")).toBe("17.7.2026");
   });
 
-  it("übermittelt eine optionale Ablehnungsbegründung", async () => {
+  it("recovers from a failed initial load", async () => {
     const user = userEvent.setup();
-    renderWithProviders(
-      <Routes><Route path="/recipient/:token" element={<RecipientDocumentPage />} /></Routes>,
-      { route: "/recipient/test-token" }
-    );
-
-    expect(await screen.findByRole("button", { name: "Angebot ablehnen" })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Optionale Begründung bei Ablehnung/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Angebot ablehnen" }));
-    const reason = await screen.findByLabelText(/Optionale Begründung bei Ablehnung/);
-    await user.type(reason, "Der Zeitrahmen passt leider nicht.");
-    await user.click(screen.getByRole("button", { name: "Ablehnung bestätigen" }));
-
-    await waitFor(() => expect(respondToOffer).toHaveBeenCalledWith("test-token", "REJECTED", "Der Zeitrahmen passt leider nicht."));
-    expect(await screen.findByText(/Begründung: Der Zeitrahmen passt leider nicht\./)).toBeInTheDocument();
+    loadMock.mockRejectedValueOnce(new Error("technical")).mockResolvedValueOnce(recipientData);
+    renderPage();
+    expect(await screen.findByText("Dokument nicht erreichbar")).toBeInTheDocument();
+    expect(screen.queryByText("technical")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    expect(await screen.findByRole("heading", { name: "Ihr Angebot von Musterbetrieb" })).toBeInTheDocument();
+    expect(loadMock).toHaveBeenCalledTimes(2);
   });
 
-  it("zeigt das öffentliche Angebot mit Erklärung und Antwortmöglichkeiten", async () => {
-    renderWithProviders(
-      <Routes><Route path="/recipient/:token" element={<RecipientDocumentPage />} /></Routes>,
-      { route: "/recipient/test-token" }
-    );
-
-    await waitFor(() => expect(loadRecipientDocument).toHaveBeenCalledWith("test-token"));
-    expect(await screen.findByText("Ihr Angebot von Muster Consulting")).toBeInTheDocument();
-    expect(screen.getByText("Vielen Dank für Ihre Anfrage.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Angebot annehmen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Angebot ablehnen" })).toBeInTheDocument();
-  });
-
-  it("ersetzt ein angenommenes Angebot durch eine Dankeseite", async () => {
-    loadRecipientDocument.mockResolvedValueOnce({
-      type: "offer",
-      doc: { number: "ANG-2026-0042", positions: [] },
-      client: { companyName: "Beispiel GmbH" },
-      settings: { companyName: "Muster Consulting", currency: "EUR" },
-      response: "ACCEPTED",
-      responseReason: null,
-      expiresAt: "2026-08-14T00:00:00.000Z",
-    });
-
-    renderWithProviders(
-      <Routes><Route path="/recipient/:token" element={<RecipientDocumentPage />} /></Routes>,
-      { route: "/recipient/test-token" }
-    );
-
-    expect(await screen.findByRole("heading", { name: "Vielen Dank für Ihre Rückmeldung!" })).toBeInTheDocument();
-    expect(screen.getByText(/ANG-2026-0042/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Angebot annehmen" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Angebot ablehnen" })).not.toBeInTheDocument();
+  it("shows a rejection distinctly and prevents another response", async () => {
+    loadMock.mockResolvedValue({ ...recipientData, response: "REJECTED", responseReason: "Termin passt nicht." });
+    renderPage();
+    expect(await screen.findByText("Antwort gespeichert: Abgelehnt")).toBeInTheDocument();
+    expect(screen.getByText(/Termin passt nicht/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Angebot annehmen" })).not.toBeInTheDocument());
   });
 });

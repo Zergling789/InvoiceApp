@@ -7,6 +7,13 @@ import App from "./App";
 import "./styles/index.css";
 import { isSupabaseConfigured } from "@/supabaseClient";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { initializeVisualViewport } from "@/utils/visualViewport";
+import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
+import { GlobalBrowserErrorNotice } from "@/components/GlobalBrowserErrorNotice";
+import { initializeGlobalBrowserErrorReporting } from "@/app/observability/clientErrorReporter";
+
+initializeVisualViewport();
+initializeGlobalBrowserErrorReporting();
 
 function MissingLocalConfiguration() {
   return (
@@ -34,6 +41,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
+          <NetworkStatusBanner />
+          <GlobalBrowserErrorNotice />
           <ConfirmProvider>
             <BrowserRouter>
               {isSupabaseConfigured ? <App /> : <MissingLocalConfiguration />}

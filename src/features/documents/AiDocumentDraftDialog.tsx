@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, Package, Sparkles, Trash2, X } from "lucide-react";
 
 import { createAiDocumentDraft, type AiDocumentDraft } from "@/app/ai/aiService";
+import { DOCUMENT_DRAFT_TEXT_LIMIT } from "@/app/ai/documentDraftContract";
 import { AppButton } from "@/ui/AppButton";
 import { AppNumberInput } from "@/ui/AppNumberInput";
 import { getCurrencySymbol } from "@/utils/money";
@@ -17,7 +18,7 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, custome
   const [error, setError] = useState<string | null>(null);
 
   const generate = async () => {
-    if (!description.trim() || description.length > 4000) return;
+    if (!description.trim() || description.length > DOCUMENT_DRAFT_TEXT_LIMIT) return;
     setLoading(true); setError(null);
     try {
       const response = await createAiDocumentDraft({ description, documentType, currency, vatRate, customerId });
@@ -38,12 +39,12 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, custome
   const selectedPositions = draft?.positions.filter((_, index) => selected[index]) ?? [];
   const canApply = selectedPositions.length > 0 && selectedPositions.every((position) => position.price !== null && position.title?.trim() && position.quantity > 0 && position.unit?.trim());
 
-  return createPortal(<div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/35 backdrop-blur-sm sm:items-center sm:p-4" role="presentation">
-    <div className="app-card flex max-h-[100dvh] w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-b-none p-0 sm:max-h-[90dvh] sm:rounded-[var(--app-radius-lg)]" role="dialog" aria-modal="true" aria-labelledby="ai-draft-title">
+  return createPortal(<div className="app-visual-viewport fixed inset-x-0 z-[80] flex items-end justify-center bg-black/35 backdrop-blur-sm sm:items-center sm:p-4" role="presentation">
+    <div className="app-card flex max-h-full w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-b-none p-0 sm:max-h-[90%] sm:rounded-[var(--app-radius-lg)]" role="dialog" aria-modal="true" aria-labelledby="ai-draft-title">
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--app-border)] p-5 sm:px-7"><div><div className="app-eyebrow">KI-Entwurf</div><h2 id="ai-draft-title" className="mt-1 text-2xl font-semibold tracking-tight">Dokument mit KI erstellen</h2><p className="mt-2 text-sm text-[var(--app-muted)]">Nur Leistungsangaben eingeben – keine Namen, E-Mails, Adressen oder Bankdaten.</p></div><button type="button" onClick={onClose} aria-label="Abbrechen" className="grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-black/5 dark:hover:bg-white/10"><X size={19} /></button></div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-7">
         <label className="mt-5 block text-sm font-semibold" htmlFor="ai-draft-description">Leistungen beschreiben</label>
-        <textarea id="ai-draft-description" rows={5} maxLength={4000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Zum Beispiel: Terrasse mit 40 m² neu pflastern." className="mt-2 w-full p-3" disabled={loading} />
+        <textarea id="ai-draft-description" rows={5} maxLength={DOCUMENT_DRAFT_TEXT_LIMIT} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Zum Beispiel: Terrasse mit 40 m² neu pflastern." className="mt-2 w-full p-3" disabled={loading} />
         <div className="mt-1 text-right text-xs text-[var(--app-muted)]">{description.length} / 4.000</div>
         {error && <div role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
         {draft && <div className="mt-6 space-y-5" aria-label="KI-Vorschau">
@@ -60,7 +61,7 @@ export function AiDocumentDraftDialog({ documentType, currency, vatRate, custome
           {draft.warnings.length > 0 && <div className="rounded-2xl bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200"><div className="flex items-center gap-2 font-semibold"><AlertTriangle size={17} /> Bitte prüfen</div><ul className="mt-2 list-disc space-y-1 pl-5">{draft.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
         </div>}
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:px-7"><AppButton variant="ghost" onClick={onClose}>Abbrechen</AppButton>{!draft ? <AppButton onClick={() => void generate()} disabled={loading || !description.trim()}><Sparkles size={17} /> {loading ? "Vorschlag wird erstellt …" : "Vorschlag erstellen"}</AppButton> : <AppButton onClick={() => onApply({ ...draft, positions: selectedPositions })} disabled={!canApply}>Übernehmen</AppButton>}</div>
+      <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] bg-[var(--app-surface)] p-4 safe-bottom sm:flex-row sm:justify-end sm:px-7"><AppButton className="w-full sm:w-auto" variant="ghost" onClick={onClose}>Abbrechen</AppButton>{!draft ? <AppButton className="w-full sm:w-auto" onClick={() => void generate()} disabled={loading || !description.trim()}><Sparkles size={17} /> {loading ? "Vorschlag wird erstellt …" : "Vorschlag erstellen"}</AppButton> : <AppButton className="w-full sm:w-auto" onClick={() => onApply({ ...draft, positions: selectedPositions })} disabled={!canApply}>Übernehmen</AppButton>}</div>
     </div>
   </div>, document.body);
 }

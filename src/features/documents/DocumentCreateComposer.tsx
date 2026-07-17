@@ -225,8 +225,15 @@ export function DocumentCreateComposer({
           : "Weiter zur Vorschau";
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-[var(--app-bg)]">
-      <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8">
+    <div
+      data-testid="document-composer-layout"
+      className={
+        isEditing
+          ? "min-h-0 bg-[var(--app-bg)]"
+          : "grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-[var(--app-bg)]"
+      }
+    >
+      <div className={isEditing ? "p-4 sm:p-6 lg:p-8" : "min-h-0 overflow-y-auto overscroll-contain scroll-pb-32 p-4 sm:p-6 lg:p-8"}>
         <div className="mx-auto grid max-w-6xl items-start gap-6 xl:grid-cols-[minmax(0,1fr)_310px]">
           <main className="min-w-0 space-y-5">
             <div>
@@ -1047,10 +1054,10 @@ export function DocumentCreateComposer({
         </div>
       </div>
 
-      <footer className="border-t border-[var(--app-border)] bg-[var(--app-surface-solid)] px-4 py-3 safe-bottom sm:px-6">
+      <footer className={`border-t border-[var(--app-border)] bg-[var(--app-surface-solid)] px-4 py-3 safe-bottom sm:px-6 ${isEditing ? "sticky bottom-0 z-30 shadow-[0_-8px_24px_rgba(0,0,0,0.12)]" : ""}`}>
         {wizardEnabled ? (
-          <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:flex sm:justify-between">
-            <div>
+          <div className={`mx-auto grid max-w-6xl items-center gap-2 sm:flex sm:justify-between ${step === "vorschau" ? "grid-cols-1" : "grid-cols-[auto_minmax(0,1fr)]"}`}>
+            <div className={step === "vorschau" ? "w-full sm:w-auto" : undefined}>
               {step === "kunde" ? (
                 <AppButton type="button" variant="ghost" onClick={onCancel}>
                   Abbrechen
@@ -1059,18 +1066,20 @@ export function DocumentCreateComposer({
                 <AppButton
                   type="button"
                   variant="secondary"
+                  className={step === "vorschau" ? "w-full sm:w-auto" : undefined}
                   onClick={() => goToStep(documentSteps[stepIndex - 1].key)}
                 >
                   Zurück{step === "vorschau" ? " und bearbeiten" : ""}
                 </AppButton>
               )}
             </div>
-            <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
+            <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
               {step === "vorschau" ? (
                 <>
                   <AppButton
                     type="button"
                     variant="secondary"
+                    className="w-full sm:w-auto"
                     disabled={!canSave || saving}
                     onClick={onSave}
                   >
@@ -1078,6 +1087,7 @@ export function DocumentCreateComposer({
                   </AppButton>
                   <AppButton
                     type="button"
+                    className="w-full sm:w-auto"
                     disabled={!canSave || saving}
                     onClick={onSave}
                   >

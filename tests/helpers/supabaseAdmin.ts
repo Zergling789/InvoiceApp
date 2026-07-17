@@ -1,16 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
 
-const SUPABASE_URL =
-  process.env.E2E_SUPABASE_URL ??
-  process.env.SUPABASE_URL ??
-  process.env.VITE_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE =
-  process.env.E2E_SUPABASE_SERVICE_ROLE ?? process.env.SUPABASE_SERVICE_ROLE;
-const SUPABASE_ANON_KEY =
-  process.env.E2E_SUPABASE_ANON_KEY ??
-  process.env.VITE_SUPABASE_ANON_KEY ??
-  process.env.SUPABASE_ANON_KEY;
+const SUPABASE_URL = process.env.E2E_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE = process.env.E2E_SUPABASE_SERVICE_ROLE;
+const SUPABASE_ANON_KEY = process.env.E2E_SUPABASE_ANON_KEY;
 
 export const hasE2eSupabaseEnv = Boolean(
   SUPABASE_URL && SUPABASE_SERVICE_ROLE && SUPABASE_ANON_KEY,
@@ -134,6 +127,8 @@ export async function seedUserSettings({
       number_padding: 4,
       footer_text: "Danke für Ihr Vertrauen.",
       default_sender_identity_id: senderIdentityId,
+      onboarding_step: "DONE",
+      onboarding_completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" }

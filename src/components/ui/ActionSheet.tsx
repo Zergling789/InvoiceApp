@@ -29,13 +29,14 @@ export function ActionSheet({ isOpen, title, actions, onClose }: ActionSheetProp
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-3 sm:p-4">
+    <div className="app-visual-viewport fixed inset-x-0 z-[80] flex items-end justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={title ?? "Aktionen"}>
       <button
+        type="button"
         aria-label="Schließen"
         className="absolute inset-0 h-full w-full"
         onClick={onClose}
       />
-      <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl safe-bottom">
+      <div className="relative flex max-h-[calc(100%-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl safe-bottom">
         {title && (
           <div className="border-b px-5 py-4">
             <div className="text-sm font-semibold text-gray-700">{title}</div>

@@ -3,12 +3,12 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { Client, Invoice, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
-import { useToast } from "@/ui/FeedbackProvider";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import type { DocumentFormData } from "@/features/documents/documentEditorModel";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 const buildEditorSeed = (doc: Invoice): EditorSeed => ({
   id: doc.id,
@@ -83,7 +83,6 @@ export default function InvoiceEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +91,7 @@ export default function InvoiceEditPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
   const [editorInitial, setEditorInitial] = useState<Partial<DocumentFormData> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? "/app/documents";
 
   useEffect(() => {
@@ -125,7 +125,6 @@ export default function InvoiceEditPage() {
         if (mounted) {
           const message = e instanceof Error ? e.message : String(e);
           setError(message);
-          toast.error(message);
         }
       } finally {
         if (mounted) setLoading(false);
@@ -134,7 +133,7 @@ export default function InvoiceEditPage() {
     return () => {
       mounted = false;
     };
-  }, [id, toast]);
+  }, [id, reloadToken]);
 
   const handleSaved = async () => {
     if (!id) return;
@@ -149,9 +148,10 @@ export default function InvoiceEditPage() {
   if (error || !doc || !settings || !editorSeed) {
     return (
       <div className="space-y-3">
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {error ?? "Rechnung konnte nicht geladen werden."}
-        </div>
+        <LoadErrorCard
+          title="Rechnung konnte nicht geladen werden"
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
         <Link to="/app/documents">
           <AppButton variant="secondary">Zurück zu Dokumenten</AppButton>
         </Link>

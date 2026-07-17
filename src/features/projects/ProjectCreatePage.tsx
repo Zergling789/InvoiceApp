@@ -7,6 +7,8 @@ import ProjectForm, { type DraftProject } from "@/features/projects/ProjectForm"
 import { useToast } from "@/ui/FeedbackProvider";
 import { useClients } from "@/app/clients/clientQueries";
 import * as projectService from "@/app/projects/projectService";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
+import { AppButton } from "@/ui/AppButton";
 
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -26,7 +28,7 @@ export default function ProjectCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
-  const { clients } = useClients();
+  const { clients, loading: clientsLoading, error: clientsError, refresh: refreshClients } = useClients();
 
   const idRef = useRef(newId());
   const [draft, setDraft] = useState<DraftProject>(() => emptyDraft());
@@ -105,7 +107,22 @@ export default function ProjectCreatePage() {
   return (
     <ModalSheet title="Neues Projekt" isOpen onClose={handleClose}>
       <div className="p-6">
-        <ProjectForm
+        {clientsLoading ? (
+          <div role="status" className="py-8 text-center text-sm text-[var(--app-muted)]">
+            Kunden werden geladen …
+          </div>
+        ) : clientsError ? (
+          <div className="space-y-3">
+            <LoadErrorCard
+              title="Kunden konnten nicht geladen werden"
+              onRetry={() => void refreshClients()}
+            />
+            <AppButton type="button" variant="secondary" onClick={() => handleClose()}>
+              Zurück
+            </AppButton>
+          </div>
+        ) : (
+          <ProjectForm
           value={draft}
           initialValue={initialDraft}
           clients={clients}
@@ -118,7 +135,8 @@ export default function ProjectCreatePage() {
           showHeader={false}
           onDirtyChange={setIsDirty}
           onCreateClient={() => navigate(`/app/customers/new?returnUrl=${encodeURIComponent("/app/projects/new")}`)}
-        />
+          />
+        )}
       </div>
     </ModalSheet>
   );

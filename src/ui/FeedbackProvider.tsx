@@ -108,8 +108,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={api}>
       {children}
       {dialog && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
-          <div className="max-h-[100dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl safe-bottom sm:max-h-[90dvh] sm:rounded-xl sm:p-6">
+        <div className="app-visual-viewport fixed inset-x-0 z-[90] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
+          <div className="max-h-full w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-5 shadow-xl safe-bottom sm:max-h-[90%] sm:rounded-xl sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900">{dialog.title}</h3>
             <p className="mt-2 whitespace-pre-line text-sm text-gray-600">{dialog.message}</p>
             {dialog.acknowledgementLabel && (
@@ -123,11 +123,12 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 <span>{dialog.acknowledgementLabel}</span>
               </label>
             )}
-            <div className="mt-6 flex justify-end gap-2">
-              <AppButton variant="secondary" onClick={() => close(false)}>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <AppButton className="w-full sm:w-auto" variant="secondary" onClick={() => close(false)}>
                 Abbrechen
               </AppButton>
               <AppButton
+                className="w-full sm:w-auto"
                 disabled={Boolean(dialog.acknowledgementLabel) && !acknowledged}
                 onClick={() => close(true)}
               >

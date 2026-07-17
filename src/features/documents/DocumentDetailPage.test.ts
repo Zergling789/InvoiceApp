@@ -4,6 +4,7 @@ import {
   buildDocumentTimeline,
   canCreateRecipientLink,
   getDocumentEditPath,
+  prioritizeDocumentActions,
 } from "@/features/documents/DocumentDetailPage";
 import { OfferStatus, type Offer } from "@/types";
 
@@ -24,6 +25,29 @@ describe("document edit navigation", () => {
   it("opens offers and invoices on dedicated edit routes", () => {
     expect(getDocumentEditPath("invoice", "inv-1")).toBe("/app/documents/invoice/inv-1/edit");
     expect(getDocumentEditPath("offer", "off-1")).toBe("/app/documents/offer/off-1/edit");
+  });
+});
+
+describe("document action priority", () => {
+  it("places the next workflow step first and keeps every other action", () => {
+    const actions = [
+      { key: "COPY_RECIPIENT_LINK", label: "Empfänger-Link kopieren", onSelect: () => undefined },
+      { key: "DOWNLOAD_PDF", label: "PDF herunterladen", onSelect: () => undefined },
+      { key: "SEND_OFFER", label: "Angebot senden", onSelect: () => undefined },
+    ];
+
+    const prioritized = prioritizeDocumentActions(actions, {
+      key: "SEND_OFFER",
+      label: "Angebot senden",
+      onSelect: () => undefined,
+    });
+
+    expect(prioritized.map((action) => action.label)).toEqual([
+      "Angebot senden",
+      "Empfänger-Link kopieren",
+      "PDF herunterladen",
+    ]);
+    expect(prioritized[0].variant).toBe("primary");
   });
 });
 

@@ -4,6 +4,7 @@ import crypto from "crypto";
 import express from "express";
 import nodemailer from "nodemailer";
 import { buildOfferRecipientEmail } from "./recipientEmail.js";
+import { classifyEmailDeliveryError } from "./emailDelivery.js";
 import { createClient as createRedisClient } from "redis";
 import { createClient } from "@supabase/supabase-js";
 import { renderDocumentHtml } from "./renderDocumentHtml.js";
@@ -13,8 +14,12 @@ import { generateValidatedZugferd } from "./einvoice/zugferdGenerator.js";
 import { buildAccountExportZip, loadOwnedAccountData } from "./accountDataExport.js";
 import { processDueAccountDeletions, verifyWorkerSecret } from "./accountDeletionWorker.js";
 import { generateInvoiceDraft } from "./ai/invoiceDraft.js";
+import {
+  DOCUMENT_DRAFT_CONTRACT_VERSION,
+  normalizeDocumentDraftIntake,
+} from "./ai/documentIntake.js";
 import { rankPositionSuggestions } from "./positionSuggestions.js";
-import { extractBusinessCard } from "./ai/businessCard.js";
+import { extractBusinessCard, validateBusinessCardImage } from "./ai/businessCard.js";
 import { createErrorReporter, evaluateReadiness, hashLogUserId, logEvent, logRequestError } from "./observability.js";
 import {
   buildLegalAcceptanceRows,
@@ -32,6 +37,7 @@ import {
   parseEmailList,
   sanitizeFilename,
 } from "./requestUtils.js";
+import { parseClientErrorReport } from "./clientErrorReport.js";
 
 // Keep production compatible with `.env`, while allowing one local file for
 // both Vite and the Express process. Local values intentionally win.
@@ -303,6 +309,24 @@ const ensureMailer = async () => {
   return transporter;
 };
 
+const readPositiveTimeout = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const SMTP_CONNECTION_TIMEOUT_MS = readPositiveTimeout(
+  process.env.SMTP_CONNECTION_TIMEOUT_MS,
+  10_000
+);
+const SMTP_GREETING_TIMEOUT_MS = readPositiveTimeout(
+  process.env.SMTP_GREETING_TIMEOUT_MS,
+  10_000
+);
+const SMTP_SOCKET_TIMEOUT_MS = readPositiveTimeout(
+  process.env.SMTP_SOCKET_TIMEOUT_MS,
+  30_000
+);
+
 const getMailer = async () => {
   if (!mailerPromise) {
     const validation = validateSmtpEnv();
@@ -320,6 +344,9 @@ const getMailer = async () => {
       host,
       port,
       secure,
+      connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+      socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
       auth: process.env.SMTP_USER
         ? {
             user: process.env.SMTP_USER,
@@ -988,7 +1015,11 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
   const table = resolvedType === "invoice" ? "invoices" : "offers";
 
   if (process.env.DEBUG_EMAIL_DOC === "1") {
-    console.log("[email] loadDocumentPayloadFromDb", { type: resolvedType, docId, userId, table });
+    logEvent("info", "email_document_lookup_started", {
+      type: resolvedType,
+      table,
+      userIdHash: hashLogUserId(userId),
+    });
   }
 
   const selectFields = resolvedType === "invoice"
@@ -1004,11 +1035,11 @@ const loadDocumentPayloadFromDb = async ({ type, docId, userId, supabase }) => {
 
   if (docError || !docRow) {
     if (process.env.DEBUG_EMAIL_DOC === "1") {
-      console.log("[email] document lookup failed", {
-        error: docError?.message ?? docError ?? null,
-        docId,
-        userId,
+      logEvent("warn", "email_document_lookup_failed", {
+        failureCode: docError?.code,
+        type: resolvedType,
         table,
+        userIdHash: hashLogUserId(userId),
       });
     }
     const err = new Error("Document not found");
@@ -1360,21 +1391,20 @@ app.post("/api/positions/suggestion-events", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
+const handleDocumentDraft = async (req, res) => {
   try {
     checkRateLimit(`ai_user_${req.user.id}`, 20);
     if (req.ip) checkRateLimit(`ai_ip_${req.ip}`, 60);
 
-    const db = requireSupabase();
-    const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
-    await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
-    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    const { description } = normalizeDocumentDraftIntake(req.body);
     const documentType = req.body?.documentType;
-    if (!description) return sendError(res, 400, "AI_INPUT_REQUIRED", "Bitte beschreibe die gewünschten Leistungen.", req);
-    if (description.length > 4000) return sendError(res, 400, "AI_INPUT_TOO_LONG", "Die Beschreibung darf höchstens 4.000 Zeichen enthalten.", req);
     if (documentType !== "invoice" && documentType !== "offer") {
       return sendError(res, 400, "AI_INVALID_DOCUMENT_TYPE", "Ungültiger Dokumenttyp.", req);
     }
+
+    const db = requireSupabase();
+    const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
+    await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
 
     const currency = typeof req.body?.currency === "string" && /^[A-Z]{3}$/.test(req.body.currency)
       ? req.body.currency
@@ -1405,12 +1435,15 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
       userId: req.user.id,
       priceCandidates,
     });
-    return res.json({ draft });
+    return res.json({ contractVersion: DOCUMENT_DRAFT_CONTRACT_VERSION, draft });
   } catch (error) {
     const requestId = req.requestId;
     logRequestError(req, error, error?.code || "AI_INVOICE_DRAFT_FAILED");
     if (["PLAN_REQUIRED", "FEATURE_NOT_INCLUDED", "USAGE_LIMIT_REACHED"].includes(error?.code)) return sendError(res, error.status, error.code, error.code === "USAGE_LIMIT_REACHED" ? "Dein KI-Kontingent für diesen Monat ist aufgebraucht." : "Diese KI-Funktion ist in deinem Tarif nicht enthalten.", req);
     if (error?.status === 429) return sendError(res, 429, "RATE_LIMIT", "Zu viele KI-Anfragen. Bitte versuche es später erneut.", req);
+    if (error?.code === "AI_SOURCE_INVALID" || error?.code === "AI_SOURCE_NOT_SUPPORTED" || error?.code === "AI_INPUT_REQUIRED" || error?.code === "AI_INPUT_TOO_LONG") {
+      return sendError(res, error.status || 400, error.code, error.message, req);
+    }
     if (error?.code === "AI_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Funktion ist nicht konfiguriert.", req);
     if (error?.code === "AI_MODEL_NOT_CONFIGURED") return sendError(res, 503, error.code, "KI-Modell ist nicht konfiguriert.", req);
     if (error?.code === "AI_INVALID_RESPONSE" || error?.name === "ZodError") {
@@ -1418,16 +1451,23 @@ app.post("/api/ai/invoice-draft", requireAuth, async (req, res) => {
     }
     return sendError(res, 502, "AI_GENERATION_FAILED", "KI-Vorschlag konnte nicht erstellt werden.", req);
   }
-});
+};
+
+app.post(
+  ["/api/ai/document-draft", "/api/ai/invoice-draft"],
+  requireAuth,
+  handleDocumentDraft,
+);
 
 app.post("/api/ai/business-card", requireAuth, async (req, res) => {
   try {
     checkRateLimit(`ai_card_user_${req.user.id}`, 12);
     if (req.ip) checkRateLimit(`ai_card_ip_${req.ip}`, 30);
+    const imageDataUrl = validateBusinessCardImage(req.body?.imageDataUrl);
     const db = requireSupabase();
     const plan = await requireEntitlement(db, req.user.id, "AI_DRAFT");
     await incrementUsage(db, req.user.id, plan, "AI_DRAFT");
-    const contact = await extractBusinessCard({ imageDataUrl: req.body?.imageDataUrl, userId: req.user.id });
+    const contact = await extractBusinessCard({ imageDataUrl, userId: req.user.id });
     return res.json({ contact });
   } catch (error) {
     logRequestError(req, error, error?.code || "AI_BUSINESS_CARD_FAILED");
@@ -2597,6 +2637,7 @@ app.post(
   emailAuthGuard,
   async (req, res) => {
     let pendingRecipientLinkId = null;
+    let mailAccepted = false;
     try {
       if (!req.user?.id) {
       return sendError(res, 401, "unauthorized", "Unauthorized", req);
@@ -2737,6 +2778,7 @@ app.post(
           },
         ],
       });
+      mailAccepted = true;
 
       await requireSupabase()
         .from("sender_identities")
@@ -2808,7 +2850,7 @@ app.post(
 
       res.status(200).json({ ok: true });
     } catch (err) {
-      if (pendingRecipientLinkId) {
+      if (pendingRecipientLinkId && !mailAccepted) {
         try {
           await requireSupabase()
             .from("document_recipient_links")
@@ -2819,6 +2861,16 @@ app.post(
         }
       }
       logRequestError(req, err, err?.code || "EMAIL_SEND_FAILED");
+      const deliveryError = classifyEmailDeliveryError(err, mailAccepted);
+      if (deliveryError) {
+        return sendError(
+          res,
+          deliveryError.status,
+          deliveryError.code,
+          deliveryError.message,
+          req
+        );
+      }
       const dbError = normalizeDbError(err);
       if (dbError) {
         return sendError(res, dbError.httpStatus, dbError.code, dbError.message, req);
@@ -2845,6 +2897,31 @@ app.post(
     }
   }
 );
+
+// Client reports contain correlation metadata only. They are public so failures
+// before authentication can still be diagnosed, and are therefore rate limited.
+app.post("/api/client-errors", (req, res) => {
+  try {
+    checkRateLimit(`client_error:${req.ip ?? "unknown"}`, 30, 60 * 1000);
+    const report = parseClientErrorReport(req.body);
+    logEvent("warn", "client_error_reported", {
+      requestId: req.requestId,
+      clientErrorId: report.errorId,
+      clientErrorKind: report.kind,
+      clientRoute: report.route,
+    });
+    return res.status(202).json({ ok: true, requestId: req.requestId });
+  } catch (error) {
+    if (error?.status === 429) return sendRateLimit(req, res, 60);
+    return sendError(
+      res,
+      error?.status ?? 400,
+      error?.code ?? "CLIENT_ERROR_REPORT_INVALID",
+      "Der Fehlerbericht ist ungültig.",
+      req,
+    );
+  }
+});
 
 // Liveness confirms that the process responds. Readiness additionally verifies
 // required configuration and a minimal database query without exposing details.

@@ -1,11 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import ThemeToggle from "@/components/ThemeToggle";
 import { supabase } from "@/supabaseClient";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const sessionExpired = new URLSearchParams(location.search).get("reason") === "session-expired";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -15,13 +17,18 @@ export default function LoginPage() {
   const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
+    if (sessionExpired) {
+      setInfo("Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.");
+      void supabase.auth.signOut({ scope: "local" });
+      return;
+    }
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         navigate("/app", { replace: true });
       }
     })();
-  }, [navigate]);
+  }, [navigate, sessionExpired]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

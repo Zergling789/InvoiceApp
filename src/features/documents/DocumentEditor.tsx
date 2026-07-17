@@ -14,7 +14,6 @@ import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
-import { supabase } from "@/supabaseClient";
 import { formatErrorToast } from "@/utils/errorMapping";
 import {
   INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
@@ -309,7 +308,7 @@ export function DocumentEditor({
   const applyPositionGroup = (positions: Omit<Position, "id">[]) => {
     setFormData((current) => ({ ...current, positions: [...(current.positions ?? []), ...positions.map((position) => ({ ...position, id: newId() }))] }));
     setShowPositionGroups(false);
-    toast.success("Positionsgruppe übernommen.");
+    toast.success("Paket übernommen.");
   };
 
   const totals = useMemo(() => {
@@ -638,11 +637,27 @@ export function DocumentEditor({
   };
 
   const handleMarkOfferAccepted = async () => {
-    await applyOfferUpdate({ status: OfferStatus.ACCEPTED });
+    try {
+      await offerService.recordOfferDecision(formData.id, "ACCEPTED");
+      setFormData((current) => ({ ...current, status: OfferStatus.ACCEPTED }));
+      await onSaved();
+      toast.success("Angebot als angenommen markiert.");
+    } catch (error) {
+      const workflowError = error as Error & { code?: string };
+      toast.error(formatErrorToast({ code: workflowError.code, message: workflowError.message }));
+    }
   };
 
   const handleMarkOfferDeclined = async () => {
-    await applyOfferUpdate({ status: OfferStatus.REJECTED });
+    try {
+      await offerService.recordOfferDecision(formData.id, "REJECTED");
+      setFormData((current) => ({ ...current, status: OfferStatus.REJECTED }));
+      await onSaved();
+      toast.success("Angebot als abgelehnt markiert.");
+    } catch (error) {
+      const workflowError = error as Error & { code?: string };
+      toast.error(formatErrorToast({ code: workflowError.code, message: workflowError.message }));
+    }
   };
 
   const handleCreateInvoiceFromOffer = async () => {
@@ -652,28 +667,22 @@ export function DocumentEditor({
     }
     const ok = await confirm({
       title: "Rechnung erstellen",
-      message: "Angebot in Rechnung umwandeln?",
+      message: "Aus dem angenommenen Angebot wird ein neuer Rechnungsentwurf erstellt. Kunde, Positionen und Konditionen werden automatisch übernommen.",
     });
     if (!ok) return;
 
-    const { data, error } = await supabase.rpc("convert_offer_to_invoice", {
-      offer_id: formData.id,
-    });
-
-    if (error) {
+    let invoiceId: string;
+    try {
+      invoiceId = await offerService.convertOfferToInvoice(formData.id);
+    } catch (error) {
+      const workflowError = error as Error & { code?: string };
       toast.error(
         formatErrorToast({
-          code: error.code,
-          message: error.message,
+          code: workflowError.code,
+          message: workflowError.message,
           fallback: "Angebot konnte nicht umgewandelt werden.",
         })
       );
-      return;
-    }
-
-    const invoiceId = data?.id;
-    if (!invoiceId) {
-      toast.error("Rechnung konnte nicht erstellt werden.");
       return;
     }
 
@@ -708,9 +717,9 @@ export function DocumentEditor({
     const client = displayClient;
 
     return (
-      <div className="fixed inset-0 bg-white z-50 overflow-hidden">
+      <div className="app-visual-viewport fixed inset-x-0 bg-white z-50 overflow-hidden">
         {sendModal}
-        <div className="flex h-[100svh] flex-col sm:h-full">
+        <div className="flex h-full flex-col">
           <div className="flex-1 overflow-y-auto safe-top safe-area-container bottom-action-spacer">
             <div className="w-full max-w-none px-4 pt-4 bottom-action-spacer sm:max-w-[210mm] sm:mx-auto sm:p-[10mm] sm:pb-[10mm] bg-white shadow-none print:shadow-none">
               <div className="no-print flex flex-col gap-3 mb-8 p-4 bg-gray-100 rounded-lg sm:flex-row sm:items-center sm:justify-between">
@@ -933,13 +942,14 @@ export function DocumentEditor({
             </div>
 
             <div className="bottom-action-bar document-preview-actions sm:hidden no-print safe-area-container">
-              <div className="flex flex-wrap gap-2 justify-end">
-                <AppButton variant="secondary" onClick={() => void handleDownloadPdf()}>
+              <div className="grid grid-cols-2 gap-2">
+                <AppButton className="w-full px-3 text-xs" variant="secondary" onClick={() => void handleDownloadPdf()}>
                   <FileDown size={16} /> PDF herunterladen
                 </AppButton>
-                {isInvoice && formData.status !== InvoiceStatus.DRAFT && <AppButton variant="secondary" onClick={() => void handleDownloadCii()}><FileDown size={16} /> CII-XML (Vorab)</AppButton>}
+                {isInvoice && formData.status !== InvoiceStatus.DRAFT && <AppButton className="w-full px-3 text-xs" variant="secondary" onClick={() => void handleDownloadCii()}><FileDown size={16} /> CII-XML (Vorab)</AppButton>}
 
                 <AppButton
+                  className="w-full px-3 text-xs"
                   variant="secondary"
                   onClick={() => setShowSendModal(true)}
                 >
@@ -947,6 +957,7 @@ export function DocumentEditor({
                 </AppButton>
 
                 <AppButton
+                  className="w-full px-3 text-xs"
                   variant="secondary"
                   aria-label={readOnly ? "Schließen" : undefined}
                   onClick={() => {
@@ -1011,7 +1022,7 @@ export function DocumentEditor({
           ? "min-h-screen-safe bg-gray-50"
           : isEmbeddedLayout
           ? "flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white"
-          : "fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4"
+          : "app-visual-viewport fixed inset-x-0 z-[60] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4"
       }
     >
       {sendModal}
@@ -1021,7 +1032,7 @@ export function DocumentEditor({
             ? "bg-white min-h-screen-safe flex flex-col"
             : isEmbeddedLayout
             ? `${showOfferWizard ? "grid grid-rows-[auto_minmax(0,1fr)_auto]" : "flex flex-col"} h-full min-h-0 flex-1 overflow-hidden bg-white`
-            : `${showOfferWizard ? "grid grid-rows-[auto_minmax(0,1fr)_auto]" : "flex flex-col"} h-[100dvh] w-full max-w-4xl min-h-0 overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:h-[90dvh] sm:rounded-xl`
+            : `${showOfferWizard ? "grid grid-rows-[auto_minmax(0,1fr)_auto]" : "flex flex-col"} h-full w-full max-w-4xl min-h-0 overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:h-[90%] sm:rounded-xl`
         }
       >
         {showOfferWizard ? (
@@ -1280,7 +1291,7 @@ export function DocumentEditor({
                       >
                         <Sparkles size={17} /> Mit KI erstellen
                       </AppButton>
-                      <AppButton type="button" variant="secondary" onClick={() => setShowPositionGroups(true)} disabled={disabled} className="w-full sm:w-auto"><Layers3 size={17} /> Positionsgruppe</AppButton>
+                      <AppButton type="button" variant="secondary" onClick={() => setShowPositionGroups(true)} disabled={disabled} className="w-full sm:w-auto"><Layers3 size={17} /> Paket einfügen</AppButton>
                       <AppButton
                         type="button"
                         onClick={addPosition}
@@ -1309,7 +1320,7 @@ export function DocumentEditor({
                         <span>{formatMoney(group.tax, documentCurrency, locale)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between text-base font-semibold text-blue-700 pt-2 border-t">
+                    <div className="flex justify-between border-t pt-2 text-base font-semibold text-[var(--app-primary)]">
                       <span>Gesamtbetrag:</span>
                       <span>
                         {formatMoney(totals.total, documentCurrency, locale)}
@@ -1368,9 +1379,9 @@ export function DocumentEditor({
               <AppButton
                 onClick={() => void handleSave({ closeAfterSave: true })}
                 disabled={saving || !formData.clientId}
-                className="w-full sm:w-40 justify-center bg-blue-600 hover:bg-blue-700 text-white"
+                className="w-full justify-center sm:w-40"
               >
-                {saving ? "Speichere..." : "Weiter"}
+                {saving ? "Wird gespeichert …" : "Weiter"}
               </AppButton>
             </div>
 
@@ -1406,7 +1417,7 @@ export function DocumentEditor({
                       </span>
                       {locked && (
                         <span className="px-2 py-1 rounded border bg-red-50 text-red-600 border-red-200">
-                          Locked
+                          Gesperrt
                         </span>
                       )}
                     </div>
@@ -1427,7 +1438,7 @@ export function DocumentEditor({
                     type="button"
                     className={`text-sm font-medium px-3 py-2 rounded-t ${
                       activeTab === "details"
-                        ? "text-blue-600 border-b-2 border-blue-600"
+                        ? "border-b-2 border-[var(--app-primary)] text-[var(--app-primary)]"
                         : "text-gray-500 hover:text-gray-700"
                     }`}
                     onClick={() => setActiveTab("details")}
@@ -1438,7 +1449,7 @@ export function DocumentEditor({
                     type="button"
                     className={`text-sm font-medium px-3 py-2 rounded-t ${
                       activeTab === "activity"
-                        ? "text-blue-600 border-b-2 border-blue-600"
+                        ? "border-b-2 border-[var(--app-primary)] text-[var(--app-primary)]"
                         : "text-gray-500 hover:text-gray-700"
                     }`}
                     onClick={() => setActiveTab("activity")}
@@ -1494,7 +1505,7 @@ export function DocumentEditor({
                         <div className="mt-1 whitespace-pre-line">{displayClient.address}</div>
                       )}
                       <div className="mt-2">
-                        <Link to="/app/clients" className="text-xs text-blue-600 hover:underline">
+                        <Link to="/app/clients" className="text-xs text-[var(--app-primary)] hover:underline">
                           Kunde bearbeiten
                         </Link>
                       </div>
@@ -1811,7 +1822,7 @@ export function DocumentEditor({
               <AppButton type="button" variant="ghost" onClick={() => setShowAiDraftDialog(true)} disabled={disabled}>
                 <Sparkles size={16} /> Mit KI erstellen
               </AppButton>
-              <AppButton type="button" variant="ghost" onClick={() => setShowPositionGroups(true)} disabled={disabled}><Layers3 size={16} /> Positionsgruppe</AppButton>
+              <AppButton type="button" variant="ghost" onClick={() => setShowPositionGroups(true)} disabled={disabled}><Layers3 size={16} /> Paket einfügen</AppButton>
             </div>
 
             <div className="space-y-2">

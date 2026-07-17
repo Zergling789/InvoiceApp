@@ -871,6 +871,9 @@ export type Database = {
           logo_url: string
           name: string
           number_padding: number
+          onboarding_client_id: string | null
+          onboarding_completed_at: string | null
+          onboarding_step: string
           payment_terms_days: number
           prefix_invoice: string
           prefix_offer: string
@@ -914,6 +917,9 @@ export type Database = {
           logo_url?: string
           name?: string
           number_padding?: number
+          onboarding_client_id?: string | null
+          onboarding_completed_at?: string | null
+          onboarding_step?: string
           payment_terms_days?: number
           prefix_invoice?: string
           prefix_offer?: string
@@ -957,6 +963,9 @@ export type Database = {
           logo_url?: string
           name?: string
           number_padding?: number
+          onboarding_client_id?: string | null
+          onboarding_completed_at?: string | null
+          onboarding_step?: string
           payment_terms_days?: number
           prefix_invoice?: string
           prefix_offer?: string
@@ -1229,6 +1238,39 @@ export type Database = {
           number: string
           positions: Json
           project_id: string | null
+          sent_at: string | null
+          sent_count: number
+          sent_via: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          valid_until: string | null
+          vat_rate: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "offers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_offer_decision: {
+        Args: { decision: string; offer_id: string }
+        Returns: {
+          client_id: string
+          created_at: string
+          currency: string
+          date: string
+          footer_text: string
+          id: string
+          intro_text: string
+          invoice_id: string | null
+          last_sent_at: string | null
+          last_sent_to: string | null
+          number: string
+          positions: Json
+          project_id: string | null
+          rejection_reason: string | null
           sent_at: string | null
           sent_count: number
           sent_via: string | null

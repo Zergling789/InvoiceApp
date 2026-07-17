@@ -20,7 +20,8 @@ type OfferDetailViewProps = {
   totals: { net: number; vat: number; gross: number };
   timeline: TimelineItem[];
   canConvert?: boolean;
-  directActions: Array<{ label: string; onSelect: () => void; variant?: "primary" | "secondary" }>;
+  directActions: Array<{ label: string; onSelect: () => void | Promise<void>; variant?: "primary" | "secondary"; disabled?: boolean }>;
+  nextStepHint?: string;
   hasMoreActions: boolean;
   onConvert: () => void;
   onMore: () => void;
@@ -42,6 +43,7 @@ export function OfferDetailView({
   timeline,
   canConvert,
   directActions,
+  nextStepHint,
   hasMoreActions,
   onConvert,
   onMore,
@@ -61,9 +63,12 @@ export function OfferDetailView({
             {client?.companyName || "Unbekannter Kunde"} · {formatDate(offer.date, locale)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {directActions.map((action) => <AppButton key={action.label} variant={action.variant ?? "secondary"} onClick={action.onSelect}>{action.label}</AppButton>)}
-          {hasMoreActions && <AppButton variant="ghost" onClick={onMore}><MoreVertical size={17} /> Mehr</AppButton>}
+        <div className="w-full lg:w-auto">
+          <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+            {directActions.map((action) => <AppButton key={action.label} className="w-full justify-center sm:w-auto" variant={action.variant ?? "secondary"} onClick={action.onSelect} disabled={action.disabled}>{action.label}</AppButton>)}
+            {hasMoreActions && <AppButton className="w-full justify-center sm:w-auto" variant="ghost" onClick={onMore}><MoreVertical size={17} /> Mehr</AppButton>}
+          </div>
+          {nextStepHint && <p className="mt-2 max-w-md text-sm leading-5 text-[var(--app-muted)] lg:text-right"><span className="font-semibold text-[var(--app-text)]">Nächster Schritt:</span> {nextStepHint}</p>}
         </div>
       </header>
 

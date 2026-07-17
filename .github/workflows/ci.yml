@@ -63,6 +63,8 @@ jobs:
         run: npx playwright test tests/basic.spec.ts
       - name: Run recipient portal flow
         run: npx playwright test tests/recipient-portal.spec.ts
+      - name: Run mobile public document flow
+        run: npx playwright test tests/mobile-workflow.spec.ts
 
   einvoice-validation:
     name: EN16931 and PDF/A-3 validation
@@ -162,6 +164,10 @@ jobs:
         run: npx playwright test tests/flows.spec.ts
       - name: Run invoice status flows
         run: npx playwright test tests/invoice-status.spec.ts
+      - name: Run mobile invoice creation flow
+        run: npx playwright test tests/mobile-invoice-workflow.spec.ts
+      - name: Run new-user onboarding flow
+        run: npx playwright test tests/onboarding.spec.ts
       - name: Run two-user RLS isolation
         run: npx playwright test tests/rls-isolation.spec.ts
 

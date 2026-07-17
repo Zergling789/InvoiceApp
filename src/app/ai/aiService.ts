@@ -1,27 +1,14 @@
 import { readApiError } from "@/app/api/apiError";
 import { apiFetch, readJsonResponse } from "@/app/api/apiClient";
+import {
+  parseAiDocumentDraftResponse,
+  type AiDocumentDraft,
+  type AiDraftPosition,
+  type TextDocumentIntakeSource,
+} from "@/app/ai/documentDraftContract";
+import { ApiRequestError } from "@/utils/errors";
 
-export type AiDraftPosition = {
-  title: string;
-  description: string;
-  quantity: number;
-  unit: string;
-  price: number | null;
-  priceNeedsReview: boolean;
-  category: string;
-  internalNote: string;
-  subpositions: string[];
-  priceSourceId: string | null;
-  taxCategory: "STANDARD" | "REDUCED" | "ZERO" | "EXEMPT" | "SMALL_BUSINESS" | "REVERSE_CHARGE";
-  taxRate: number;
-  source: { id: string; title: string; kind: string; source: string; productNumber?: string | null; manufacturer?: string | null; imageUrl?: string | null } | null;
-};
-export type AiDocumentDraft = {
-  positions: AiDraftPosition[];
-  introText: string;
-  footerText: string;
-  warnings: string[];
-};
+export type { AiDocumentDraft, AiDraftPosition };
 export type CreateAiDraftInput = {
   description: string;
   documentType: "invoice" | "offer";
@@ -30,15 +17,39 @@ export type CreateAiDraftInput = {
   customerId?: string;
 };
 
+export const buildDocumentDraftRequest = (input: CreateAiDraftInput) => ({
+  source: {
+    kind: "TEXT",
+    text: input.description,
+  } satisfies TextDocumentIntakeSource,
+  documentType: input.documentType,
+  currency: input.currency,
+  vatRate: input.vatRate,
+  customerId: input.customerId,
+});
+
 export async function createAiDocumentDraft(input: CreateAiDraftInput): Promise<AiDocumentDraft> {
-  const response = await apiFetch("/api/ai/invoice-draft", {
+  const response = await apiFetch("/api/ai/document-draft", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(buildDocumentDraftRequest(input)),
   }, { auth: true });
   if (!response.ok) {
     const error = await readApiError(response);
-    throw new Error(error.message ?? "KI-Vorschlag konnte nicht erstellt werden.");
+    throw new ApiRequestError(
+      error.message ?? "KI-Vorschlag konnte nicht erstellt werden.",
+      response.status,
+      error.code,
+      error.requestId,
+    );
   }
-  const data = await readJsonResponse<{ draft: AiDocumentDraft }>(response);
-  return data.draft;
+  const data = await readJsonResponse<unknown>(response);
+  const parsed = parseAiDocumentDraftResponse(data);
+  if (!parsed) {
+    throw new ApiRequestError(
+      "Der KI-Vorschlag hatte ein ungültiges Format.",
+      502,
+      "AI_INVALID_RESPONSE",
+    );
+  }
+  return parsed.draft;
 }

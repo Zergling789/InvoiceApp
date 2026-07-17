@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 
 import type { Client, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
-import { useToast } from "@/ui/FeedbackProvider";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import * as clientService from "@/app/clients/clientService";
 import type { CreatedDocumentTarget } from "@/features/documents/createdDocumentNavigation";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 const toLocalISODate = (d: Date) => {
   const year = d.getFullYear();
@@ -31,13 +31,12 @@ type OfferFormProps = {
 };
 
 export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
-  const toast = useToast();
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -68,7 +67,6 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
         if (!mounted) return;
         const message = e instanceof Error ? e.message : String(e);
         setError(message);
-        toast.error(message);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -76,7 +74,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
     return () => {
       mounted = false;
     };
-  }, [toast]);
+  }, [reloadToken]);
 
   if (loading) {
     return <div className="text-sm text-gray-500 p-6">Lade Angebot...</div>;
@@ -85,9 +83,10 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
   if (error || !settings || !editorSeed) {
     return (
       <div className="space-y-3 p-6">
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {error ?? "Angebot konnte nicht geladen werden."}
-        </div>
+        <LoadErrorCard
+          title="Angebotserstellung konnte nicht geladen werden"
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
         <AppButton variant="secondary" onClick={() => onClose()}>
           Zurück
         </AppButton>

@@ -32,6 +32,7 @@ import {
   formatInvoicePhaseLabel,
   formatOfferPhaseLabel,
 } from "@/features/documents/state/formatPhaseLabel";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 type DashboardData = {
   clients: Client[];
@@ -80,6 +81,7 @@ export default function TodosPage() {
   const [selectedDoc, setSelectedDoc] = useState<Invoice | Offer | null>(null);
   const [selectedType, setSelectedType] = useState<"invoice" | "offer" | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -103,7 +105,7 @@ export default function TodosPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [reloadToken]);
 
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -254,7 +256,7 @@ export default function TodosPage() {
         statusLabel: formatOfferPhaseLabel(phase),
         tone: "blue",
         ageLabel: `seit ${getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today)} Tagen`,
-        secondaryAction: capabilities.canSend ? { label: "Follow-up senden", intent: "followup" } : undefined,
+        secondaryAction: capabilities.canSend ? { label: "Nachfrage senden", intent: "followup" } : undefined,
       };
     })())
   );
@@ -458,19 +460,20 @@ export default function TodosPage() {
         </AppButton>
       </div>
 
-      {error && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {error}
-        </div>
-      )}
-
       {loading && (
         <AppCard>
           <div className="text-sm text-gray-500">Lade To-dos...</div>
         </AppCard>
       )}
 
-      {!loading && totalCards === 0 && (
+      {!loading && error && (
+        <LoadErrorCard
+          title="To-dos konnten nicht geladen werden"
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
+      )}
+
+      {!loading && !error && totalCards === 0 && (
         <AppCard className="flex flex-col gap-4 items-start">
           <div className="text-sm text-gray-600">✅ Keine offenen To-dos</div>
           <div className="flex flex-wrap gap-3">
@@ -490,7 +493,7 @@ export default function TodosPage() {
         </AppCard>
       )}
 
-      {!loading && overdueInvoiceCards.length > 0 && (
+      {!loading && !error && overdueInvoiceCards.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Überfällige Rechnungen</h2>
@@ -530,7 +533,7 @@ export default function TodosPage() {
         </section>
       )}
 
-      {!loading && openInvoiceCards.length > 0 && (
+      {!loading && !error && openInvoiceCards.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Offene Rechnungen</h2>
@@ -570,7 +573,7 @@ export default function TodosPage() {
         </section>
       )}
 
-      {!loading && followUpOfferCards.length > 0 && (
+      {!loading && !error && followUpOfferCards.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Angebote ohne Antwort</h2>
@@ -610,10 +613,10 @@ export default function TodosPage() {
         </section>
       )}
 
-      {!loading && draftCards.length > 0 && (
+      {!loading && !error && draftCards.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Drafts unvollständig</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Unfertige Entwürfe</h2>
             <span className="text-sm text-gray-500">{draftCards.length}</span>
           </div>
           <div className="space-y-3">
@@ -656,7 +659,7 @@ export default function TodosPage() {
         <button
           type="button"
           onClick={() => setFabOpen(true)}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-primary)] text-white shadow-[0_8px_24px_rgba(0,113,227,0.3)]"
           aria-label="Neues Dokument erstellen"
         >
           <span className="text-2xl leading-none">+</span>
@@ -665,7 +668,7 @@ export default function TodosPage() {
 
       {fabOpen && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
+          className="app-visual-viewport fixed inset-x-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
           onPointerDown={() => setFabOpen(false)}
         >
           <div

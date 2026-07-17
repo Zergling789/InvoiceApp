@@ -1,4 +1,5 @@
 import { OfferDetailView } from "@/features/documents/OfferDetailView";
+import { getNextDocumentAction } from "@/features/documents/state/documentState";
 import { OfferStatus, type Client, type Offer } from "@/types";
 
 const demoOffer: Offer = {
@@ -29,6 +30,7 @@ const demoClient: Client = {
 export default function AngebotDetails() {
   const net = 950;
   const vat = net * 0.19;
+  const nextStep = getNextDocumentAction("offer", demoOffer);
   return (
     <div className="min-h-screen bg-[var(--app-bg)] px-4 py-8 sm:px-8">
       <div className="mx-auto max-w-7xl">
@@ -45,9 +47,10 @@ export default function AngebotDetails() {
             { label: "Gesendet", value: "28.12.2025" },
           ]}
           directActions={[
-            { label: "Senden", onSelect: () => undefined },
-            { label: "Bearbeiten", onSelect: () => undefined },
+            { label: nextStep?.label ?? "Empfänger-Link kopieren", onSelect: () => undefined, variant: "primary" },
+            { label: "Erneut senden", onSelect: () => undefined },
           ]}
+          nextStepHint={nextStep?.hint}
           hasMoreActions
           onConvert={() => undefined}
           onMore={() => undefined}

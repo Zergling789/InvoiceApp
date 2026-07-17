@@ -96,7 +96,7 @@ export function BrandingSettingsSection({ settings, onChange }: Props) {
 
   return (
     <div className="border-t border-[var(--app-border)] pt-6 space-y-6">
-      <div><div className="text-base font-semibold">Branding & Dokumentdesign</div><p className="mt-1 text-sm text-[var(--app-muted)]">Logo, Akzentfarbe und Standardlayout für neue Rechnungen.</p></div>
+      <div><div className="text-base font-semibold">Logo & Dokumentdesign</div><p className="mt-1 text-sm text-[var(--app-muted)]">Logo, Akzentfarbe und Standardlayout für neue Rechnungen.</p></div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="space-y-3">
           <label htmlFor={inputId} className="text-sm font-medium">Firmenlogo</label>

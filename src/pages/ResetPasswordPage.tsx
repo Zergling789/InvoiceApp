@@ -161,7 +161,7 @@ export default function ResetPasswordPage() {
 
               <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <Link to="/login" className="font-semibold text-indigo-600 dark:text-indigo-300">
-                  Zurueck zum Login
+                  Zurück zur Anmeldung
                 </Link>
                 <Link to="/" className="font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white">
                   Zur Startseite

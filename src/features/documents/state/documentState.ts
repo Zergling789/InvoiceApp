@@ -7,6 +7,21 @@ export type InvoicePhase = "draft" | "issued" | "sent" | "overdue" | "paid" | "c
 export type OfferPhase = "draft" | "sent" | "accepted" | "rejected" | "invoiced";
 export type DocumentPhase = InvoicePhase | OfferPhase;
 
+export type DocumentWorkflowActionKey =
+  | "FINALIZE_INVOICE"
+  | "SEND_INVOICE"
+  | "MARK_INVOICE_PAID"
+  | "SEND_DUNNING"
+  | "SEND_OFFER"
+  | "COPY_RECIPIENT_LINK"
+  | "CONVERT_OFFER";
+
+export type DocumentWorkflowAction = {
+  key: DocumentWorkflowActionKey;
+  label: string;
+  hint: string;
+};
+
 export type InvoiceCapabilities = {
   canEdit: boolean;
   canFinalize: boolean;
@@ -151,4 +166,77 @@ export function getDocumentCapabilities(
     canMarkPaid: false,
     canCancel: false,
   };
+}
+
+export function getNextDocumentAction(
+  docType: "invoice",
+  doc: Invoice,
+  now?: Date,
+): DocumentWorkflowAction | null;
+export function getNextDocumentAction(
+  docType: "offer",
+  doc: Offer,
+  now?: Date,
+): DocumentWorkflowAction | null;
+export function getNextDocumentAction(
+  docType: DocType,
+  doc: Invoice | Offer,
+  now = new Date(),
+): DocumentWorkflowAction | null {
+  if (docType === "invoice") {
+    const phase = getInvoicePhase(doc as Invoice, now);
+    if (phase === "draft") {
+      return {
+        key: "FINALIZE_INVOICE",
+        label: "Rechnung finalisieren",
+        hint: "Rechnung prüfen und die endgültige Rechnungsnummer vergeben.",
+      };
+    }
+    if (phase === "issued") {
+      return {
+        key: "SEND_INVOICE",
+        label: "Rechnung senden",
+        hint: "Die fertige Rechnung per E-Mail an den Kunden senden.",
+      };
+    }
+    if (phase === "sent") {
+      return {
+        key: "MARK_INVOICE_PAID",
+        label: "Zahlung erfassen",
+        hint: "Nach dem Zahlungseingang die Rechnung als bezahlt markieren.",
+      };
+    }
+    if (phase === "overdue") {
+      return {
+        key: "SEND_DUNNING",
+        label: "Mahnung senden",
+        hint: "Den Kunden auf die überfällige Zahlung hinweisen.",
+      };
+    }
+    return null;
+  }
+
+  const phase = getOfferPhase(doc as Offer);
+  if (phase === "draft") {
+    return {
+      key: "SEND_OFFER",
+      label: "Angebot senden",
+      hint: "Das Angebot per E-Mail senden und die Rückmeldung online erhalten.",
+    };
+  }
+  if (phase === "sent") {
+    return {
+      key: "COPY_RECIPIENT_LINK",
+      label: "Empfänger-Link kopieren",
+      hint: "Den persönlichen Link erneut teilen oder die Rückmeldung abwarten.",
+    };
+  }
+  if (phase === "accepted") {
+    return {
+      key: "CONVERT_OFFER",
+      label: "Rechnung aus Angebot erstellen",
+      hint: "Kunde und Positionen automatisch in eine neue Rechnung übernehmen.",
+    };
+  }
+  return null;
 }

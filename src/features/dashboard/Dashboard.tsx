@@ -11,6 +11,7 @@ import { ActionList, type ActionItem } from "@/components/dashboard/ActionList";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { formatMoney } from "@/utils/money";
 import {
@@ -42,6 +43,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
   const [company, setCompany] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -58,7 +60,7 @@ export default function Dashboard() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [reloadToken]);
 
   const derived = useMemo(() => {
     const today = new Date();
@@ -160,13 +162,13 @@ export default function Dashboard() {
         return {
           id: `offer-followup-${offer.id}`,
           title: `${clientName} · Angebot ${offer.number}`,
-          subtitle: "Follow-up fällig – antworte, bevor es kalt wird.",
+          subtitle: "Nachfrage fällig – bleib beim Kunden im Gespräch.",
           amountLabel: formatAmount(
             calculateDocumentTotal(offer.positions, offer.vatRate),
             currency
           ),
           ageLabel: `seit ${ageDays} Tagen`,
-          statusLabel: "Follow-up fällig",
+          statusLabel: "Nachfrage fällig",
           tone: "neutral",
           primaryCta: { label: "Angebot öffnen", to: `/app/offers/${offer.id}` },
         };
@@ -263,7 +265,14 @@ export default function Dashboard() {
           </div>
         </details>
       </div>
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error ? (
+        <LoadErrorCard
+          title="Dashboard konnte nicht geladen werden"
+          retrying={loading}
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
+      ) : (
+        <>
 
       <section className="space-y-4">
         <SectionHeader title="Cashflow" subtitle="Dein Fokus: Geld reinholen." />
@@ -314,7 +323,7 @@ export default function Dashboard() {
           isLoading={loading}
           emptyState={
             <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-gray-200 p-6 text-sm text-gray-600">
-              <span>✅ Alles sauber – keine offenen Follow-ups.</span>
+              <span>✅ Alles erledigt – keine offenen Nachfragen.</span>
               <Link to="/app/offers/new">
                 <AppButton>Neues Angebot erstellen</AppButton>
               </Link>
@@ -338,6 +347,9 @@ export default function Dashboard() {
           />
         )}
       </section>
+
+        </>
+      )}
 
     </div>
   );

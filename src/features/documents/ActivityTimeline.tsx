@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { formatDate } from "@/types";
 import { dbListDocumentActivity } from "@/db/documentActivityDb";
+import { AppButton } from "@/ui/AppButton";
 
 type ActivityEvent = Awaited<ReturnType<typeof dbListDocumentActivity>>[number];
 
@@ -44,6 +45,7 @@ export function ActivityTimeline({
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -72,7 +74,7 @@ export function ActivityTimeline({
     return () => {
       active = false;
     };
-  }, [docId, docType]);
+  }, [docId, docType, reloadToken]);
 
   const rendered = useMemo(
     () =>
@@ -89,7 +91,21 @@ export function ActivityTimeline({
   }
 
   if (error) {
-    return <div className="text-sm text-red-600">Aktivität konnte nicht geladen werden.</div>;
+    return (
+      <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/10 p-4">
+        <p className="text-sm font-medium text-red-700 dark:text-red-300">
+          Aktivitäten konnten nicht geladen werden.
+        </p>
+        <AppButton
+          className="mt-3"
+          type="button"
+          variant="secondary"
+          onClick={() => setReloadToken((current) => current + 1)}
+        >
+          Erneut versuchen
+        </AppButton>
+      </div>
+    );
   }
 
   if (!rendered.length) {

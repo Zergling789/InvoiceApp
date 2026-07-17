@@ -8,7 +8,7 @@ type DbSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
 type DbSettingsInsert = Database["public"]["Tables"]["user_settings"]["Insert"];
 
 const SETTINGS_FIELDS =
-  "user_id,name,company_name,address,tax_id,seller_tax_number,seller_vat_id,seller_country,seller_street,seller_house_number,seller_postal_code,seller_city,seller_electronic_address,seller_electronic_address_scheme,default_vat_rate,default_payment_terms,payment_terms_days,iban,bic,bank_name,email,email_default_subject,email_default_text,is_small_business,small_business_note,logo_url,primary_color,template_id,locale,currency,prefix_invoice,prefix_offer,number_padding,invoice_number_prefix,invoice_number_next,invoice_number_padding,invoice_number_include_year,footer_text,default_sender_identity_id,created_at,updated_at" as const;
+  "user_id,name,company_name,address,tax_id,seller_tax_number,seller_vat_id,seller_country,seller_street,seller_house_number,seller_postal_code,seller_city,seller_electronic_address,seller_electronic_address_scheme,default_vat_rate,default_payment_terms,payment_terms_days,iban,bic,bank_name,email,email_default_subject,email_default_text,is_small_business,small_business_note,logo_url,primary_color,template_id,locale,currency,prefix_invoice,prefix_offer,number_padding,invoice_number_prefix,invoice_number_next,invoice_number_padding,invoice_number_include_year,footer_text,default_sender_identity_id,onboarding_step,onboarding_completed_at,onboarding_client_id,created_at,updated_at" as const;
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();

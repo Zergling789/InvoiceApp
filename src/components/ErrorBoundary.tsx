@@ -1,4 +1,5 @@
 import React, { type ErrorInfo, type ReactNode } from "react";
+import { reportClientError } from "@/app/observability/clientErrorReporter";
 
 type Props = { children: ReactNode };
 type State = { failed: boolean; errorId?: string };
@@ -11,6 +12,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (this.state.errorId) {
+      reportClientError("REACT_RENDER_ERROR", { errorId: this.state.errorId, notify: false });
+    }
     if (import.meta.env.DEV) console.error("React render error", error, info);
   }
 
@@ -26,9 +30,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
             Lade die Seite neu. Falls der Fehler erneut auftritt, nenne dem Support bitte die Fehler-ID
             {this.state.errorId ? ` ${this.state.errorId}` : ""}.
           </p>
-          <button className="app-button app-button-primary mt-5" type="button" onClick={() => window.location.reload()}>
-            Seite neu laden
-          </button>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button className="app-button app-button-primary" type="button" onClick={() => window.location.reload()}>
+              Seite neu laden
+            </button>
+            <a className="app-button app-button-secondary" href="/">
+              Zur Startseite
+            </a>
+          </div>
         </section>
       </main>
     );

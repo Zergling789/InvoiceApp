@@ -1,11 +1,13 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/renderWithProviders";
 import Dashboard from "./Dashboard";
 
+const loadDashboardDataMock = vi.fn();
+
 vi.mock("@/app/dashboard/dashboardService", () => ({
-  loadDashboardData: vi.fn(async () => ({ clients: [], offers: [], invoices: [] })),
+  loadDashboardData: () => loadDashboardDataMock(),
 }));
 
 vi.mock("@/app/settings/settingsService", () => ({
@@ -13,7 +15,10 @@ vi.mock("@/app/settings/settingsService", () => ({
 }));
 
 describe("Dashboard-Navigation", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loadDashboardDataMock.mockResolvedValue({ clients: [], offers: [], invoices: [] });
+  });
 
   it("verwendet kanonische Erstellen- und Dokumentlinks", async () => {
     renderWithProviders(<Dashboard />, { route: "/app" });
@@ -32,5 +37,20 @@ describe("Dashboard-Navigation", () => {
     await screen.findByRole("heading", { name: /Hallo Everest AG/i });
     expect(screen.queryByRole("heading", { name: "Schnellaktionen" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Alle To-dos" })).toHaveAttribute("href", "/app/todos");
+  });
+
+  it("zeigt nach einem Ladefehler keine leeren Kennzahlen und kann erneut laden", async () => {
+    loadDashboardDataMock
+      .mockRejectedValueOnce(new Error("private database detail"))
+      .mockResolvedValueOnce({ clients: [], offers: [], invoices: [] });
+    renderWithProviders(<Dashboard />, { route: "/app" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Dashboard konnte nicht geladen werden");
+    expect(screen.queryByText("private database detail")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cashflow")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    await waitFor(() => expect(loadDashboardDataMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Cashflow")).toBeVisible();
   });
 });

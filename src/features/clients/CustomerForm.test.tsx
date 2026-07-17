@@ -73,4 +73,13 @@ describe("CustomerForm required fields", () => {
     expect(Array.from(vatSelect.options, (option) => option.value)).toEqual(["", "19", "7"]);
     expect(Array.from(languageSelect.options, (option) => option.value)).toEqual(["de"]);
   });
+
+  it("uses customer-friendly wording for the next reminder", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TestForm onSave={vi.fn()} />);
+
+    await user.click(screen.getByText("Organisation"));
+    expect(screen.getByText("Nächste Nachfrage")).toBeVisible();
+    expect(screen.queryByText(/Follow-up/i)).not.toBeInTheDocument();
+  });
 });

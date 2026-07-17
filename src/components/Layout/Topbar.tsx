@@ -69,7 +69,7 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
         </button>
       </div>
       {menuOpen && (
-        <div className="fixed inset-0 z-40 flex items-start justify-end bg-black/50 p-4 backdrop-blur-sm md:hidden">
+        <div className="app-visual-viewport fixed inset-x-0 z-40 flex items-start justify-end bg-black/50 p-4 safe-top backdrop-blur-sm md:hidden">
           <div className="app-card max-h-[calc(100dvh-2rem)] w-full max-w-sm space-y-2 overflow-y-auto rounded-3xl bg-[var(--app-surface-solid)] p-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold text-gray-700 dark:text-slate-200">Menü</div>

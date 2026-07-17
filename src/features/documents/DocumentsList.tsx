@@ -531,7 +531,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
           <div className="app-card text-center text-gray-500">Keine Dokumente gefunden.</div>
         )}
 
-        {loading && <div className="app-card text-center text-gray-500">Lade...</div>}
+        {loading && <div className="app-card text-center text-gray-500">Dokumente werden geladen …</div>}
       </div>
 
       <div className="hidden md:block bg-white rounded-lg shadow border overflow-hidden">
@@ -634,7 +634,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                           }}
                           title="In Rechnung wandeln"
                           aria-label="In Rechnung wandeln"
-                          className="h-11 w-11 inline-flex items-center justify-center text-indigo-600 hover:bg-indigo-50 rounded"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded text-[var(--app-primary)] hover:bg-[var(--app-primary)]/10"
                         >
                           <ReceiptEuro size={18} />
                         </button>
@@ -697,7 +697,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
             {loading && (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-gray-500">
-                  Lade...
+                  Dokumente werden geladen …
                 </td>
               </tr>
             )}

@@ -26,6 +26,7 @@ import {
 import { fetchSettings } from "@/app/settings/settingsService";
 import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
 import { getClientDisplayName, getClientPersonName } from "@/domain/models/Client";
+import { LoadErrorCard } from "@/components/LoadErrorCard";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
@@ -421,25 +422,25 @@ export default function DocumentsHubPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <AppButton
           variant={mode === "all" ? "primary" : "secondary"}
           onClick={() => setMode("all")}
-          className="min-w-[120px] justify-center"
+          className="min-w-0 justify-center px-3 sm:min-w-[120px] sm:px-5"
         >
           Alle
         </AppButton>
         <AppButton
           variant={mode === "offer" ? "primary" : "secondary"}
           onClick={() => setMode("offer")}
-          className="min-w-[120px] justify-center"
+          className="min-w-0 justify-center px-3 sm:min-w-[120px] sm:px-5"
         >
           Angebote
         </AppButton>
         <AppButton
           variant={mode === "invoice" ? "primary" : "secondary"}
           onClick={() => setMode("invoice")}
-          className="min-w-[120px] justify-center"
+          className="min-w-0 justify-center px-3 sm:min-w-[120px] sm:px-5"
         >
           Rechnungen
         </AppButton>
@@ -572,16 +573,15 @@ export default function DocumentsHubPage() {
 
       </div>
 
-      {error && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {error}
-        </div>
-      )}
-
       {loading ? (
         <AppCard>
           <div className="text-sm text-gray-500">Lade Dokumente...</div>
         </AppCard>
+      ) : error ? (
+        <LoadErrorCard
+          title="Dokumente konnten nicht geladen werden"
+          onRetry={() => void refreshDocuments()}
+        />
       ) : filteredRows.length === 0 ? (
         <AppCard>
           <div className="text-sm text-gray-500">Keine Dokumente gefunden.</div>
@@ -655,7 +655,7 @@ export default function DocumentsHubPage() {
             >
               <AppCard
                 className={[
-                  "flex flex-col gap-3 hover:border-indigo-200 hover:bg-indigo-50/30 transition",
+                  "flex flex-col gap-3 transition hover:border-[var(--app-primary)]/40 hover:bg-[var(--app-primary)]/[0.04]",
                   row.isOverdue ? "border-red-200 bg-red-50/40" : "",
                 ].join(" ")}
               >
@@ -692,7 +692,7 @@ export default function DocumentsHubPage() {
         <button
           type="button"
           onClick={() => setFabOpen(true)}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-primary)] text-white shadow-[0_8px_24px_rgba(0,113,227,0.3)]"
           aria-label="Neues Dokument erstellen"
         >
           <span className="text-2xl leading-none">+</span>
@@ -701,11 +701,14 @@ export default function DocumentsHubPage() {
 
       {fabOpen && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
+          className="app-visual-viewport fixed inset-x-0 z-40 flex items-end justify-center bg-gray-900/50 sm:hidden"
           onPointerDown={() => setFabOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Dokument oder Kunde erstellen"
         >
           <div
-            className="w-full rounded-t-2xl bg-white p-6 shadow-xl"
+            className="max-h-full w-full overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-6 safe-bottom shadow-xl"
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>

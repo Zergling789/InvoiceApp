@@ -183,6 +183,32 @@ describe("DocumentEditor send email status", () => {
     expect(saveInvoiceMock).not.toHaveBeenCalled();
   });
 
+  it("uses normal page scrolling while editing a document", () => {
+    renderWithProviders(
+      <DocumentEditor
+        type="offer"
+        seed={{ ...seed, validUntil: "2025-01-15" }}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        useCreateComposer
+        composerEditing
+        initial={{
+          clientId: "client-1",
+          positions: [{ id: "position-1", description: "Beratung", quantity: 1, unit: "Std", price: 100 }],
+          status: OfferStatus.DRAFT,
+        }}
+      />,
+      { route: "/app/documents/offer/offer-1/edit" },
+    );
+
+    const layout = screen.getByTestId("document-composer-layout");
+    expect(layout).not.toHaveClass("h-full");
+    expect(layout.firstElementChild).not.toHaveClass("overflow-y-auto");
+    expect(layout.querySelector("footer")).toHaveClass("sticky", "bottom-0");
+  });
+
   it("opens the AI dialog from the offer creation wizard", async () => {
     const user = userEvent.setup();
     renderWithProviders(

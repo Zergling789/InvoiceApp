@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { createErrorReporter, evaluateReadiness, NoopErrorReporter, redactLogValue } from "../observability.js";
 
 test("redacts nested credentials and reduces errors to safe metadata", () => {
@@ -28,4 +29,13 @@ test("readiness succeeds only with complete configuration and database access", 
 
   const missing = await evaluateReadiness({ supabase: null, hasUrl: true, hasServiceRole: false, hasAnonKey: true });
   assert.deepEqual(missing, { ready: false, checks: { configuration: "missing", database: "unavailable" } });
+});
+
+test("email document diagnostics never log raw document or user identifiers", async () => {
+  const source = await readFile(new URL("../index.js", import.meta.url), "utf8");
+  const lookup = source.match(/const loadDocumentPayloadFromDb[\s\S]*?const doc =/)?.[0] ?? "";
+
+  assert.doesNotMatch(lookup, /console\.log/);
+  assert.doesNotMatch(lookup, /\{\s*type: resolvedType, docId, userId/);
+  assert.match(lookup, /userIdHash: hashLogUserId\(userId\)/);
 });

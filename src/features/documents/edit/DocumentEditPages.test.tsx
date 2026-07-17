@@ -1,10 +1,16 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 
 import { renderWithProviders } from "@/test/renderWithProviders";
 import InvoiceEditPage from "./InvoiceEditPage";
 import OfferEditPage from "./OfferEditPage";
+
+const getInvoiceMock = vi.fn();
+const getOfferMock = vi.fn();
+
+const invoice = { id: "inv-1", number: null, clientId: "c-1", date: "2026-07-17", serviceDate: "2026-07-17", paymentTermsDays: 14, positions: [], vatRate: 19, isSmallBusiness: false, introText: "", footerText: "", status: "DRAFT", currency: "EUR" };
+const offer = { id: "off-1", number: "ANG-1", clientId: "c-1", date: "2026-07-17", validUntil: "2026-07-31", positions: [], vatRate: 19, introText: "", footerText: "", status: "DRAFT", currency: "EUR" };
 
 vi.mock("@/features/documents/DocumentEditor", () => ({
   DocumentEditor: ({ type, layout, useCreateComposer, composerEditing }: { type: string; layout: string; useCreateComposer: boolean; composerEditing: boolean }) => (
@@ -15,13 +21,19 @@ vi.mock("@/features/documents/DocumentEditor", () => ({
 vi.mock("@/app/clients/clientService", () => ({ list: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/app/settings/settingsService", () => ({ fetchSettings: vi.fn().mockResolvedValue({ currency: "EUR", locale: "de-DE" }) }));
 vi.mock("@/app/invoices/invoiceService", () => ({
-  getInvoice: vi.fn().mockResolvedValue({ id: "inv-1", number: null, clientId: "c-1", date: "2026-07-17", serviceDate: "2026-07-17", paymentTermsDays: 14, positions: [], vatRate: 19, isSmallBusiness: false, introText: "", footerText: "", status: "DRAFT", currency: "EUR" }),
+  getInvoice: () => getInvoiceMock(),
 }));
 vi.mock("@/app/offers/offerService", () => ({
-  getOffer: vi.fn().mockResolvedValue({ id: "off-1", number: "ANG-1", clientId: "c-1", date: "2026-07-17", validUntil: "2026-07-31", positions: [], vatRate: 19, introText: "", footerText: "", status: "DRAFT", currency: "EUR" }),
+  getOffer: () => getOfferMock(),
 }));
 
 describe("dedicated document edit pages", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getInvoiceMock.mockResolvedValue(invoice);
+    getOfferMock.mockResolvedValue(offer);
+  });
+
   it("renders invoice editing as a standalone page composer", async () => {
     renderWithProviders(<Routes><Route path="/app/documents/invoice/:id/edit" element={<InvoiceEditPage />} /></Routes>, { route: "/app/documents/invoice/inv-1/edit" });
     const editor = await screen.findByTestId("editor-invoice");
@@ -34,5 +46,17 @@ describe("dedicated document edit pages", () => {
     const editor = await screen.findByTestId("editor-offer");
     expect(editor).toHaveAttribute("data-layout", "page");
     expect(editor).toHaveAttribute("data-editing", "true");
+  });
+
+  it("recovers from an invoice loading failure without showing technical details", async () => {
+    getInvoiceMock.mockRejectedValueOnce(new Error("private database detail")).mockResolvedValueOnce(invoice);
+    renderWithProviders(<Routes><Route path="/app/documents/invoice/:id/edit" element={<InvoiceEditPage />} /></Routes>, { route: "/app/documents/invoice/inv-1/edit" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Rechnung konnte nicht geladen werden");
+    expect(screen.queryByText("private database detail")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+
+    await waitFor(() => expect(getInvoiceMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId("editor-invoice")).toBeVisible();
   });
 });

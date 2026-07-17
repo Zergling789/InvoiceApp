@@ -1,58 +1,58 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi, beforeEach, describe, it, expect } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Route, Routes } from "react-router-dom";
 
 import Clients from "./Clients";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
-let removeMock: ReturnType<typeof vi.fn>;
-let refreshMock: ReturnType<typeof vi.fn>;
+let clientsState: { clients: Array<Record<string, unknown>>; loading: boolean; error: string | null };
+const refreshMock = vi.fn();
 
 vi.mock("@/app/clients/clientQueries", () => ({
-  useClients: () => ({
-    clients: [
-      {
-        id: "client-1",
-        companyName: "Acme GmbH",
-        contactPerson: "",
-        email: "test@example.com",
-        address: "",
-        notes: "",
-      },
-    ],
-    loading: false,
-    error: null,
-    refresh: refreshMock,
-  }),
-  useDeleteClient: () => ({ remove: removeMock, deleting: false }),
-  useSaveClient: () => ({ save: vi.fn(), saving: false }),
+  useClients: () => ({ ...clientsState, refresh: refreshMock }),
 }));
 
-describe("Clients delete flow", () => {
+describe("Clients", () => {
   beforeEach(() => {
-    removeMock = vi.fn();
-    refreshMock = vi.fn();
+    refreshMock.mockReset();
+    clientsState = {
+      clients: [
+        { id: "client-1", companyName: "Acme GmbH", firstName: "Anna", lastName: "Müller", contactPerson: "Anna Müller", email: "anna@acme.de", address: "", notes: "", city: "Berlin" },
+        { id: "client-2", companyName: "", firstName: "Peter", lastName: "Schmidt", contactPerson: "Peter Schmidt", email: "", address: "", notes: "", city: "Hamburg" },
+      ],
+      loading: false,
+      error: null,
+    };
   });
 
-  it("shows dialog and cancels without deleting", async () => {
+  it("filters customers by name, company and place", async () => {
     const user = userEvent.setup();
     renderWithProviders(<Clients />, { route: "/app/clients" });
-
-    await user.click(screen.getByRole("button", { name: /loeschen|l?schen/i }));
-    expect(screen.getByText("Kunde loeschen")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Abbrechen" }));
-
-    expect(removeMock).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("Kunden durchsuchen"), "hamburg");
+    expect(screen.getByText("Peter Schmidt")).toBeInTheDocument();
+    expect(screen.queryByText("Acme GmbH")).not.toBeInTheDocument();
   });
 
-  it("confirms and deletes", async () => {
+  it("opens editing on a dedicated route", async () => {
     const user = userEvent.setup();
+    renderWithProviders(<Routes><Route path="/app/clients" element={<Clients />} /><Route path="/app/clients/:id/edit" element={<div>Kundenbearbeitung</div>} /></Routes>, { route: "/app/clients" });
+    await user.click(screen.getByRole("button", { name: /Acme GmbH/ }));
+    expect(screen.getByText("Kundenbearbeitung")).toBeInTheDocument();
+  });
+
+  it("shows a useful empty state", () => {
+    clientsState.clients = [];
     renderWithProviders(<Clients />, { route: "/app/clients" });
+    expect(screen.getByText("Noch keine Kunden")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ersten Kunden anlegen" })).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: /loeschen|l?schen/i }));
-    expect(screen.getByText("Kunde loeschen")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Bestaetigen" }));
-
-    expect(removeMock).toHaveBeenCalledWith("client-1");
+  it("offers retry after a loading error", async () => {
+    const user = userEvent.setup();
+    clientsState.error = "network";
+    renderWithProviders(<Clients />, { route: "/app/clients" });
+    await user.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 });
