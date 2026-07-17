@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
@@ -54,5 +54,14 @@ describe("Clients", () => {
     renderWithProviders(<Clients />, { route: "/app/clients" });
     await user.click(screen.getByRole("button", { name: "Erneut versuchen" }));
     expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the list after returning from customer creation", async () => {
+    renderWithProviders(<Clients />, {
+      route: "/app/clients",
+      routeState: { refreshDocuments: 123 },
+    });
+
+    await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
   });
 });

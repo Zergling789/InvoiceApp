@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Mail, MapPin, Plus, ScanLine, Search, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -33,6 +33,16 @@ export default function Clients() {
   const location = useLocation();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const refreshToken = (location.state as { refreshDocuments?: number } | null)?.refreshDocuments;
+    if (!refreshToken) return;
+    void refresh();
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: {},
+    });
+  }, [location.hash, location.pathname, location.search, location.state, navigate, refresh]);
 
   const filteredClients = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("de-DE");
