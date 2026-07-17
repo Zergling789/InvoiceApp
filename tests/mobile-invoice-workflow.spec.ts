@@ -69,7 +69,9 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
     await customerDialog.getByLabel("Ort", { exact: true }).fill("Berlin");
     await customerDialog.getByRole("button", { name: "Änderungen speichern" }).click();
 
-    await expect(page.getByText("Mobilbau GmbH", { exact: true })).toBeVisible();
+    await expect(customerDialog).toBeHidden();
+    await expect(page).toHaveURL(/\/app\/clients$/);
+    await expect(page.getByRole("heading", { name: "Mobilbau GmbH", exact: true })).toBeVisible();
     await page.goto("/app/documents");
     await page.getByRole("button", { name: "Neues Dokument erstellen" }).click();
     const quickCreate = page.getByRole("dialog", { name: "Dokument oder Kunde erstellen" });
