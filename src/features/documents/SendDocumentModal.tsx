@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { FileDown, Loader2, Mail, X } from "lucide-react";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
@@ -155,6 +155,7 @@ export function SendDocumentModal({
   onFinalize,
   onSent,
 }: SendDocumentModalProps) {
+  const titleId = useId();
   const toast = useToast();
   const [localDocument, setLocalDocument] = useState<Offer | Invoice>(document);
   const [to, setTo] = useState("");
@@ -358,10 +359,15 @@ export function SendDocumentModal({
 
   return (
     <div className="app-visual-viewport fixed inset-x-0 z-[70] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
-      <div className="flex max-h-full w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:max-h-[90%] sm:rounded-xl">
+      <div
+        className="flex max-h-full w-full max-w-4xl min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl safe-bottom sm:max-h-[90%] sm:rounded-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">{dialogCopy.title}</h3>
+            <h3 id={titleId} className="text-lg font-semibold text-gray-900">{dialogCopy.title}</h3>
             <p className="text-sm text-gray-500">
               {documentType === "invoice" ? "Rechnung" : "Angebot"}{" "}
               {documentType === "invoice" ? localDocument.number ?? "Entwurf" : localDocument.number}
