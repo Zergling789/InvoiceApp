@@ -4,6 +4,50 @@ import { roundMoney } from "./money";
 export type TaxGroup = { taxCategory: TaxCategory; taxRate: number; netAmount: number; taxAmount: number; grossAmount: number; taxExemptionReason?: string | null };
 export type DocumentTotals = { netTotal: number; taxTotal: number; grossTotal: number; taxGroups: TaxGroup[] };
 
+export const SUPPORTED_TAX_RATES = {
+  STANDARD: 19,
+  REDUCED: 7,
+  SMALL_BUSINESS: 0,
+} as const satisfies Partial<Record<TaxCategory, number>>;
+
+export const TAX_CATEGORY_LABELS: Record<TaxCategory, string> = {
+  STANDARD: "Regelsteuer (19 %)",
+  REDUCED: "Ermäßigte Steuer (7 %)",
+  SMALL_BUSINESS: "Kleinunternehmer (0 %)",
+  ZERO: "0 % steuerpflichtig",
+  EXEMPT: "Steuerbefreit",
+  REVERSE_CHARGE: "Reverse Charge",
+};
+
+export function isSupportedPositionTax(
+  position: { taxCategory?: TaxCategory | null; taxRate?: number | null },
+  smallBusiness = false,
+): boolean {
+  if (smallBusiness) {
+    return position.taxCategory === "SMALL_BUSINESS" && Number(position.taxRate ?? 0) === 0;
+  }
+  return (
+    (position.taxCategory === "STANDARD" && Number(position.taxRate) === SUPPORTED_TAX_RATES.STANDARD) ||
+    (position.taxCategory === "REDUCED" && Number(position.taxRate) === SUPPORTED_TAX_RATES.REDUCED)
+  );
+}
+
+export function resolveSupportedPositionTax(
+  position: { taxCategory?: TaxCategory | null; taxRate?: number | null },
+  fallbackRate = 19,
+  smallBusiness = false,
+): { taxCategory: "STANDARD" | "REDUCED" | "SMALL_BUSINESS"; taxRate: 19 | 7 | 0 } {
+  if (isSupportedPositionTax(position, smallBusiness)) {
+    return {
+      taxCategory: position.taxCategory as "STANDARD" | "REDUCED" | "SMALL_BUSINESS",
+      taxRate: Number(position.taxRate) as 19 | 7 | 0,
+    };
+  }
+  if (smallBusiness) return { taxCategory: "SMALL_BUSINESS", taxRate: 0 };
+  if (Number(fallbackRate) === 7) return { taxCategory: "REDUCED", taxRate: 7 };
+  return { taxCategory: "STANDARD", taxRate: 19 };
+}
+
 export function defaultTaxCategory(rate: number, smallBusiness = false): TaxCategory {
   if (smallBusiness) return "SMALL_BUSINESS";
   if (rate === 7) return "REDUCED";

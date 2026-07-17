@@ -12,6 +12,8 @@ const EVENT_LABELS: Record<string, string> = {
   FINALIZED: "Finalisiert",
   PAID: "Bezahlt",
   CONVERTED: "Umgewandelt",
+  ACCEPTED: "Angebot angenommen",
+  REJECTED: "Angebot abgelehnt",
 };
 
 const formatEventMeta = (eventType: string, meta: Record<string, unknown>) => {
@@ -22,7 +24,7 @@ const formatEventMeta = (eventType: string, meta: Record<string, unknown>) => {
   }
   if (eventType === "CONVERTED") {
     const invoiceId = typeof meta.invoice_id === "string" ? meta.invoice_id : "";
-    return invoiceId ? `Invoice: ${invoiceId}` : "";
+    return invoiceId ? `Rechnung: ${invoiceId}` : "";
   }
   return "";
 };
@@ -76,7 +78,7 @@ export function ActivityTimeline({
     () =>
       events.map((event) => ({
         ...event,
-        label: EVENT_LABELS[event.event_type] ?? event.event_type,
+        label: EVENT_LABELS[event.event_type.toUpperCase()] ?? event.event_type,
         metaText: formatEventMeta(event.event_type, asMetaRecord(event.meta)),
       })),
     [events]

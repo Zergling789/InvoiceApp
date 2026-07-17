@@ -42,4 +42,35 @@ describe("CustomerForm required fields", () => {
 
     expect(onSave).toHaveBeenCalledTimes(1);
   });
+
+  it("bietet als Kundenstandard nur App-Standard oder EUR an", () => {
+    renderWithProviders(<TestForm onSave={vi.fn()} />);
+
+    const currencySelect = screen.getByLabelText("Währung") as HTMLSelectElement;
+    expect(Array.from(currencySelect.options, (option) => option.value)).toEqual(["", "EUR"]);
+  });
+
+  it("zeigt zuerst nur die wichtigsten Kontaktdaten", () => {
+    renderWithProviders(<TestForm onSave={vi.fn()} />);
+
+    expect(screen.getByLabelText(/Vorname/)).toBeVisible();
+    expect(screen.getByLabelText(/Nachname/)).toBeVisible();
+    expect(screen.getByLabelText("Firma")).toBeVisible();
+    expect(screen.getByLabelText("E-Mail")).toBeVisible();
+    expect(screen.getByLabelText("Telefon")).toBeVisible();
+    expect(screen.getByLabelText("Kundennummer")).not.toBeVisible();
+    expect(screen.getByText("Weitere Kontaktdaten")).toBeVisible();
+  });
+
+  it("begrenzt Steuerstandard und Sprache auf unterstützte Werte", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TestForm onSave={vi.fn()} />);
+
+    await user.click(screen.getByText("Abrechnung"));
+
+    const vatSelect = screen.getByLabelText("Standard-MwSt.") as HTMLSelectElement;
+    const languageSelect = screen.getByLabelText("Sprache") as HTMLSelectElement;
+    expect(Array.from(vatSelect.options, (option) => option.value)).toEqual(["", "19", "7"]);
+    expect(Array.from(languageSelect.options, (option) => option.value)).toEqual(["de"]);
+  });
 });

@@ -12,7 +12,6 @@
     transform: translateY(0);
   }
 }
-
 .branding-template-preview {
   --preview-accent: #4f46e5;
   position: relative;
@@ -56,7 +55,6 @@
     --app-space-4: clamp(1.2rem, 1rem + 1vw, 2rem);
     --app-radius-lg: 20px;
     --app-text-base: clamp(0.95rem, 0.9rem + 0.4vw, 1rem);
-    --mobile-nav-h: 72px;
   }
 
   .dark {
@@ -150,7 +148,6 @@
     }
   }
 }
-
 @layer components {
   .app-container {
     width: 100%;
@@ -598,20 +595,6 @@
     min-height: 100dvh;
   }
 
-  .app-shell {
-    padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom));
-  }
-
-  @media (min-width: 768px) {
-    .app-shell {
-      padding-bottom: 0;
-    }
-  }
-
-  .app-shell--no-mobile-nav {
-    padding-bottom: 0;
-  }
-
   .safe-top {
     padding-top: env(safe-area-inset-top);
   }
@@ -629,14 +612,10 @@
     padding-right: env(safe-area-inset-right);
   }
 
-  .mobile-nav {
-    height: var(--mobile-nav-h);
-  }
-
   .mobile-fab {
     position: fixed;
     right: 1rem;
-    bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 1rem);
+    bottom: calc(env(safe-area-inset-bottom) + 1rem);
     z-index: 45;
   }
 
@@ -697,8 +676,4 @@
       bottom: 0;
     }
   }
-}
-
-body.offer-wizard-open .mobile-nav {
-  display: none;
 }

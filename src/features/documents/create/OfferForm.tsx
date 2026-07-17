@@ -58,7 +58,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
           vatRate: Number(settingsData.defaultVatRate ?? 0),
           introText: "Gerne unterbreite ich Ihnen folgendes Angebot:",
           footerText: "Ich freue mich auf Ihre Rückmeldung.",
-          currency: settingsData.currency ?? "EUR",
+          currency: "EUR",
         };
         setClients(clientData);
         setSettings(settingsData);

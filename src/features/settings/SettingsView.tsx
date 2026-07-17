@@ -592,10 +592,16 @@ export default function SettingsView() {
                 value={settings.currency ?? "EUR"}
                 onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
               >
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="USD">USD</option>
+                {(settings.currency ?? "EUR") !== "EUR" && (
+                  <option value={settings.currency} disabled>
+                    Nicht unterstützt ({settings.currency})
+                  </option>
+                )}
+                <option value="EUR">EUR – Euro</option>
               </select>
+              {(settings.currency ?? "EUR") !== "EUR" && (
+                <p className="mt-1 text-xs text-amber-700">Bitte stelle die Standardwährung auf EUR um.</p>
+              )}
             </div>
           </div>
         </div>

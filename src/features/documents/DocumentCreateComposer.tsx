@@ -11,7 +11,7 @@ import {
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
-import type { Client, Position } from "@/types";
+import type { Client, Position, TaxCategory } from "@/types";
 import type { DocumentFormData } from "@/features/documents/documentEditorModel";
 import { formatMoney, getCurrencySymbol } from "@/utils/money";
 import { AppButton } from "@/ui/AppButton";
@@ -19,6 +19,12 @@ import { AppCard } from "@/ui/AppCard";
 import { AppNumberInput } from "@/ui/AppNumberInput";
 import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
 import { getClientDisplayName } from "@/domain/models/Client";
+import {
+  isSupportedPositionTax,
+  resolveSupportedPositionTax,
+  SUPPORTED_TAX_RATES,
+  TAX_CATEGORY_LABELS,
+} from "@/domain/rules/tax";
 
 type Props = {
   type: "offer" | "invoice";
@@ -209,6 +215,15 @@ export function DocumentCreateComposer({
     goToStep(next.key);
   };
 
+  const continueLabel =
+    step === "kunde"
+      ? "Weiter zu Dokumentdaten"
+      : step === "dokument"
+        ? "Weiter zu Positionen"
+        : step === "positionen"
+          ? "Weiter zu Texte und Optionen"
+          : "Weiter zur Vorschau";
+
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-[var(--app-bg)]">
       <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8">
@@ -235,9 +250,28 @@ export function DocumentCreateComposer({
             {wizardEnabled && (
               <nav
                 aria-label={`Fortschritt ${isInvoice ? "Rechnungs" : "Angebots"}erstellung`}
-                className="overflow-x-auto pb-1"
+                className="pb-1"
               >
-                <ol className="grid min-w-[640px] grid-cols-5 gap-2">
+                <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] p-4 sm:hidden">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-semibold">Schritt {stepIndex + 1} von {documentSteps.length}</span>
+                    <span className="text-[var(--app-muted)]">{documentSteps[stepIndex].label}</span>
+                  </div>
+                  <div
+                    className="mt-3 h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/10"
+                    role="progressbar"
+                    aria-label="Fortschritt"
+                    aria-valuemin={1}
+                    aria-valuemax={documentSteps.length}
+                    aria-valuenow={stepIndex + 1}
+                  >
+                    <div
+                      className="h-full rounded-full bg-[var(--app-primary)] transition-[width]"
+                      style={{ width: `${((stepIndex + 1) / documentSteps.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <ol className="hidden grid-cols-5 gap-2 sm:grid">
                   {documentSteps.map((item, index) => {
                     const active = item.key === step;
                     const complete = index < stepIndex;
@@ -516,35 +550,64 @@ export function DocumentCreateComposer({
                       </>
                     )}
                     <label className="text-sm font-medium">
-                      Standard-MwSt. (%)
-                      <AppNumberInput
-                        min={0}
-                        step="any"
+                      Standard-Steuersatz
+                      <select
+                        aria-label="Standard-MwSt. (%)"
                         className={`${inputClass} mt-2`}
-                        value={data.vatRate ?? 0}
-                        disabled={disabled}
-                        onValueChange={(vatRate) =>
-                          onChange({ ...data, vatRate })
-                        }
-                      />
+                        value={data.isSmallBusiness ? 0 : data.vatRate ?? 19}
+                        disabled={disabled || Boolean(data.isSmallBusiness)}
+                        onChange={(event) => {
+                          const vatRate = Number(event.target.value);
+                          const taxCategory: TaxCategory = vatRate === 7 ? "REDUCED" : "STANDARD";
+                          onChange({
+                            ...data,
+                            vatRate,
+                            positions: data.positions.map((position) => ({
+                              ...position,
+                              taxCategory,
+                              taxRate: vatRate,
+                              taxExemptionReason: undefined,
+                            })),
+                          });
+                        }}
+                      >
+                        {!data.isSmallBusiness && ![7, 19].includes(Number(data.vatRate)) && (
+                          <option value={data.vatRate} disabled>
+                            Nicht unterstützt ({Number(data.vatRate)} %)
+                          </option>
+                        )}
+                        {data.isSmallBusiness ? (
+                          <option value={0}>Kleinunternehmer (0 %)</option>
+                        ) : (
+                          <>
+                            <option value={19}>Regelsteuer (19 %)</option>
+                            <option value={7}>Ermäßigte Steuer (7 %)</option>
+                          </>
+                        )}
+                      </select>
                     </label>
-                    {!isInvoice && (
-                      <label className="text-sm font-medium">
-                        Währung
-                        <select
-                          className={`${inputClass} mt-2`}
-                          value={data.currency ?? currency}
-                          disabled={disabled}
-                          onChange={(event) =>
-                            onChange({ ...data, currency: event.target.value })
-                          }
-                        >
-                          {["EUR", "USD", "CHF", "GBP"].map((item) => (
-                            <option key={item}>{item}</option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
+                    <label className="text-sm font-medium">
+                      Währung
+                      <select
+                        aria-label="Währung"
+                        className={`${inputClass} mt-2`}
+                        value={data.currency ?? currency}
+                        disabled={disabled}
+                        onChange={(event) => onChange({ ...data, currency: event.target.value })}
+                      >
+                        {(data.currency ?? currency) !== "EUR" && (
+                          <option value={data.currency ?? currency} disabled>
+                            Nicht unterstützt ({data.currency ?? currency})
+                          </option>
+                        )}
+                        <option value="EUR">EUR – Euro</option>
+                      </select>
+                      {(data.currency ?? currency) !== "EUR" && (
+                        <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">
+                          Fremdwährungen werden derzeit nicht unterstützt. Bitte stelle das Dokument auf EUR um.
+                        </span>
+                      )}
+                    </label>
                   </div>
                 </AppCard>
               </div>
@@ -572,7 +635,7 @@ export function DocumentCreateComposer({
                         onClick={onOpenGroups}
                         disabled={disabled}
                       >
-                        Positionsgruppe
+                        Paket einfügen
                       </AppButton>
                       <AppButton
                         type="button"
@@ -603,96 +666,74 @@ export function DocumentCreateComposer({
                             key={position.id}
                             className="grid gap-2 rounded-2xl border border-[var(--app-border)] p-3 md:grid-cols-[minmax(0,1fr)_85px_90px_120px_44px] md:items-center"
                           >
-                            <PositionSuggestionInput
-                              ariaLabel={`Beschreibung ${index + 1}`}
-                              value={position.description}
-                              disabled={disabled}
-                              customerId={data.clientId}
-                              documentType={type}
-                              currency={data.currency ?? currency}
-                              onChange={(value) =>
-                                onUpdatePosition(index, "description", value)
-                              }
-                              onSelect={(suggestion) => {
-                                onUpdatePosition(
-                                  index,
-                                  "description",
-                                  suggestion.title,
-                                );
-                                onUpdatePosition(
-                                  index,
-                                  "quantity",
-                                  suggestion.quantity || 1,
-                                );
-                                onUpdatePosition(
-                                  index,
-                                  "unit",
-                                  suggestion.unit || "Stk",
-                                );
-                                onUpdatePosition(
-                                  index,
-                                  "price",
-                                  suggestion.lastPrice ??
-                                    suggestion.standardPrice ??
-                                    0,
-                                );
-                                if (suggestion.taxCategory)
-                                  onUpdatePosition(
-                                    index,
-                                    "taxCategory",
-                                    suggestion.taxCategory,
+                            <label className="space-y-1 md:contents">
+                              <span className="text-xs font-medium text-[var(--app-muted)] md:sr-only">Leistung oder Produkt</span>
+                              <PositionSuggestionInput
+                                ariaLabel={`Beschreibung ${index + 1}`}
+                                value={position.description}
+                                disabled={disabled}
+                                customerId={data.clientId}
+                                documentType={type}
+                                currency={data.currency ?? currency}
+                                onChange={(value) => onUpdatePosition(index, "description", value)}
+                                onSelect={(suggestion) => {
+                                  const tax = resolveSupportedPositionTax(
+                                    suggestion,
+                                    Number(data.vatRate),
+                                    Boolean(data.isSmallBusiness),
                                   );
-                                if (suggestion.taxRate !== null)
-                                  onUpdatePosition(
-                                    index,
-                                    "taxRate",
-                                    suggestion.taxRate,
-                                  );
-                              }}
-                            />
-                            <AppNumberInput
-                              aria-label={`Menge ${index + 1}`}
-                              className={inputClass}
-                              value={position.quantity}
-                              disabled={disabled}
-                              min={0}
-                              step="any"
-                              onValueChange={(quantity) =>
-                                onUpdatePosition(index, "quantity", quantity)
-                              }
-                            />
-                            <input
-                              aria-label={`Einheit ${index + 1}`}
-                              className={inputClass}
-                              value={position.unit}
-                              disabled={disabled}
-                              onChange={(event) =>
-                                onUpdatePosition(
-                                  index,
-                                  "unit",
-                                  event.target.value,
-                                )
-                              }
-                            />
-                            <AppNumberInput
-                              aria-label={`Preis ${index + 1}`}
-                              className={`${inputClass} pr-10`}
-                              value={position.price}
-                              disabled={disabled}
-                              min={0}
-                              step="any"
-                              suffix={currencySymbol}
-                              onValueChange={(price) =>
-                                onUpdatePosition(index, "price", price)
-                              }
-                            />
+                                  onUpdatePosition(index, "description", suggestion.title);
+                                  onUpdatePosition(index, "quantity", suggestion.quantity || 1);
+                                  onUpdatePosition(index, "unit", suggestion.unit || "Stk");
+                                  onUpdatePosition(index, "price", suggestion.lastPrice ?? suggestion.standardPrice ?? 0);
+                                  onUpdatePosition(index, "taxCategory", tax.taxCategory);
+                                  onUpdatePosition(index, "taxRate", tax.taxRate);
+                                }}
+                              />
+                            </label>
+                            <label className="space-y-1 md:contents">
+                              <span className="text-xs font-medium text-[var(--app-muted)] md:sr-only">Menge</span>
+                              <AppNumberInput
+                                aria-label={`Menge ${index + 1}`}
+                                className={inputClass}
+                                value={position.quantity}
+                                disabled={disabled}
+                                min={0}
+                                step="any"
+                                onValueChange={(quantity) => onUpdatePosition(index, "quantity", quantity)}
+                              />
+                            </label>
+                            <label className="space-y-1 md:contents">
+                              <span className="text-xs font-medium text-[var(--app-muted)] md:sr-only">Einheit</span>
+                              <input
+                                aria-label={`Einheit ${index + 1}`}
+                                className={inputClass}
+                                value={position.unit}
+                                disabled={disabled}
+                                onChange={(event) => onUpdatePosition(index, "unit", event.target.value)}
+                              />
+                            </label>
+                            <label className="space-y-1 md:contents">
+                              <span className="text-xs font-medium text-[var(--app-muted)] md:sr-only">Einzelpreis</span>
+                              <AppNumberInput
+                                aria-label={`Preis ${index + 1}`}
+                                className={`${inputClass} pr-10`}
+                                value={position.price}
+                                disabled={disabled}
+                                min={0}
+                                step="any"
+                                suffix={currencySymbol}
+                                onValueChange={(price) => onUpdatePosition(index, "price", price)}
+                              />
+                            </label>
                             <button
                               type="button"
                               aria-label={`Position ${index + 1} löschen`}
-                              className="grid h-11 w-11 place-items-center rounded-full text-red-500 hover:bg-red-500/10"
+                              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-500/10 md:w-11 md:rounded-full"
                               onClick={() => onRemovePosition(index)}
                             >
                               <Trash2 size={16} />
+                              <span className="md:sr-only">Position löschen</span>
                             </button>
                           </div>
                         ))}
@@ -706,74 +747,47 @@ export function DocumentCreateComposer({
                         {data.positions.map((position, index) => (
                           <div
                             key={`tax-${position.id}`}
-                            className="grid gap-2 rounded-xl bg-black/[0.025] p-3 sm:grid-cols-[minmax(0,1fr)_190px_90px]"
+                            className="grid gap-2 rounded-xl bg-black/[0.025] p-3 sm:grid-cols-[minmax(0,1fr)_240px]"
                           >
                             <div className="min-w-0 self-center truncate text-sm font-medium">
                               {position.description || `Position ${index + 1}`}
                             </div>
-                            <select
-                              aria-label={`Steuerart ${index + 1}`}
-                              className={inputClass}
-                              value={
-                                position.taxCategory ??
-                                (data.isSmallBusiness
-                                  ? "SMALL_BUSINESS"
-                                  : Number(data.vatRate) === 0
-                                    ? "ZERO"
-                                    : "STANDARD")
-                              }
-                              disabled={disabled}
-                              onChange={(event) => {
-                                const category = event.target.value;
-                                onUpdatePosition(
-                                  index,
-                                  "taxCategory",
-                                  category,
-                                );
-                                onUpdatePosition(
-                                  index,
-                                  "taxRate",
-                                  category === "STANDARD"
-                                    ? 19
-                                    : category === "REDUCED"
-                                      ? 7
-                                      : 0,
-                                );
-                              }}
-                            >
-                              <option value="STANDARD">Regelsteuer</option>
-                              <option value="REDUCED">Ermäßigt</option>
-                              <option value="ZERO">0 % steuerpflichtig</option>
-                              <option value="EXEMPT">Steuerbefreit</option>
-                              <option value="REVERSE_CHARGE">
-                                Reverse Charge
-                              </option>
-                              <option value="SMALL_BUSINESS">
-                                Kleinunternehmer
-                              </option>
-                            </select>
-                            <AppNumberInput
-                              aria-label={`Steuersatz ${index + 1}`}
-                              min={0}
-                              className={inputClass}
-                              value={position.taxRate ?? data.vatRate ?? 0}
-                              disabled={
-                                disabled ||
-                                [
-                                  "ZERO",
-                                  "EXEMPT",
-                                  "REVERSE_CHARGE",
-                                  "SMALL_BUSINESS",
-                                ].includes(position.taxCategory ?? "")
-                              }
-                              onValueChange={(taxRate) =>
-                                onUpdatePosition(index, "taxRate", taxRate)
-                              }
-                            />
+                            <div>
+                              <select
+                                aria-label={`Steuerart ${index + 1}`}
+                                className={inputClass}
+                                value={position.taxCategory ?? (data.isSmallBusiness ? "SMALL_BUSINESS" : Number(data.vatRate) === 7 ? "REDUCED" : "STANDARD")}
+                                disabled={disabled}
+                                onChange={(event) => {
+                                  const category = event.target.value as keyof typeof SUPPORTED_TAX_RATES;
+                                  onUpdatePosition(index, "taxCategory", category);
+                                  onUpdatePosition(index, "taxRate", SUPPORTED_TAX_RATES[category]);
+                                }}
+                              >
+                                {!isSupportedPositionTax(position, Boolean(data.isSmallBusiness)) && position.taxCategory && (
+                                  <option value={position.taxCategory} disabled>
+                                    Nicht unterstützt: {TAX_CATEGORY_LABELS[position.taxCategory]}
+                                  </option>
+                                )}
+                                {data.isSmallBusiness ? (
+                                  <option value="SMALL_BUSINESS">{TAX_CATEGORY_LABELS.SMALL_BUSINESS}</option>
+                                ) : (
+                                  <>
+                                    <option value="STANDARD">{TAX_CATEGORY_LABELS.STANDARD}</option>
+                                    <option value="REDUCED">{TAX_CATEGORY_LABELS.REDUCED}</option>
+                                  </>
+                                )}
+                              </select>
+                              {!isSupportedPositionTax(position, Boolean(data.isSmallBusiness)) && (
+                                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                                  Dieser Steuerfall kann derzeit nicht ausgestellt werden. Bitte wähle 19 %, 7 % oder Kleinunternehmer.
+                                </p>
+                              )}
+                            </div>
                             {position.taxCategory === "EXEMPT" && (
                               <input
                                 aria-label={`Grund Steuerbefreiung ${index + 1}`}
-                                className={`${inputClass} sm:col-span-3`}
+                                className={`${inputClass} sm:col-span-2`}
                                 placeholder="Rechtsgrund der Steuerbefreiung"
                                 value={position.taxExemptionReason ?? ""}
                                 disabled={disabled}
@@ -1035,7 +1049,7 @@ export function DocumentCreateComposer({
 
       <footer className="border-t border-[var(--app-border)] bg-[var(--app-surface-solid)] px-4 py-3 safe-bottom sm:px-6">
         {wizardEnabled ? (
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+          <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:flex sm:justify-between">
             <div>
               {step === "kunde" ? (
                 <AppButton type="button" variant="ghost" onClick={onCancel}>
@@ -1051,7 +1065,7 @@ export function DocumentCreateComposer({
                 </AppButton>
               )}
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
               {step === "vorschau" ? (
                 <>
                   <AppButton
@@ -1077,16 +1091,13 @@ export function DocumentCreateComposer({
               ) : (
                 <AppButton
                   type="button"
+                  className="w-full sm:w-auto"
                   onClick={continueWizard}
                   disabled={disabled}
+                  aria-label={continueLabel}
                 >
-                  {step === "kunde"
-                    ? "Weiter zu Dokumentdaten"
-                    : step === "dokument"
-                      ? "Weiter zu Positionen"
-                      : step === "positionen"
-                        ? "Weiter zu Texte und Optionen"
-                        : "Weiter zur Vorschau"}
+                  <span className="sm:hidden">Weiter</span>
+                  <span className="hidden sm:inline">{continueLabel}</span>
                 </AppButton>
               )}
             </div>

@@ -61,6 +61,7 @@ export function InvoiceForm({ onClose, onSaved, onDirtyChange }: InvoiceFormProp
           smallBusinessNote: settingsData.smallBusinessNote ?? SMALL_BUSINESS_DEFAULT_NOTE,
           introText: "",
           footerText: `Zahlbar innerhalb von ${defaultTerms} Tagen ohne Abzug.`,
+          currency: "EUR",
         };
         setClients(clientData);
         setSettings(settingsData);

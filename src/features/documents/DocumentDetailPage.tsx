@@ -96,6 +96,15 @@ export const buildDocumentTimeline = (
   const rejectedEvent = activityEvents.find(
     (event) => event.event_type.toUpperCase() === "REJECTED"
   );
+  const acceptedEvent = activityEvents.find(
+    (event) => event.event_type.toUpperCase() === "ACCEPTED"
+  );
+  if ("validUntil" in doc && doc.status === OfferStatus.ACCEPTED && acceptedEvent) {
+    items.push({
+      label: "Angebot angenommen",
+      value: formatDate(acceptedEvent.created_at, "de-DE"),
+    });
+  }
   if ("validUntil" in doc && doc.status === OfferStatus.REJECTED && rejectedEvent) {
     items.push({
       label: "Angebot abgelehnt",

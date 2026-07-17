@@ -1,10 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { calculateDocumentTotals, getTaxLabel, normalizePositionTax } from "./tax";
+import { calculateDocumentTotals, getTaxLabel, isSupportedPositionTax, normalizePositionTax, resolveSupportedPositionTax } from "./tax";
 import type { Position, TaxCategory } from "@/types";
 
 const p = (price: number, taxCategory: TaxCategory, taxRate: number, reason?: string): Position => ({ id: `${taxCategory}-${price}`, description: "Leistung", quantity: 1, unit: "Std", price, taxCategory, taxRate, taxExemptionReason: reason });
 
 describe("positionsbasierte Umsatzsteuer", () => {
+  it("begrenzt den unterstützten Markt auf 19 %, 7 % und Kleinunternehmer", () => {
+    expect(isSupportedPositionTax(p(100, "STANDARD", 19))).toBe(true);
+    expect(isSupportedPositionTax(p(100, "REDUCED", 7))).toBe(true);
+    expect(isSupportedPositionTax(p(100, "SMALL_BUSINESS", 0), true)).toBe(true);
+    expect(isSupportedPositionTax(p(100, "REVERSE_CHARGE", 0))).toBe(false);
+    expect(isSupportedPositionTax(p(100, "EXEMPT", 0))).toBe(false);
+    expect(isSupportedPositionTax(p(100, "ZERO", 0))).toBe(false);
+    expect(isSupportedPositionTax(p(100, "STANDARD", 18))).toBe(false);
+    expect(isSupportedPositionTax(p(100, "SMALL_BUSINESS", 0), false)).toBe(false);
+  });
+
+  it("übernimmt bei Vorschlägen den bereits gewählten Dokumentsteuersatz", () => {
+    expect(resolveSupportedPositionTax(p(100, "REVERSE_CHARGE", 0), 19)).toEqual({ taxCategory: "STANDARD", taxRate: 19 });
+    expect(resolveSupportedPositionTax(p(100, "EXEMPT", 0), 7)).toEqual({ taxCategory: "REDUCED", taxRate: 7 });
+    expect(resolveSupportedPositionTax(p(100, "STANDARD", 19), 7)).toEqual({ taxCategory: "STANDARD", taxRate: 19 });
+    expect(resolveSupportedPositionTax(p(100, "STANDARD", 19), 19, true)).toEqual({ taxCategory: "SMALL_BUSINESS", taxRate: 0 });
+  });
+
   it("berechnet das fachliche Mischsteuer-Beispiel mit Gruppenrundung", () => {
     const totals = calculateDocumentTotals([p(60, "STANDARD", 19), p(150, "REDUCED", 7), p(10, "EXEMPT", 0, "§ 4 UStG"), p(45.99, "ZERO", 0)], 19);
     expect(totals).toMatchObject({ netTotal: 265.99, taxTotal: 21.9, grossTotal: 287.89 });

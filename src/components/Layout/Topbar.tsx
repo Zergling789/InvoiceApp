@@ -3,15 +3,18 @@ import { LogOut, Menu, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
+import { BetaFeedback } from "@/components/BetaFeedback";
 import { supabase } from "@/supabaseClient";
 import { useToast } from "@/ui/FeedbackProvider";
+import type { NavItem } from "./Sidebar";
 
 type TopbarProps = {
   brand?: string;
   settingsHref?: string;
+  navItems?: NavItem[];
 };
 
-export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings" }: TopbarProps) {
+export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings", navItems = [] }: TopbarProps) {
   const navigate = useNavigate();
   const toast = useToast();
   const [signingOut, setSigningOut] = useState(false);
@@ -66,8 +69,8 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
         </button>
       </div>
       {menuOpen && (
-        <div className="fixed inset-0 z-40 flex items-start justify-end bg-black/30 p-4 backdrop-blur-sm md:hidden">
-          <div className="app-card w-full max-w-sm space-y-2 rounded-3xl p-4">
+        <div className="fixed inset-0 z-40 flex items-start justify-end bg-black/50 p-4 backdrop-blur-sm md:hidden">
+          <div className="app-card max-h-[calc(100dvh-2rem)] w-full max-w-sm space-y-2 overflow-y-auto rounded-3xl bg-[var(--app-surface-solid)] p-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold text-gray-700 dark:text-slate-200">Menü</div>
               <button
@@ -79,6 +82,20 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
                 <X size={18} />
               </button>
             </div>
+            <nav className="space-y-1 border-b border-[var(--app-border)] pb-3" aria-label="Mobile Navigation">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={linkClass}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {item.icon} {item.label}
+                </NavLink>
+              ))}
+              <BetaFeedback variant="menu" />
+            </nav>
             <ThemeToggle />
             <NavLink
               to={settingsHref}

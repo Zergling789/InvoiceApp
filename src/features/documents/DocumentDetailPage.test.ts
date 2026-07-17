@@ -20,6 +20,28 @@ describe("canCreateRecipientLink", () => {
 });
 
 describe("buildDocumentTimeline", () => {
+  it("zeigt den gespeicherten Annahmezeitpunkt als Angebotsaktivität", () => {
+    const offer = {
+      status: OfferStatus.ACCEPTED,
+      date: "2026-07-13",
+      validUntil: "2026-07-27",
+    } as Offer;
+
+    const timeline = buildDocumentTimeline(offer, [
+      {
+        id: "activity-accepted",
+        event_type: "accepted",
+        meta: {},
+        created_at: "2026-07-15T09:45:00.000Z",
+      },
+    ]);
+
+    expect(timeline).toContainEqual({
+      label: "Angebot angenommen",
+      value: "15.7.2026",
+    });
+  });
+
   it("zeigt den gespeicherten Ablehnungszeitpunkt als Angebotsaktivität", () => {
     const offer = {
       status: OfferStatus.REJECTED,

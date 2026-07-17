@@ -336,6 +336,11 @@ describe("DocumentEditor send email status", () => {
         name: /fortschritt rechnungserstellung/i,
       }),
     ).toBeVisible();
+    expect(screen.getByText("Schritt 1 von 5")).toBeVisible();
+    expect(screen.getByRole("progressbar", { name: "Fortschritt" })).toHaveAttribute(
+      "aria-valuenow",
+      "1",
+    );
     expect(screen.getByRole("button", { name: /1 Kunde/ })).toHaveAttribute(
       "aria-current",
       "step",
@@ -348,9 +353,22 @@ describe("DocumentEditor send email status", () => {
     );
     expect(screen.getByLabelText("Rechnungsnummer")).toBeDisabled();
     expect(screen.getByLabelText("Leistungsdatum")).toHaveValue("2025-01-01");
+    const currencySelect = screen.getByLabelText("Währung") as HTMLSelectElement;
+    expect(Array.from(currencySelect.options, (option) => option.value)).toEqual(["EUR"]);
     await user.click(
       screen.getByRole("button", { name: "Weiter zu Positionen" }),
     );
+    expect(screen.getByText("Schritt 3 von 5")).toBeVisible();
+    expect(screen.getByText("Leistung oder Produkt")).toBeVisible();
+    expect(screen.getByText("Menge")).toBeVisible();
+    expect(screen.getByText("Einheit")).toBeVisible();
+    expect(screen.getByText("Einzelpreis")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Paket einfügen" })).toBeVisible();
+    const taxSelect = screen.getByLabelText("Steuerart 1") as HTMLSelectElement;
+    expect(Array.from(taxSelect.options, (option) => option.value)).toEqual([
+      "STANDARD",
+      "REDUCED",
+    ]);
     await user.click(
       screen.getByRole("button", { name: "Weiter zu Texte und Optionen" }),
     );
@@ -363,6 +381,54 @@ describe("DocumentEditor send email status", () => {
     expect(
       screen.getByRole("button", { name: /^Rechnung erstellen$/ }),
     ).toBeEnabled();
+  });
+
+  it("bewahrt alte Sondersteuerfälle, bietet sie aber nicht für neue Positionen an", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DocumentEditor
+        type="invoice"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        useCreateComposer
+        initial={{
+          clientId: "client-1",
+          positions: [
+            {
+              id: "legacy-tax-position",
+              description: "Alte Leistung",
+              quantity: 1,
+              unit: "Std",
+              price: 100,
+              taxCategory: "REVERSE_CHARGE",
+              taxRate: 0,
+            },
+          ],
+          status: InvoiceStatus.DRAFT,
+          currency: "USD",
+        }}
+      />,
+      { route: "/app/invoices/new" },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }));
+    const currencySelect = screen.getByLabelText("Währung") as HTMLSelectElement;
+    expect(Array.from(currencySelect.options, (option) => option.value)).toEqual(["USD", "EUR"]);
+    expect(currencySelect.options[0]).toBeDisabled();
+    expect(screen.getByText(/Fremdwährungen werden derzeit nicht unterstützt/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
+
+    const taxSelect = screen.getByLabelText("Steuerart 1") as HTMLSelectElement;
+    expect(Array.from(taxSelect.options, (option) => option.value)).toEqual([
+      "REVERSE_CHARGE",
+      "STANDARD",
+      "REDUCED",
+    ]);
+    expect(taxSelect.options[0]).toBeDisabled();
+    expect(screen.getByText(/Dieser Steuerfall kann derzeit nicht ausgestellt werden/)).toBeVisible();
   });
 
   it("sets status SENT on successful send", async () => {

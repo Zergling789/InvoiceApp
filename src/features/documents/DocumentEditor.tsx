@@ -23,7 +23,14 @@ import {
 
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
-import { calculateDocumentTotals, getTaxLabel } from "@/domain/rules/tax";
+import {
+  calculateDocumentTotals,
+  getTaxLabel,
+  isSupportedPositionTax,
+  resolveSupportedPositionTax,
+  SUPPORTED_TAX_RATES,
+  TAX_CATEGORY_LABELS,
+} from "@/domain/rules/tax";
 import { downloadDocumentPdf, downloadInvoiceCii } from "@/app/pdf/documentPdfService";
 import { canConvertToInvoice } from "@/domain/rules/offerRules";
 import { formatDocumentStatus } from "@/features/documents/utils/formatStatus";
@@ -44,6 +51,7 @@ import { DocumentCreateComposer } from "@/features/documents/DocumentCreateCompo
 import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
 import type { PositionSuggestion } from "@/app/positions/positionSuggestionService";
 import { PositionGroupDialog } from "@/features/documents/PositionGroupDialog";
+import { normalizeDocumentCountry } from "@/domain/rules/marketScope";
 
 export type { EditorSeed } from "@/features/documents/documentEditorModel";
 
@@ -144,10 +152,10 @@ export function DocumentEditor({
   const showPrimaryAction = !readOnly;
   const showActionBar = true;
   const invoiceMetaDisabled = disabled || (isInvoice && formData.status !== InvoiceStatus.DRAFT);
-  const currencyOptions = ["EUR", "USD", "CHF", "GBP"];
   const documentCurrency = isInvoice
-    ? settings.currency ?? "EUR"
+    ? formData.currency ?? settings.currency ?? "EUR"
     : formData.currency ?? settings.currency ?? "EUR";
+  const currencyOptions = documentCurrency === "EUR" ? ["EUR"] : [documentCurrency, "EUR"];
   const locale = settings.locale ?? "de-DE";
   const currencySymbol = getCurrencySymbol(documentCurrency, locale);
   const showOfferWizard =
@@ -184,8 +192,9 @@ export function DocumentEditor({
     const customerDefaults = useCreateComposer && client
       ? {
           ...(client.paymentTermsDays != null ? { paymentTermsDays: client.paymentTermsDays } : {}),
-          ...(client.currency ? { currency: client.currency } : {}),
+          currency: "EUR",
           ...(client.defaultVatRate != null ? { vatRate: client.defaultVatRate } : {}),
+          ...(isInvoice ? { customerCountry: normalizeDocumentCountry(client.country) } : {}),
         }
       : {};
     if (!isInvoice || readOnly || locked || formData.status !== InvoiceStatus.DRAFT) {
@@ -249,14 +258,19 @@ export function DocumentEditor({
     if (readOnly || locked) return;
     setFormData((current) => {
       const positions = [...(current.positions ?? [])];
+      const tax = resolveSupportedPositionTax(
+        suggestion,
+        Number(current.vatRate),
+        Boolean(current.isSmallBusiness),
+      );
       positions[index] = {
         ...positions[index],
         description: suggestion.title,
         quantity: suggestion.quantity || 1,
         unit: suggestion.unit || "Stk",
         price: suggestion.lastPrice ?? suggestion.standardPrice ?? 0,
-        taxCategory: suggestion.taxCategory ?? positions[index].taxCategory,
-        taxRate: suggestion.taxRate ?? positions[index].taxRate,
+        taxCategory: tax.taxCategory,
+        taxRate: tax.taxRate,
       };
       return { ...current, positions };
     });
@@ -1148,8 +1162,8 @@ export function DocumentEditor({
                           onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                         >
                           {currencyOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
+                            <option key={option} value={option} disabled={option !== "EUR"}>
+                              {option === "EUR" ? "EUR – Euro" : `Nicht unterstützt (${option})`}
                             </option>
                           ))}
                         </select>
@@ -1196,24 +1210,36 @@ export function DocumentEditor({
                               }
                             />
                           </div>
-                          <select
-                            aria-label={`Steuerart ${idx + 1}`}
-                            className="w-full border rounded-lg p-2 text-sm"
-                            value={pos.taxCategory ?? (isSmallBusiness ? "SMALL_BUSINESS" : Number(formData.vatRate) === 0 ? "ZERO" : "STANDARD")}
-                            disabled={disabled}
-                            onChange={(event) => {
-                              const category = event.target.value;
-                              updatePosition(idx, "taxCategory", category);
-                              updatePosition(idx, "taxRate", category === "STANDARD" ? 19 : category === "REDUCED" ? 7 : 0);
-                            }}
-                          >
-                            <option value="STANDARD">Regelsteuer</option>
-                            <option value="REDUCED">Ermäßigt</option>
-                            <option value="ZERO">0 % steuerpflichtig</option>
-                            <option value="EXEMPT">Steuerbefreit</option>
-                            <option value="REVERSE_CHARGE">Reverse Charge</option>
-                            {isInvoice && <option value="SMALL_BUSINESS">Kleinunternehmer</option>}
-                          </select>
+                          <div>
+                            <select
+                              aria-label={`Steuerart ${idx + 1}`}
+                              className="w-full border rounded-lg p-2 text-sm"
+                              value={pos.taxCategory ?? (isSmallBusiness ? "SMALL_BUSINESS" : Number(formData.vatRate) === 7 ? "REDUCED" : "STANDARD")}
+                              disabled={disabled}
+                              onChange={(event) => {
+                                const category = event.target.value as keyof typeof SUPPORTED_TAX_RATES;
+                                updatePosition(idx, "taxCategory", category);
+                                updatePosition(idx, "taxRate", SUPPORTED_TAX_RATES[category]);
+                              }}
+                            >
+                              {!isSupportedPositionTax(pos, isSmallBusiness) && pos.taxCategory && (
+                                <option value={pos.taxCategory} disabled>
+                                  Nicht unterstützt: {TAX_CATEGORY_LABELS[pos.taxCategory]}
+                                </option>
+                              )}
+                              {isSmallBusiness ? (
+                                <option value="SMALL_BUSINESS">{TAX_CATEGORY_LABELS.SMALL_BUSINESS}</option>
+                              ) : (
+                                <>
+                                  <option value="STANDARD">{TAX_CATEGORY_LABELS.STANDARD}</option>
+                                  <option value="REDUCED">{TAX_CATEGORY_LABELS.REDUCED}</option>
+                                </>
+                              )}
+                            </select>
+                            {!isSupportedPositionTax(pos, isSmallBusiness) && (
+                              <p className="mt-1 text-xs text-amber-700">Nicht unterstützter Steuerfall</p>
+                            )}
+                          </div>
                           {pos.taxCategory === "EXEMPT" && <input className="w-full border rounded-lg p-2 text-sm sm:col-span-6" placeholder="Rechtsgrund der Steuerbefreiung" value={pos.taxExemptionReason ?? ""} disabled={disabled} onChange={(event) => updatePosition(idx, "taxExemptionReason", event.target.value)} />}
                           {!readOnly && (
                             <button
@@ -1671,8 +1697,8 @@ export function DocumentEditor({
                       onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                     >
                       {currencyOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
+                        <option key={option} value={option} disabled={option !== "EUR"}>
+                          {option === "EUR" ? "EUR – Euro" : `Nicht unterstützt (${option})`}
                         </option>
                       ))}
                     </select>
@@ -1726,10 +1752,10 @@ export function DocumentEditor({
                 </div>
                 <div className="mt-2 text-sm text-gray-700 space-y-1">
                   {formData.status === OfferStatus.REJECTED && (
-                    <div className="text-red-600">Offer declined</div>
+                    <div className="text-red-600">Angebot abgelehnt</div>
                   )}
                   {formData.status === OfferStatus.ACCEPTED && (
-                    <div className="text-green-700">Offer accepted</div>
+                    <div className="text-green-700">Angebot angenommen</div>
                   )}
                   {formData.invoiceId && (
                     <div>
