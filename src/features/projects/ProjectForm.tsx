@@ -1,11 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { Save, X } from "lucide-react";
 
+import { getClientDisplayName } from "@/domain/models/Client";
 import type { Client, Project } from "@/types";
+import { getCurrencySymbol } from "@/utils/money";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { AppNumberInput } from "@/ui/AppNumberInput";
-import { getCurrencySymbol } from "@/utils/money";
 
 export type DraftProject = {
   id?: string;
@@ -27,9 +28,12 @@ type ProjectFormProps = {
   saving?: boolean;
   showHeader?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
+  onCreateClient?: () => void;
   currency?: string;
   locale?: string;
 };
+
+const inputClass = "app-input mt-1 w-full";
 
 export function ProjectForm({
   value,
@@ -41,133 +45,48 @@ export function ProjectForm({
   saving = false,
   showHeader = true,
   onDirtyChange,
+  onCreateClient,
   currency = "EUR",
   locale = "de-DE",
 }: ProjectFormProps) {
   const currencySymbol = getCurrencySymbol(currency, locale);
-  const budgetLabel = value.budgetType === "hourly" ? "Budget (Stunden)" : `Budget (${currency})`;
-  const budgetHint = value.budgetType === "hourly" ? "Gib die geplanten Stunden an." : "Gib den Festpreis an.";
-
-  const isDirty = useMemo(
-    () => JSON.stringify(value) !== JSON.stringify(initialValue),
-    [initialValue, value]
-  );
+  const isDirty = useMemo(() => JSON.stringify(value) !== JSON.stringify(initialValue), [initialValue, value]);
+  const canSave = Boolean(value.name.trim() && value.clientId && !saving);
 
   useEffect(() => {
-    if (onDirtyChange) {
-      onDirtyChange(isDirty);
-    }
+    onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
 
   return (
     <div className="space-y-4">
-      {showHeader && (
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Neues Projekt</h2>
-          <p className="text-sm text-gray-500">Projekt-Einstellungen</p>
-        </div>
-      )}
+      {showHeader && <div><div className="app-eyebrow">Neuer Auftrag</div><h2 className="mt-1 text-xl font-semibold">Projekt anlegen</h2><p className="mt-1 text-sm text-[var(--app-muted)]">Kunde und geplanten Umfang festhalten.</p></div>}
 
-      <AppCard className="bg-gray-50">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input
-              className="w-full border rounded p-2"
-              value={value.name}
-              onChange={(e) => onChange({ ...value, name: e.target.value })}
-              autoComplete="off"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Kunde *</label>
-            <select
-              className="w-full border rounded p-2"
-              value={value.clientId}
-              onChange={(e) => onChange({ ...value, clientId: e.target.value })}
-            >
-              <option value="">Wählen...</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.companyName}
-                </option>
-              ))}
-            </select>
-            {clients.length === 0 && (
-              <div className="text-xs text-gray-500 mt-1">Keine Kunden vorhanden – erst Kunden anlegen.</div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Budget-Typ</label>
-            <select
-              className="w-full border rounded p-2"
-              value={value.budgetType}
-              onChange={(e) => onChange({ ...value, budgetType: e.target.value as Project["budgetType"] })}
-            >
-              <option value="hourly">Stundenbasiert</option>
-              <option value="fixed">Festpreis</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stundensatz</label>
-              <AppNumberInput
-                className="w-full border rounded p-2 pr-10"
-                value={value.hourlyRate}
-                onValueChange={(hourlyRate) => onChange({ ...value, hourlyRate })}
-                disabled={value.budgetType !== "hourly"}
-                min={0}
-                step="any"
-                suffix={currencySymbol}
-              />
-              {value.budgetType !== "hourly" && (
-                <div className="text-xs text-gray-500 mt-1">Nicht relevant bei Festpreis.</div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{budgetLabel}</label>
-              <AppNumberInput
-                className="w-full border rounded p-2 pr-10"
-                value={value.budgetTotal}
-                onValueChange={(budgetTotal) => onChange({ ...value, budgetTotal })}
-                min={0}
-                step="any"
-                suffix={value.budgetType === "hourly" ? "Std." : currencySymbol}
-              />
-              <div className="text-xs text-gray-500 mt-1">{budgetHint}</div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              className="w-full border rounded p-2"
-              value={value.status}
-              onChange={(e) => onChange({ ...value, status: e.target.value as Project["status"] })}
-            >
-              <option value="active">aktiv</option>
-              <option value="completed">abgeschlossen</option>
-              <option value="archived">archiviert</option>
-            </select>
-          </div>
+      <AppCard className="space-y-5 p-4 sm:p-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label htmlFor="project-name" className="text-sm font-medium">Projektname *<input id="project-name" className={inputClass} value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} placeholder="Zum Beispiel: Terrasse Familie Müller" autoComplete="off" /></label>
+          <label htmlFor="project-client" className="text-sm font-medium">Kunde *<select id="project-client" className={inputClass} value={value.clientId} onChange={(event) => onChange({ ...value, clientId: event.target.value })}><option value="">Kunde auswählen</option>{clients.map((client) => <option key={client.id} value={client.id}>{getClientDisplayName(client)}</option>)}</select>{clients.length === 0 && <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-amber-700"><span>Für ein Projekt brauchst du zuerst einen Kunden.</span>{onCreateClient && <button type="button" className="font-semibold underline underline-offset-2" onClick={onCreateClient}>Kunden anlegen</button>}</span>}</label>
         </div>
 
-        <div className="flex justify-end gap-2 mt-4">
-          <AppButton
-            variant="ghost"
-            disabled={saving}
-            onClick={onCancel}
-          >
-            <X size={16} /> Abbrechen
-          </AppButton>
+        <fieldset>
+          <legend className="text-sm font-medium">Wie wird der Auftrag berechnet?</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <label className={`cursor-pointer rounded-xl border p-3 ${value.budgetType === "hourly" ? "border-[var(--app-primary)] bg-blue-500/10" : "border-[var(--app-border)]"}`}><input type="radio" name="budgetType" value="hourly" checked={value.budgetType === "hourly"} onChange={() => onChange({ ...value, budgetType: "hourly" })} className="mr-2" /><span className="font-medium">Nach Stunden</span><span className="mt-1 block pl-6 text-xs text-[var(--app-muted)]">Stundensatz und geplante Stunden</span></label>
+            <label className={`cursor-pointer rounded-xl border p-3 ${value.budgetType === "fixed" ? "border-[var(--app-primary)] bg-blue-500/10" : "border-[var(--app-border)]"}`}><input type="radio" name="budgetType" value="fixed" checked={value.budgetType === "fixed"} onChange={() => onChange({ ...value, budgetType: "fixed" })} className="mr-2" /><span className="font-medium">Festpreis</span><span className="mt-1 block pl-6 text-xs text-[var(--app-muted)]">Ein vereinbarter Gesamtbetrag</span></label>
+          </div>
+        </fieldset>
 
-          <AppButton disabled={saving} onClick={onSave}>
-            <Save size={16} /> {saving ? "Speichere..." : "Speichern"}
-          </AppButton>
+        {value.budgetType === "hourly" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label htmlFor="project-hourly-rate" className="text-sm font-medium">Stundensatz<AppNumberInput id="project-hourly-rate" className={`${inputClass} pr-10`} value={value.hourlyRate} onValueChange={(hourlyRate) => onChange({ ...value, hourlyRate })} min={0} step="any" suffix={currencySymbol} /></label>
+            <label htmlFor="project-hours" className="text-sm font-medium">Geplante Stunden<AppNumberInput id="project-hours" className={`${inputClass} pr-12`} value={value.budgetTotal} onValueChange={(budgetTotal) => onChange({ ...value, budgetTotal })} min={0} step="any" suffix="Std." /></label>
+          </div>
+        ) : (
+          <label htmlFor="project-fixed-price" className="block max-w-sm text-sm font-medium">Vereinbarter Festpreis<AppNumberInput id="project-fixed-price" className={`${inputClass} pr-10`} value={value.budgetTotal} onValueChange={(budgetTotal) => onChange({ ...value, budgetTotal })} min={0} step="any" suffix={currencySymbol} /></label>
+        )}
+
+        <div className="flex flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-4 sm:flex-row sm:justify-end">
+          <AppButton variant="ghost" disabled={saving} onClick={onCancel}><X size={16} /> Abbrechen</AppButton>
+          <AppButton disabled={!canSave} onClick={onSave}><Save size={16} /> {saving ? "Wird gespeichert…" : "Projekt anlegen"}</AppButton>
         </div>
       </AppCard>
     </div>

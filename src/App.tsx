@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation, useParams, type Location } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, type Location } from "react-router-dom";
 import { LayoutDashboard, Users, FileText, ListTodo, Menu } from "lucide-react";
 
 import Dashboard from "@/features/dashboard/Dashboard";
@@ -28,11 +28,8 @@ import LegalPage from "@/pages/LegalPage";
 import RecipientDocumentPage from "@/pages/RecipientDocumentPage";
 import { PublicLegalFooter } from "@/components/PublicLegalFooter";
 import { PositionCatalogPage } from "@/features/positions/PositionCatalogPage";
-
-function LegacyDocumentRedirect({ type }: { type: "offer" | "invoice" }) {
-  const { id } = useParams<{ id: string }>();
-  return <Navigate to={`/app/${type}s/${id ?? ""}`} replace />;
-}
+import InvoiceEditPage from "@/features/documents/edit/InvoiceEditPage";
+import OfferEditPage from "@/features/documents/edit/OfferEditPage";
 
 const navItems: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -86,8 +83,8 @@ export default function App() {
           <Route path="invoices/:id" element={<DocumentDetailRoute forcedType="invoice" />} />
           <Route path="customers/new" element={<CustomerCreatePage />} />
           <Route path="projects/new" element={<ProjectCreatePage />} />
-          <Route path="documents/offer/:id/edit" element={<LegacyDocumentRedirect type="offer" />} />
-          <Route path="documents/invoice/:id/edit" element={<LegacyDocumentRedirect type="invoice" />} />
+          <Route path="documents/offer/:id/edit" element={<OfferEditPage />} />
+          <Route path="documents/invoice/:id/edit" element={<InvoiceEditPage />} />
           <Route path="documents/:type/:id" element={<DocumentDetailRoute />} />
           <Route path="more" element={<MorePage />} />
           <Route path="settings" element={<SettingsView />} />

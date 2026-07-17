@@ -677,3 +677,18 @@
     }
   }
 }
+@keyframes document-created-highlight {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  20%, 70% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 75%, transparent), 0 0 28px color-mix(in srgb, var(--app-primary) 30%, transparent); }
+}
+
+.document-created-highlight {
+  animation: document-created-highlight 2.4s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .document-created-highlight {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 65%, transparent);
+  }
+}

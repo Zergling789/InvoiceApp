@@ -8,6 +8,7 @@ import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEd
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
+import type { CreatedDocumentTarget } from "@/features/documents/createdDocumentNavigation";
 
 const toLocalISODate = (d: Date) => {
   const year = d.getFullYear();
@@ -25,7 +26,7 @@ const newId = () =>
 
 type InvoiceFormProps = {
   onClose: () => void;
-  onSaved?: () => void | Promise<void>;
+  onSaved?: (document: CreatedDocumentTarget) => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
@@ -105,7 +106,7 @@ export function InvoiceForm({ onClose, onSaved, onDirtyChange }: InvoiceFormProp
       clients={clients}
       onClose={onClose}
       onSaved={async () => {
-        await onSaved?.();
+        await onSaved?.({ id: editorSeed.id, type: "invoice" });
       }}
       layout="embedded"
       showHeader={false}

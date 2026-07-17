@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { Client, Invoice, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { useToast } from "@/ui/FeedbackProvider";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
+import type { DocumentFormData } from "@/features/documents/documentEditorModel";
 import * as clientService from "@/app/clients/clientService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 
@@ -13,6 +14,14 @@ const buildEditorSeed = (doc: Invoice): EditorSeed => ({
   id: doc.id,
   number: doc.number ?? null,
   date: doc.date,
+  serviceDate: doc.serviceDate,
+  servicePeriodStart: doc.servicePeriodStart,
+  servicePeriodEnd: doc.servicePeriodEnd,
+  sellerCountry: doc.sellerCountry,
+  customerCountry: doc.customerCountry,
+  customerType: doc.customerType,
+  serviceCountry: doc.serviceCountry,
+  buyerReference: doc.buyerReference,
   paymentTermsDays: doc.paymentTermsDays ?? 14,
   dueDate: doc.dueDate ?? undefined,
   vatRate: Number(doc.vatRate ?? 0),
@@ -20,14 +29,36 @@ const buildEditorSeed = (doc: Invoice): EditorSeed => ({
   smallBusinessNote: doc.smallBusinessNote ?? null,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
+  currency: doc.currency ?? "EUR",
 });
 
-const buildEditorInitial = (doc: Invoice) => ({
+const buildEditorInitial = (doc: Invoice): Partial<DocumentFormData> => ({
   id: doc.id,
   number: doc.number ?? null,
   date: doc.date,
+  serviceDate: doc.serviceDate,
+  servicePeriodStart: doc.servicePeriodStart,
+  servicePeriodEnd: doc.servicePeriodEnd,
+  sellerCountry: doc.sellerCountry,
+  customerCountry: doc.customerCountry,
+  customerType: doc.customerType,
+  serviceCountry: doc.serviceCountry,
+  buyerReference: doc.buyerReference,
   paymentTermsDays: doc.paymentTermsDays ?? 14,
   clientId: doc.clientId ?? "",
+  clientName: doc.clientName ?? "",
+  clientCompanyName: doc.clientCompanyName ?? "",
+  clientContactPerson: doc.clientContactPerson ?? "",
+  clientEmail: doc.clientEmail ?? "",
+  clientPhone: doc.clientPhone ?? null,
+  clientVatId: doc.clientVatId ?? null,
+  clientAddress: doc.clientAddress ?? "",
+  clientStreet: doc.clientStreet ?? null,
+  clientHouseNumber: doc.clientHouseNumber ?? null,
+  clientPostalCode: doc.clientPostalCode ?? null,
+  clientCity: doc.clientCity ?? null,
+  clientElectronicAddress: doc.clientElectronicAddress ?? null,
+  clientElectronicAddressScheme: doc.clientElectronicAddressScheme ?? null,
   projectId: doc.projectId ?? undefined,
   offerId: doc.offerId ?? undefined,
   dueDate: doc.dueDate ?? undefined,
@@ -45,11 +76,13 @@ const buildEditorInitial = (doc: Invoice) => ({
   lastSentAt: doc.lastSentAt ?? null,
   sentCount: doc.sentCount ?? 0,
   sentVia: doc.sentVia ?? null,
+  currency: doc.currency ?? "EUR",
 });
 
 export default function InvoiceEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -58,7 +91,8 @@ export default function InvoiceEditPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
-  const [editorInitial, setEditorInitial] = useState<any>(null);
+  const [editorInitial, setEditorInitial] = useState<Partial<DocumentFormData> | null>(null);
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? "/app/documents";
 
   useEffect(() => {
     let mounted = true;
@@ -131,7 +165,7 @@ export default function InvoiceEditPage() {
       seed={editorSeed}
       settings={settings}
       clients={clients}
-      onClose={() => navigate(`/app/documents/invoice/${doc.id}`)}
+      onClose={() => navigate(`/app/invoices/${doc.id}`, { replace: true, state: { returnTo } })}
       onSaved={handleSaved}
       initial={editorInitial ?? undefined}
       layout="page"

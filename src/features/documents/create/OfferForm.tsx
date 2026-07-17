@@ -7,6 +7,7 @@ import { fetchSettings } from "@/app/settings/settingsService";
 import { getNextDocumentNumber } from "@/app/numbering/numberingService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import * as clientService from "@/app/clients/clientService";
+import type { CreatedDocumentTarget } from "@/features/documents/createdDocumentNavigation";
 
 const toLocalISODate = (d: Date) => {
   const year = d.getFullYear();
@@ -25,7 +26,7 @@ const newId = () =>
 
 type OfferFormProps = {
   onClose: (force?: boolean) => void;
-  onSaved?: () => void;
+  onSaved?: (document: CreatedDocumentTarget) => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
@@ -102,7 +103,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
       clients={clients}
       onClose={onClose}
       onSaved={async () => {
-        await onSaved?.();
+        await onSaved?.({ id: editorSeed.id, type: "offer" });
       }}
       layout="embedded"
       showHeader={false}

@@ -97,6 +97,22 @@ test("PDF generation is deterministic for the same invoice", async () => {
   assert.equal(bufferA.toString("utf8"), bufferB.toString("utf8"));
 });
 
+test("PDF generation keeps working when the optional payment BIC is invalid", async () => {
+  const supabase = createMockSupabase(fixtures);
+  const payload = await loadDocumentPayloadFromDb({
+    type: "invoice",
+    docId: "inv_1",
+    userId: "user_1",
+    supabase,
+  });
+  payload.settings.iban = "DE89370400440532013000";
+  payload.settings.bic = "INVALID";
+
+  const html = (await createPdfBufferFromPayload("invoice", payload)).toString("utf8");
+  assert.match(html, /Mit Banking-App bezahlen/);
+  assert.match(html, /data:image\/png;base64/);
+});
+
 test("Email attachment uses the server-generated PDF buffer", async () => {
   const supabase = createMockSupabase(fixtures);
   const payload = await loadDocumentPayloadFromDb({

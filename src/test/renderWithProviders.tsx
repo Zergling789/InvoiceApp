@@ -6,14 +6,15 @@ import { ConfirmProvider, ToastProvider } from "@/ui/FeedbackProvider";
 
 type ProviderOptions = Omit<RenderOptions, "wrapper"> & {
   route?: string;
+  routeState?: unknown;
 };
 
 export function renderWithProviders(
   ui: ReactElement,
-  { route = "/", ...options }: ProviderOptions = {}
+  { route = "/", routeState, ...options }: ProviderOptions = {}
 ) {
   return render(
-    <MemoryRouter initialEntries={[route]}>
+    <MemoryRouter initialEntries={[routeState === undefined ? route : { pathname: route, state: routeState }]}>
       <ToastProvider>
         <ConfirmProvider>{ui}</ConfirmProvider>
       </ToastProvider>

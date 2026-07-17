@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { Client, Offer, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
 import { useToast } from "@/ui/FeedbackProvider";
 import { fetchSettings } from "@/app/settings/settingsService";
 import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
+import type { DocumentFormData } from "@/features/documents/documentEditorModel";
 import * as clientService from "@/app/clients/clientService";
 import * as offerService from "@/app/offers/offerService";
 
@@ -19,7 +20,7 @@ const buildEditorSeed = (doc: Offer): EditorSeed => ({
   footerText: doc.footerText ?? "",
 });
 
-const buildEditorInitial = (doc: Offer) => ({
+const buildEditorInitial = (doc: Offer): Partial<DocumentFormData> => ({
   id: doc.id,
   number: String(doc.number ?? ""),
   date: doc.date,
@@ -31,18 +32,20 @@ const buildEditorInitial = (doc: Offer) => ({
   status: doc.status,
   introText: doc.introText ?? "",
   footerText: doc.footerText ?? "",
-  isLocked: "isLocked" in doc ? doc.isLocked ?? false : false,
-  finalizedAt: "finalizedAt" in doc ? doc.finalizedAt ?? null : null,
+  isLocked: false,
+  finalizedAt: null,
   sentAt: doc.sentAt ?? null,
   lastSentAt: doc.lastSentAt ?? null,
   sentCount: doc.sentCount ?? 0,
   sentVia: doc.sentVia ?? null,
   invoiceId: doc.invoiceId ?? null,
+  currency: doc.currency ?? "EUR",
 });
 
 export default function OfferEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,8 @@ export default function OfferEditPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
-  const [editorInitial, setEditorInitial] = useState<any>(null);
+  const [editorInitial, setEditorInitial] = useState<Partial<DocumentFormData> | null>(null);
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? "/app/documents";
 
   useEffect(() => {
     let mounted = true;
@@ -124,7 +128,7 @@ export default function OfferEditPage() {
       seed={editorSeed}
       settings={settings}
       clients={clients}
-      onClose={() => navigate(`/app/documents/offer/${doc.id}`)}
+      onClose={() => navigate(`/app/offers/${doc.id}`, { replace: true, state: { returnTo } })}
       onSaved={handleSaved}
       initial={editorInitial ?? undefined}
       layout="page"

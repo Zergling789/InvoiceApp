@@ -1068,13 +1068,25 @@ const createPdfBufferFromPayload = async (type, payload, options = {}) => {
     ? canonicalInvoiceToRenderPayload(canonicalInvoice, payload ?? {})
     : { doc: payload?.doc ?? {}, settings: payload?.settings ?? {}, client: payload?.client ?? {} };
   if (type === "invoice" && renderPayload.settings?.iban) {
-    renderPayload.settings.paymentQrDataUrl = await createEpcQrDataUrl({
+    const paymentQrInput = {
       beneficiary: renderPayload.settings.companyName,
       iban: renderPayload.settings.iban,
       bic: renderPayload.settings.bic,
       amount: canonicalInvoice.totals.grossTotal,
       reference: `Rechnung ${renderPayload.doc.number ?? ""}`.trim(),
-    });
+    };
+    try {
+      renderPayload.settings.paymentQrDataUrl = await createEpcQrDataUrl(paymentQrInput);
+    } catch (error) {
+      if (error?.code === "PAYMENT_QR_BIC_INVALID") {
+        logEvent("warn", "payment_qr_bic_omitted", { requestId, source, type, errorCode: error.code });
+        renderPayload.settings.paymentQrDataUrl = await createEpcQrDataUrl({ ...paymentQrInput, bic: "" });
+      } else if (String(error?.code ?? "").startsWith("PAYMENT_QR_")) {
+        logEvent("warn", "payment_qr_skipped", { requestId, source, type, errorCode: error.code });
+      } else {
+        throw error;
+      }
+    }
   }
   const html = renderDocumentHtml({ type, ...renderPayload });
 

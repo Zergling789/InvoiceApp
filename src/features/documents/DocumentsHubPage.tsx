@@ -6,6 +6,7 @@ import type { Client, Invoice, Offer, UserSettings } from "@/types";
 import { formatDate } from "@/types";
 import { calculateDocumentTotal } from "@/utils/dashboard";
 import { formatMoney } from "@/utils/money";
+import type { CreatedDocumentTarget, DocumentRefreshState } from "@/features/documents/createdDocumentNavigation";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
@@ -120,6 +121,7 @@ export default function DocumentsHubPage() {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const lastRefreshTokenRef = useRef<number | null>(null);
+  const [highlightedDocument, setHighlightedDocument] = useState<CreatedDocumentTarget | null>(null);
 
   const refreshDocuments = async () => {
     setLoading(true);
@@ -171,12 +173,29 @@ export default function DocumentsHubPage() {
   }, []);
 
   useEffect(() => {
-    const refreshToken = (location.state as { refreshDocuments?: number } | null)?.refreshDocuments;
+    const navigationState = location.state as DocumentRefreshState | null;
+    const refreshToken = navigationState?.refreshDocuments;
     if (!refreshToken || refreshToken === lastRefreshTokenRef.current) return;
     lastRefreshTokenRef.current = refreshToken;
+    setHighlightedDocument(navigationState.highlightDocument ?? null);
     void refreshDocuments();
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: {} });
   }, [location.hash, location.pathname, location.search, location.state, navigate]);
+
+  useEffect(() => {
+    if (!highlightedDocument || loading) return;
+    const key = `${highlightedDocument.type}-${highlightedDocument.id}`;
+    const frame = window.requestAnimationFrame(() => {
+      const candidates = document.querySelectorAll<HTMLElement>(`[data-document-key="${key}"]`);
+      const visibleCandidate = Array.from(candidates).find((element) => element.offsetParent !== null) ?? candidates[0];
+      visibleCandidate?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timeout = window.setTimeout(() => setHighlightedDocument(null), 2600);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [highlightedDocument, loading]);
 
   useEffect(() => {
     const param = searchParams.get("mode") ?? searchParams.get("type");
@@ -588,6 +607,7 @@ export default function DocumentsHubPage() {
                   return (
                     <tr
                       key={`${row.type}-${row.id}`}
+                      data-document-key={`${row.type}-${row.id}`}
                       tabIndex={0}
                       onClick={() => openDocument(row)}
                       onKeyDown={(event) => {
@@ -596,7 +616,7 @@ export default function DocumentsHubPage() {
                           openDocument(row);
                         }
                       }}
-                      className={`cursor-pointer transition-colors hover:bg-[var(--app-primary)]/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--app-primary)] ${row.isOverdue ? "bg-red-500/[0.06]" : ""}`}
+                      className={`cursor-pointer transition-colors hover:bg-[var(--app-primary)]/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--app-primary)] ${row.isOverdue ? "bg-red-500/[0.06]" : ""} ${highlightedDocument?.id === row.id && highlightedDocument.type === row.type ? "document-created-highlight" : ""}`}
                     >
                       <td className="px-4 py-4">
                         <div className="font-semibold text-[var(--app-text)]">{row.number}</div>
@@ -628,8 +648,9 @@ export default function DocumentsHubPage() {
           {filteredRows.map((row) => (
             <button
               key={`${row.type}-${row.id}`}
+              data-document-key={`${row.type}-${row.id}`}
               type="button"
-              className="text-left w-full"
+              className={`w-full rounded-2xl text-left ${highlightedDocument?.id === row.id && highlightedDocument.type === row.type ? "document-created-highlight" : ""}`}
               onClick={() => openDocument(row)}
             >
               <AppCard

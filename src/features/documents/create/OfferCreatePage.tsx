@@ -3,6 +3,7 @@ import { useLocation, useNavigate, type Location } from "react-router-dom";
 
 import ModalSheet from "@/components/ui/ModalSheet";
 import OfferForm from "@/features/documents/create/OfferForm";
+import type { CreatedDocumentTarget } from "@/features/documents/createdDocumentNavigation";
 
 export default function OfferCreatePage() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export default function OfferCreatePage() {
   const [isDirty, setIsDirty] = useState(false);
   const skipConfirmRef = useRef(false);
   const refreshTokenRef = useRef<number | null>(null);
+  const createdDocumentRef = useRef<CreatedDocumentTarget | null>(null);
 
   const state = location.state as { backgroundLocation?: Location; returnTo?: string } | null;
   const backgroundLocation = state?.backgroundLocation;
@@ -31,6 +33,14 @@ export default function OfferCreatePage() {
         refreshDocuments,
       };
     };
+
+    if (refreshDocuments && createdDocumentRef.current) {
+      navigate("/app/documents", {
+        replace: true,
+        state: { refreshDocuments, highlightDocument: createdDocumentRef.current },
+      });
+      return;
+    }
 
     if (returnTo) {
       navigate(returnTo, { replace: true, state: buildState(undefined) });
@@ -62,9 +72,10 @@ export default function OfferCreatePage() {
       <OfferForm
         onClose={handleClose}
         onDirtyChange={setIsDirty}
-        onSaved={() => {
+        onSaved={(document) => {
           skipConfirmRef.current = true;
           refreshTokenRef.current = Date.now();
+          createdDocumentRef.current = document;
           setIsDirty(false);
         }}
       />

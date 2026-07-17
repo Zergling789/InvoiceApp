@@ -117,6 +117,6 @@ FreelanceFlow begrenzt die Finalisierung derzeit technisch auf einfache inländi
 ### TEST PLAN (manuell)
 1. /app/documents öffnen → Angebot in der Liste klicken → Modal öffnet → schließen → zurück zur Liste.
 2. /app/documents öffnen → Rechnung in der Liste klicken → Modal öffnet → schließen → zurück zur Liste.
-3. /app/offers/new öffnen → speichern → Modal bleibt offen → schließen → Liste aktualisiert.
-4. /app/invoices/new öffnen → speichern → Modal bleibt offen → schließen → Liste aktualisiert.
+3. /app/offers/new öffnen → speichern → Dokumentübersicht öffnet sich → neues Angebot wird kurz hervorgehoben.
+4. /app/invoices/new öffnen → speichern → Dokumentübersicht öffnet sich → neue Rechnung wird kurz hervorgehoben.
 5. Deep Link /app/offers/:id direkt öffnen → Seite rendert ohne Background-Location.

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDocumentTimeline,
   canCreateRecipientLink,
+  getDocumentEditPath,
 } from "@/features/documents/DocumentDetailPage";
 import { OfferStatus, type Offer } from "@/types";
 
@@ -16,6 +17,13 @@ describe("canCreateRecipientLink", () => {
     const offer = { status: OfferStatus.SENT } as Offer;
 
     expect(canCreateRecipientLink(offer, "offer")).toBe(true);
+  });
+});
+
+describe("document edit navigation", () => {
+  it("opens offers and invoices on dedicated edit routes", () => {
+    expect(getDocumentEditPath("invoice", "inv-1")).toBe("/app/documents/invoice/inv-1/edit");
+    expect(getDocumentEditPath("offer", "off-1")).toBe("/app/documents/offer/off-1/edit");
   });
 });
 

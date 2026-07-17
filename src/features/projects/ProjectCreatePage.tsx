@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 
 import type { Project } from "@/types";
@@ -6,7 +6,6 @@ import ModalSheet from "@/components/ui/ModalSheet";
 import ProjectForm, { type DraftProject } from "@/features/projects/ProjectForm";
 import { useToast } from "@/ui/FeedbackProvider";
 import { useClients } from "@/app/clients/clientQueries";
-import { useSettings } from "@/app/settings/settingsQueries";
 import * as projectService from "@/app/projects/projectService";
 
 const newId = () =>
@@ -28,27 +27,36 @@ export default function ProjectCreatePage() {
   const location = useLocation();
   const toast = useToast();
   const { clients } = useClients();
-  const { settings } = useSettings();
 
   const idRef = useRef(newId());
   const [draft, setDraft] = useState<DraftProject>(() => emptyDraft());
   const initialDraft = useMemo(() => emptyDraft(), []);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const refreshTokenRef = useRef<number | null>(null);
 
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
+  const requestedClientId = new URLSearchParams(location.search).get("clientId");
+
+  useEffect(() => {
+    if (!requestedClientId || draft.clientId || !clients.some((client) => client.id === requestedClientId)) return;
+    setDraft((current) => ({ ...current, clientId: requestedClientId }));
+  }, [clients, draft.clientId, requestedClientId]);
 
   const handleClose = ({ skipConfirm = false }: { skipConfirm?: boolean } = {}) => {
     if (!skipConfirm && isDirty && !window.confirm("Änderungen verwerfen?")) return;
 
+    const refreshProjects = refreshTokenRef.current;
+    const navigationState = refreshProjects ? { refreshProjects } : undefined;
+
     if (backgroundLocation) {
-      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
+      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true, state: { ...(backgroundLocation.state && typeof backgroundLocation.state === "object" ? backgroundLocation.state as Record<string, unknown> : {}), ...navigationState } });
       return;
     }
 
     if (returnUrl) {
-      navigate(returnUrl, { replace: true });
+      navigate(returnUrl, { replace: true, state: navigationState });
       return;
     }
 
@@ -66,7 +74,7 @@ export default function ProjectCreatePage() {
       return;
     }
     if (!draft.clientId) {
-      toast.error("Bitte Kunde waehlen.");
+      toast.error("Bitte einen Kunden auswählen.");
       return;
     }
 
@@ -84,6 +92,7 @@ export default function ProjectCreatePage() {
     try {
       await projectService.saveProject(project);
       setIsDirty(false);
+      refreshTokenRef.current = Date.now();
       handleClose({ skipConfirm: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -100,14 +109,15 @@ export default function ProjectCreatePage() {
           value={draft}
           initialValue={initialDraft}
           clients={clients}
-          currency={settings?.currency ?? "EUR"}
-          locale={settings?.locale ?? "de-DE"}
+          currency="EUR"
+          locale="de-DE"
           onChange={setDraft}
           onSave={save}
           onCancel={handleClose}
           saving={saving}
           showHeader={false}
           onDirtyChange={setIsDirty}
+          onCreateClient={() => navigate(`/app/customers/new?returnUrl=${encodeURIComponent("/app/projects/new")}`)}
         />
       </div>
     </ModalSheet>

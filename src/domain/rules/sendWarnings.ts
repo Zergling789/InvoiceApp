@@ -23,6 +23,11 @@ export function getSendWarnings({
     warnings.push("IBAN fehlt in den Einstellungen.");
   }
 
+  const bic = settings.bic?.replace(/\s+/g, "").toUpperCase();
+  if (bic && !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(bic)) {
+    warnings.push("Die gespeicherte BIC ist ungültig. Der Zahlungs-QR wird ohne BIC erstellt.");
+  }
+
   if (documentType === "offer") {
     const offer = document as Offer;
     if (offer.validUntil) {

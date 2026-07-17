@@ -16,7 +16,6 @@ import {
   INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
 } from "@/domain/rules/invoiceFinalizationNotice";
 import { fetchSettings } from "@/app/settings/settingsService";
-import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEditor";
 import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
 import { OfferDetailView } from "@/features/documents/OfferDetailView";
 import { InvoiceDetailView } from "@/features/documents/InvoiceDetailView";
@@ -48,21 +47,6 @@ const toNumberOrZero = (value: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const buildEditorSeed = (doc: Invoice | Offer, type: "invoice" | "offer"): EditorSeed => ({
-  id: doc.id,
-  number: doc.number ?? null,
-  date: doc.date,
-  paymentTermsDays: type === "invoice" ? (doc as Invoice).paymentTermsDays ?? 14 : undefined,
-  dueDate: type === "invoice" ? (doc as Invoice).dueDate : undefined,
-  validUntil: type === "offer" ? (doc as Offer).validUntil : undefined,
-  vatRate: Number(doc.vatRate ?? 0),
-  isSmallBusiness: type === "invoice" ? (doc as Invoice).isSmallBusiness ?? false : undefined,
-  smallBusinessNote: type === "invoice" ? (doc as Invoice).smallBusinessNote ?? null : undefined,
-  introText: doc.introText ?? "",
-  footerText: doc.footerText ?? "",
-  currency: type === "offer" ? (doc as Offer).currency ?? undefined : undefined,
-});
-
 type DocumentDetailPageProps = {
   forcedType?: "offer" | "invoice";
   onDocumentsChange?: () => void;
@@ -77,6 +61,9 @@ export const canCreateRecipientLink = (
       ((docType === "invoice" && Boolean((doc as Invoice).finalizedAt)) ||
         (docType === "offer" && (doc as Offer).status === OfferStatus.SENT))
   );
+
+export const getDocumentEditPath = (type: "invoice" | "offer", id: string) =>
+  `/app/documents/${type}/${id}/edit`;
 
 type DetailActivityEvent = Awaited<ReturnType<typeof dbListDocumentActivity>>[number];
 
@@ -135,9 +122,6 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     "reminder" | "dunning" | "followup" | undefined
   >(undefined);
   const [showActionSheet, setShowActionSheet] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
-  const [editorInitial, setEditorInitial] = useState<any>(null);
 
   const docType = forcedType ?? (type === "invoice" ? "invoice" : "offer");
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
@@ -620,40 +604,14 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
         ];
 
   const handleEdit = () => {
-    if (!doc || !settings) return;
+    if (!doc) return;
     if (!capabilities?.canEdit) {
       toast.info("Finalisiert – nicht editierbar.");
       return;
     }
-    setEditorSeed(buildEditorSeed(doc, docType));
-    setEditorInitial({
-      id: doc.id,
-      number: doc.number ?? null,
-      date: doc.date,
-      paymentTermsDays: "paymentTermsDays" in doc ? doc.paymentTermsDays ?? 14 : undefined,
-      clientId: doc.clientId ?? "",
-      projectId: doc.projectId ?? undefined,
-      offerId: "offerId" in doc ? doc.offerId : undefined,
-      dueDate: "dueDate" in doc ? doc.dueDate : undefined,
-      validUntil: "validUntil" in doc ? doc.validUntil : undefined,
-      positions: doc.positions ?? [],
-      vatRate: Number(doc.vatRate ?? 0),
-      isSmallBusiness: "isSmallBusiness" in doc ? doc.isSmallBusiness ?? false : false,
-      smallBusinessNote: "smallBusinessNote" in doc ? doc.smallBusinessNote ?? null : null,
-      status: doc.status,
-      introText: doc.introText ?? "",
-      footerText: doc.footerText ?? "",
-      paymentDate: "paymentDate" in doc ? doc.paymentDate ?? undefined : undefined,
-      isLocked: "isLocked" in doc ? doc.isLocked ?? false : false,
-      finalizedAt: "finalizedAt" in doc ? doc.finalizedAt ?? null : null,
-      sentAt: doc.sentAt ?? null,
-      lastSentAt: doc.lastSentAt ?? null,
-      sentCount: doc.sentCount ?? 0,
-      sentVia: doc.sentVia ?? null,
-      invoiceId: "invoiceId" in doc ? doc.invoiceId ?? null : null,
-      currency: "currency" in doc ? doc.currency ?? undefined : undefined,
+    navigate(getDocumentEditPath(docType, doc.id), {
+      state: { returnTo: returnTo ?? "/app/documents" },
     });
-    setEditorOpen(true);
   };
 
   const handleSaved = async () => {
@@ -727,24 +685,6 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           />
         )}
 
-        {editorOpen && editorSeed && (
-          <DocumentEditor
-            type="offer"
-            seed={editorSeed}
-            settings={settings}
-            clients={clients}
-            onClose={() => {
-              setEditorOpen(false);
-              setEditorSeed(null);
-              setEditorInitial(null);
-            }}
-            onSaved={handleSaved}
-            initial={editorInitial ?? undefined}
-            useCreateComposer
-            composerEditing
-          />
-        )}
-
         <OfferDetailView
           offer={offer}
           client={client}
@@ -790,24 +730,6 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
           defaultMessage={defaultMessage}
           templateType={sendTemplateType}
           onSent={handleSaved}
-        />
-      )}
-
-      {editorOpen && editorSeed && (
-        <DocumentEditor
-          type="invoice"
-          seed={editorSeed}
-          settings={settings}
-          clients={clients}
-          onClose={() => {
-            setEditorOpen(false);
-            setEditorSeed(null);
-            setEditorInitial(null);
-          }}
-          onSaved={handleSaved}
-          initial={editorInitial ?? undefined}
-          useCreateComposer
-          composerEditing
         />
       )}
 

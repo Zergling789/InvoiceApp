@@ -69,4 +69,18 @@ describe("DocumentsHubPage table view", () => {
     expect(row).toHaveTextContent("119,00 €");
     expect(row).toHaveTextContent("Entwurf");
   });
+
+  it("briefly highlights a newly created document after returning to the overview", async () => {
+    renderWithProviders(<DocumentsHubPage />, {
+      route: "/app/documents",
+      routeState: {
+        refreshDocuments: 123,
+        highlightDocument: { id: "offer-1", type: "offer" },
+      },
+    });
+
+    const row = await screen.findByRole("row", { name: /ANG-0154.*Fabian.*Heimlich.*Beispiel GmbH/i });
+    expect(row).toHaveClass("document-created-highlight");
+    expect(row).toHaveAttribute("data-document-key", "offer-offer-1");
+  });
 });
