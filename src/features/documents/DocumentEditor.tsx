@@ -186,6 +186,7 @@ export function DocumentEditor({
     isInvoice,
   ]);
   const displayClient = isInvoice ? invoiceSnapshotClient : selectedClient;
+  const requestedClientId = new URLSearchParams(location.search).get("clientId");
 
   const handleClientChange = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
@@ -205,6 +206,19 @@ export function DocumentEditor({
     const snapshot = client ? buildSnapshotFromClient(client) : buildSnapshotFromClient();
     setFormData((prev) => ({ ...prev, clientId, ...snapshot, ...customerDefaults }));
   };
+
+  useEffect(() => {
+    if (
+      !useCreateComposer ||
+      formData.clientId ||
+      !requestedClientId ||
+      !clients.some((client) => client.id === requestedClientId)
+    ) {
+      return;
+    }
+
+    handleClientChange(requestedClientId);
+  }, [clients, formData.clientId, requestedClientId, useCreateComposer]);
   const { defaultSubject, defaultMessage } = useMemo(
     () => buildTemplateDefaults(formData),
     [

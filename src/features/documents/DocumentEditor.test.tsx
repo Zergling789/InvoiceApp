@@ -101,6 +101,29 @@ describe("DocumentEditor send email status", () => {
     saveOfferMock.mockResolvedValue(undefined);
   });
 
+  it.each(["offer", "invoice"] as const)(
+    "selects a newly created customer when returning to the %s wizard",
+    async (type) => {
+      renderWithProviders(
+        <DocumentEditor
+          type={type}
+          seed={type === "offer" ? { ...seed, validUntil: "2025-01-15" } : seed}
+          settings={settings}
+          clients={clients}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+          useCreateComposer
+        />,
+        { route: `/app/${type === "offer" ? "offers" : "invoices"}/new?step=kunde&clientId=client-1` },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Kunde auswählen")).toHaveValue("client-1");
+      });
+      expect(screen.getAllByText("Client AG").length).toBeGreaterThan(1);
+    },
+  );
+
   it("appends an accepted AI draft and preserves existing content", async () => {
     createAiDocumentDraftMock.mockResolvedValue({
       positions: [

@@ -27,6 +27,7 @@ export default function CustomerCreatePage() {
   const [isDirty, setIsDirty] = useState(false);
   const [scanOpen, setScanOpen] = useState(() => Boolean((location.state as { scanBusinessCard?: boolean } | null)?.scanBusinessCard));
   const refreshTokenRef = useRef<number | null>(null);
+  const createdClientIdRef = useRef<string | null>(null);
 
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
@@ -54,7 +55,11 @@ export default function CustomerCreatePage() {
     }
 
     if (returnUrl) {
-      navigate(returnUrl, { replace: true, state: buildState(undefined) });
+      const target = new URL(returnUrl, window.location.origin);
+      if (createdClientIdRef.current) {
+        target.searchParams.set("clientId", createdClientIdRef.current);
+      }
+      navigate(`${target.pathname}${target.search}${target.hash}`, { replace: true, state: buildState(undefined) });
       return;
     }
 
@@ -86,6 +91,7 @@ export default function CustomerCreatePage() {
         notes: draft.notes ?? "",
       });
       setIsDirty(false);
+      createdClientIdRef.current = draft.id;
       refreshTokenRef.current = Date.now();
       handleClose({ skipConfirm: true });
     } catch (e) {
