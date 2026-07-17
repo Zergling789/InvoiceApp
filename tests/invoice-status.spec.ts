@@ -144,7 +144,7 @@ test.describe.serial("invoice status transitions", () => {
     }
 
     await expect(invoiceHeading).toBeVisible();
-    await page.getByRole("button", { name: "Finalisieren", exact: true }).click();
+    await page.getByRole("button", { name: "Rechnung finalisieren", exact: true }).click();
     await expect(page.getByText(/ausschließlich einfache inländische B2B-Rechnungen/)).toBeVisible();
 
     const confirmButton = page.getByRole("button", { name: "Bestaetigen" });
@@ -164,7 +164,7 @@ test.describe.serial("invoice status transitions", () => {
     }).toEqual({ status: "ISSUED", is_locked: true });
 
     await expect(page.getByText("Offen", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Finalisieren", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Rechnung finalisieren", exact: true })).toHaveCount(0);
   });
 
   test("issued -> mark sent -> sent_at set", async ({ request }) => {

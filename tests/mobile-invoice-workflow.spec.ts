@@ -107,7 +107,7 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
 
     await expect(page.getByRole("heading", { name: "Entwurf", exact: true })).toBeVisible();
     await expectNoPageOverflow(page);
-    await page.getByRole("button", { name: "Finalisieren", exact: true }).click();
+    await page.getByRole("button", { name: "Rechnung finalisieren", exact: true }).click();
     const acknowledgement = page.getByRole("checkbox", { name: /Hinweis gelesen/ });
     await expect(acknowledgement).toBeVisible();
     await acknowledgement.check();
@@ -124,6 +124,6 @@ test.describe.serial("mobiler Rechnungsworkflow", () => {
     }).toEqual({ status: "ISSUED", is_locked: true });
 
     await expect(page.getByText("Offen", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Finalisieren", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Rechnung finalisieren", exact: true })).toHaveCount(0);
   });
 });
