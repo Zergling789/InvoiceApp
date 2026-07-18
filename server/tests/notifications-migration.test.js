@@ -66,6 +66,25 @@ test("read state can move forward once but cannot be reset", async () => {
   assert.match(sql, /before update on public\.notifications/);
 });
 
+test("notification texts remain valid UTF-8 and repair previously corrupted rows", async () => {
+  const encodingUrl = new URL(
+    "../../supabase/migrations/20260718172919_fix_notification_utf8_encoding.sql",
+    import.meta.url,
+  );
+  const sql = await readFile(encodingUrl, "utf8");
+
+  assert.match(sql, /Angebot geöffnet/);
+  assert.match(sql, /Rechnung geöffnet/);
+  assert.match(sql, /wurde vom Kunden geöffnet\./);
+  assert.match(sql, /drop trigger if exists notifications_guard_read_transition/);
+  assert.match(sql, /create trigger notifications_guard_read_transition/);
+  assert.match(sql, /where type in \('offer_viewed', 'invoice_viewed'\)/);
+  assert.doesNotMatch(
+    sql.replaceAll("geÃ¶ffnet", ""),
+    /Ã|Â/,
+  );
+});
+
 test("the public recipient route records the first view without logging document identifiers", async () => {
   const source = await readFile(serverUrl, "utf8");
   assert.match(source, /rpc\(\s*"record_recipient_document_view"/);
