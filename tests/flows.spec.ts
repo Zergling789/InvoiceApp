@@ -96,24 +96,25 @@ test.describe.serial("value stream: offer -> invoice", () => {
 
     await page.getByRole("button", { name: "Angebot erstellen", exact: true }).first().click();
 
-    await expect(page.getByRole("heading", { name: "Neues Angebot" })).toBeVisible();
-    await page.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
-    await expect(page.getByRole("button", { name: /2 Dokumentdaten/ })).toBeEnabled();
-    await page.getByRole("button", { name: "Weiter zu Dokumentdaten" }).click();
+    const offerEditor = page.getByRole("dialog", { name: "Neues Angebot" });
+    await expect(offerEditor).toBeVisible();
+    await offerEditor.getByLabel("Kunde auswählen").selectOption({ label: client.companyName });
+    await expect(offerEditor.getByRole("button", { name: /2 Dokumentdaten/ })).toBeEnabled();
+    await offerEditor.getByRole("button", { name: "Weiter zu Dokumentdaten" }).click();
 
     await expect(page).toHaveURL(/step=dokument/);
-    await expect(page.getByLabel("Angebotsnummer")).toBeVisible();
-    const offerNumber = await page.getByLabel("Angebotsnummer").inputValue();
-    await page.getByRole("button", { name: "Weiter zu Positionen" }).click();
-    await page.getByRole("button", { name: "Position hinzufügen" }).click();
-    await page.getByLabel("Beschreibung 1").fill("Beratung");
-    await page.getByLabel("Menge 1").fill("1");
-    await page.getByLabel("Einheit 1").fill("Stk");
-    await page.getByLabel("Preis 1").fill("100");
+    await expect(offerEditor.getByLabel("Angebotsnummer")).toBeVisible();
+    const offerNumber = await offerEditor.getByLabel("Angebotsnummer").inputValue();
+    await offerEditor.getByRole("button", { name: "Weiter zu Positionen" }).click();
+    await offerEditor.getByRole("button", { name: "Position hinzufügen" }).click();
+    await offerEditor.getByLabel("Beschreibung 1").fill("Beratung");
+    await offerEditor.getByLabel("Menge 1").fill("1");
+    await offerEditor.getByLabel("Einheit 1").fill("Stk");
+    await offerEditor.getByLabel("Preis 1").fill("100");
 
-    await page.getByRole("button", { name: "Weiter zu Texte und Optionen" }).click();
-    await page.getByRole("button", { name: "Weiter zur Vorschau" }).click();
-    await page.getByRole("button", { name: "Angebot erstellen", exact: true }).click();
+    await offerEditor.getByRole("button", { name: "Weiter zu Texte und Optionen" }).click();
+    await offerEditor.getByRole("button", { name: "Weiter zur Vorschau" }).click();
+    await offerEditor.getByRole("button", { name: "Angebot erstellen", exact: true }).click();
 
     const offerRow = page.getByRole("row").filter({ hasText: offerNumber });
     await expect(offerRow).toBeVisible();
