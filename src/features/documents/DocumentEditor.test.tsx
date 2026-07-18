@@ -165,7 +165,7 @@ describe("DocumentEditor send email status", () => {
 
     await user.click(screen.getByRole("button", { name: /mit ki erstellen/i }));
     await user.type(
-      screen.getByLabelText(/leistungen beschreiben/i),
+      await screen.findByLabelText(/leistungen beschreiben/i),
       "Hosting für zwölf Monate",
     );
     await user.click(
@@ -523,7 +523,7 @@ describe("DocumentEditor send email status", () => {
       screen.getByRole("button", { name: /per e-mail senden/i }),
     );
     await user.type(
-      screen.getByPlaceholderText("to@example.com"),
+      await screen.findByPlaceholderText("to@example.com"),
       "client@example.com",
     );
     await user.click(screen.getByRole("button", { name: /^senden$/i }));
@@ -565,7 +565,7 @@ describe("DocumentEditor send email status", () => {
       screen.getByRole("button", { name: /per e-mail senden/i }),
     );
     await user.type(
-      screen.getByPlaceholderText("to@example.com"),
+      await screen.findByPlaceholderText("to@example.com"),
       "client@example.com",
     );
     await user.click(screen.getByRole("button", { name: /^senden$/i }));
@@ -635,7 +635,7 @@ describe("DocumentEditor send email status", () => {
       screen.getByRole("button", { name: /per e-mail senden/i }),
     );
     await user.type(
-      screen.getByPlaceholderText("to@example.com"),
+      await screen.findByPlaceholderText("to@example.com"),
       "client@example.com",
     );
     await user.click(screen.getByRole("button", { name: /^senden$/i }));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import type { Client, Invoice, Offer, UserSettings } from "@/types";
@@ -16,7 +16,7 @@ import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
-import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { DeferredDialogFallback } from "@/components/DeferredDialogFallback";
 import { formatErrorToast } from "@/utils/errorMapping";
 import {
   INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
@@ -33,6 +33,12 @@ import {
   formatOfferPhaseLabel,
 } from "@/features/documents/state/formatPhaseLabel";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
+
+const SendDocumentModal = lazy(() =>
+  import("@/features/documents/SendDocumentModal").then((module) => ({
+    default: module.SendDocumentModal,
+  })),
+);
 
 type DashboardData = {
   clients: Client[];
@@ -403,33 +409,35 @@ export default function TodosPage() {
   return (
     <div className="space-y-6">
       {sendOpen && selectedDoc && selectedType && settings && (
-        <SendDocumentModal
-          isOpen={sendOpen}
-          onClose={() => setSendOpen(false)}
-          documentType={selectedType}
-          document={selectedDoc}
-          client={data.clients.find((entry) => entry.id === selectedDoc.clientId)}
-          settings={settings}
-          defaultSubject={getDefaultSubject(selectedType, selectedDoc.number ?? "")}
-          defaultMessage={getDefaultMessage()}
-          templateType={sendIntent ?? undefined}
-          onFinalize={selectedType === "invoice" ? handleFinalizeInvoice : undefined}
-          onSent={async (nextData) => {
-            if (selectedType === "invoice") {
-              const invoice = nextData as Invoice;
-              setData((prev) => ({
-                ...prev,
-                invoices: prev.invoices.map((entry) => (entry.id === invoice.id ? invoice : entry)),
-              }));
-            } else {
-              const offer = nextData as Offer;
-              setData((prev) => ({
-                ...prev,
-                offers: prev.offers.map((entry) => (entry.id === offer.id ? offer : entry)),
-              }));
-            }
-          }}
-        />
+        <Suspense fallback={<DeferredDialogFallback label="Versand wird vorbereitet …" />}>
+          <SendDocumentModal
+            isOpen
+            onClose={() => setSendOpen(false)}
+            documentType={selectedType}
+            document={selectedDoc}
+            client={data.clients.find((entry) => entry.id === selectedDoc.clientId)}
+            settings={settings}
+            defaultSubject={getDefaultSubject(selectedType, selectedDoc.number ?? "")}
+            defaultMessage={getDefaultMessage()}
+            templateType={sendIntent ?? undefined}
+            onFinalize={selectedType === "invoice" ? handleFinalizeInvoice : undefined}
+            onSent={async (nextData) => {
+              if (selectedType === "invoice") {
+                const invoice = nextData as Invoice;
+                setData((prev) => ({
+                  ...prev,
+                  invoices: prev.invoices.map((entry) => (entry.id === invoice.id ? invoice : entry)),
+                }));
+              } else {
+                const offer = nextData as Offer;
+                setData((prev) => ({
+                  ...prev,
+                  offers: prev.offers.map((entry) => (entry.id === offer.id ? offer : entry)),
+                }));
+              }
+            }}
+          />
+        </Suspense>
       )}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-gray-900">To-dos</h1>

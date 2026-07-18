@@ -93,6 +93,10 @@ Abschlusskriterium: Alle Routen laufen, Settings bearbeitbar, Angebote/Rechnunge
 2. ✅ **Stabile Browser-Caches:** React, Supabase und die verwendeten Icons liegen in getrennten Vendor-Chunks. Unveränderte Bibliotheken können dadurch über neue App-Releases hinweg im Browser-Cache bleiben.
 3. ✅ **Bundle-Regressionen blockieren:** Der Produktionsbuild erzeugt ein Vite-Manifest und prüft feste Budgets für initiales JavaScript, CSS und den größten Einzel-Chunk. Ein Überschreiten lässt den Build und damit CI fehlschlagen.
 4. ✅ **Dokumentübersicht schlanker laden:** Statt vollständiger Kundenakten mit rund 40 Feldern lädt die Dokumentübersicht nur ID, Firma sowie Vor- und Nachname beziehungsweise Kontaktperson. RLS und der Eigentümerfilter bleiben unverändert aktiv.
-5. ⏳ **Als Nächstes:** Große Komponenten weiter zerlegen, Renderprofile für Dokumenteditor und -liste erfassen und Listenabfragen bei wachsendem Datenbestand paginieren.
+5. ✅ **Dokumentlisten ruhig halten:** Tabellen- und Mobilzeilen liegen in einer memoisierten Ergebniskomponente. Sucheingaben und geöffnete Filtermenüs bauen eine unveränderte Dokumentliste dadurch nicht mehr vollständig neu auf.
+6. ✅ **Seltene Editorfunktionen nachladen:** Versand, KI-Entwurf und Paketauswahl werden erst beim Öffnen geladen. Der Editor-Transfer sinkt dadurch um rund 15 Prozent, die Dokumentdetailseite um rund 12 Prozent.
+7. ✅ **Doppelte Berechnungen entfernen:** Der Dokumenteditor berechnet Summen und Steuergruppen in einem gemeinsamen Durchlauf statt zweimal pro Positionsänderung.
+8. ✅ **Routenbudgets ergänzen:** CI begrenzt neben dem initialen Bundle nun auch die Übertragungsgröße der Dokumentübersicht, Dokumentdetailseite und Rechnungserstellung.
+9. ⏳ **Als Nächstes:** Listenabfragen bei wachsendem Datenbestand serverseitig paginieren und die großen Einstellungs- und Editorbereiche anhand realer Nutzungsprofile weiter aufteilen.
 
-**Phase 8 begonnen:** Der erste messbare Meilenstein reduziert das initiale JavaScript von rund 243 kB auf rund 148 kB gzip (etwa 39 Prozent) und schützt diese Verbesserung durch CI-Budgets. Die tiefergehende Render- und Datenbankoptimierung bleibt offen.
+**Phase 8 fortgeführt:** Das initiale JavaScript bleibt rund 39 Prozent kleiner. Zusätzlich sinkt der JavaScript-Transfer der Rechnungserstellung von rund 44,3 KiB auf 37,6 KiB gzip und der Dokumentdetailseite von 28,4 KiB auf 24,9 KiB gzip. Die serverseitige Pagination bleibt offen.

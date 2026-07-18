@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, ListFilter, Plus } from "lucide-react";
 
 import type { Invoice, Offer, UserSettings } from "@/types";
-import { formatDate } from "@/types";
 import { calculateDocumentTotal } from "@/utils/dashboard";
 import { formatMoney } from "@/utils/money";
 import type { CreatedDocumentTarget, DocumentRefreshState } from "@/features/documents/createdDocumentNavigation";
-import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import * as clientService from "@/app/clients/clientService";
@@ -27,29 +25,11 @@ import { fetchSettings } from "@/app/settings/settingsService";
 import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
 import { getClientDisplayName, getClientPersonName, type ClientSummary } from "@/domain/models/Client";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
+import { DocumentResults, type DocumentRow } from "@/features/documents/DocumentResults";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
 const URL_STATUSES = new Set<CombinedStatus>(["draft", "issued", "sent", "overdue", "paid", "canceled", "accepted", "rejected", "invoiced"]);
-
-type DocumentRow = {
-  id: string;
-  type: "offer" | "invoice";
-  number: string;
-  clientName: string;
-  firstName: string;
-  lastName: string;
-  companyName: string;
-  date: string;
-  createdAt?: string;
-  amountLabel: string;
-  statusLabel: string;
-  statusTone: "gray" | "blue" | "green" | "red" | "yellow";
-  statusKey: CombinedStatus;
-  dueDate?: string;
-  validUntil?: string;
-  isOverdue?: boolean;
-};
 
 const splitPersonName = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -379,14 +359,14 @@ export default function DocumentsHubPage() {
     );
   };
 
-  const openDocument = (row: DocumentRow) => {
+  const openDocument = useCallback((row: DocumentRow) => {
     navigate(`/app/${row.type === "invoice" ? "invoices" : "offers"}/${row.id}`, {
       state: {
         backgroundLocation: location,
         returnTo: `${location.pathname}${location.search}`,
       },
     });
-  };
+  }, [location, navigate]);
 
   const openNewEditor = (type: "invoice" | "offer") => {
     const target = type === "offer" ? "/app/offers/new" : "/app/invoices/new";
@@ -587,105 +567,11 @@ export default function DocumentsHubPage() {
           <div className="text-sm text-gray-500">Keine Dokumente gefunden.</div>
         </AppCard>
       ) : (
-        <div>
-          <div className="hidden overflow-x-auto rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-solid)] md:block">
-            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
-              <thead className="border-b border-[var(--app-border)] bg-black/[0.025] text-xs uppercase tracking-wide text-[var(--app-muted)] dark:bg-white/[0.04]">
-                <tr>
-                  <th className="w-[17%] px-4 py-3 font-semibold">Dokument</th>
-                  <th className="w-[13%] px-4 py-3 font-semibold">Vorname</th>
-                  <th className="w-[13%] px-4 py-3 font-semibold">Nachname</th>
-                  <th className="w-[16%] px-4 py-3 font-semibold">Firma</th>
-                  <th className="w-[18%] px-4 py-3 font-semibold">Datum / Frist</th>
-                  <th className="w-[12%] px-4 py-3 text-right font-semibold">Betrag</th>
-                  <th className="w-[11%] px-4 py-3 text-right font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--app-border)]">
-                {filteredRows.map((row) => {
-                  const deadline = row.type === "invoice" ? row.dueDate : row.validUntil;
-                  return (
-                    <tr
-                      key={`${row.type}-${row.id}`}
-                      data-document-key={`${row.type}-${row.id}`}
-                      tabIndex={0}
-                      onClick={() => openDocument(row)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          openDocument(row);
-                        }
-                      }}
-                      className={`cursor-pointer transition-colors hover:bg-[var(--app-primary)]/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--app-primary)] ${row.isOverdue ? "bg-red-500/[0.06]" : ""} ${highlightedDocument?.id === row.id && highlightedDocument.type === row.type ? "document-created-highlight" : ""}`}
-                    >
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-[var(--app-text)]">{row.number}</div>
-                        <div className="mt-1 text-xs text-[var(--app-muted)]">
-                          {row.type === "invoice" ? "Rechnung" : "Angebot"}
-                        </div>
-                      </td>
-                      <td className="truncate px-4 py-4" title={row.firstName || undefined}>{row.firstName || "–"}</td>
-                      <td className="truncate px-4 py-4" title={row.lastName || undefined}>{row.lastName || "–"}</td>
-                      <td className="truncate px-4 py-4" title={row.companyName || undefined}>{row.companyName || "–"}</td>
-                      <td className="px-4 py-4">
-                        <div>{formatDate(row.date, "de-DE")}</div>
-                        {deadline && (
-                          <div className={`mt-1 text-xs ${row.isOverdue ? "font-medium text-red-600" : "text-[var(--app-muted)]"}`}>
-                            {row.type === "invoice" ? "Fällig" : "Gültig bis"}: {formatDate(deadline, "de-DE")}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-right font-semibold tabular-nums">{row.amountLabel}</td>
-                      <td className="px-4 py-4 text-right"><AppBadge color={row.statusTone}>{row.statusLabel}</AppBadge></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="space-y-3 md:hidden">
-          {filteredRows.map((row) => (
-            <button
-              key={`${row.type}-${row.id}`}
-              data-document-key={`${row.type}-${row.id}`}
-              type="button"
-              className={`w-full rounded-2xl text-left ${highlightedDocument?.id === row.id && highlightedDocument.type === row.type ? "document-created-highlight" : ""}`}
-              onClick={() => openDocument(row)}
-            >
-              <AppCard
-                className={[
-                  "flex flex-col gap-3 transition hover:border-[var(--app-primary)]/40 hover:bg-[var(--app-primary)]/[0.04]",
-                  row.isOverdue ? "border-red-200 bg-red-50/40" : "",
-                ].join(" ")}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm text-gray-500">
-                      {row.type === "invoice" ? "Rechnung" : "Angebot"} {row.number}
-                    </div>
-                    <div className="text-base font-semibold text-gray-900">{row.clientName}</div>
-                  </div>
-                  <AppBadge color={row.statusTone}>{row.statusLabel}</AppBadge>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                  <span>{formatDate(row.date, "de-DE")}</span>
-                  {row.type === "invoice" && row.dueDate && (
-                    <>
-                      <span>•</span>
-                      <span className={row.isOverdue ? "text-red-600 font-medium" : ""}>
-                        Fällig: {formatDate(row.dueDate, "de-DE")}
-                      </span>
-                    </>
-                  )}
-                  <span>•</span>
-                  <span>{row.amountLabel}</span>
-                </div>
-              </AppCard>
-            </button>
-          ))}
-          </div>
-        </div>
+        <DocumentResults
+          rows={filteredRows}
+          highlightedDocument={highlightedDocument}
+          onOpen={openDocument}
+        />
       )}
 
       <div className="mobile-fab sm:hidden">

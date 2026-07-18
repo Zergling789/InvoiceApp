@@ -10,6 +10,11 @@ const budgets = {
   initialJavaScriptGzip: 170 * KIB,
   initialCssGzip: 15 * KIB,
   singleJavaScriptChunk: 300 * KIB,
+  routes: {
+    "src/features/documents/DocumentsHubPage.tsx": 20 * KIB,
+    "src/features/documents/DocumentDetailRoute.tsx": 28 * KIB,
+    "src/features/documents/create/InvoiceCreatePage.tsx": 42 * KIB,
+  },
 };
 
 const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
@@ -19,14 +24,14 @@ if (!entry) {
   throw new Error("Bundle-Budget konnte keinen Einstiegspunkt im Vite-Manifest finden.");
 }
 
-const initialChunkKeys = new Set();
-const collectStaticImports = (key) => {
-  if (initialChunkKeys.has(key)) return;
-  initialChunkKeys.add(key);
+const collectStaticImports = (key, chunkKeys = new Set()) => {
+  if (chunkKeys.has(key)) return chunkKeys;
+  chunkKeys.add(key);
   const chunk = manifest[key];
-  for (const importedKey of chunk?.imports ?? []) collectStaticImports(importedKey);
+  for (const importedKey of chunk?.imports ?? []) collectStaticImports(importedKey, chunkKeys);
+  return chunkKeys;
 };
-collectStaticImports(entry[0]);
+const initialChunkKeys = collectStaticImports(entry[0]);
 
 const initialJavaScriptFiles = new Set();
 const initialCssFiles = new Set();
@@ -39,6 +44,24 @@ for (const key of initialChunkKeys) {
 const gzipSize = (relativePath) => gzipSync(readFileSync(resolve(DIST_DIR, relativePath))).byteLength;
 const initialJavaScriptGzip = [...initialJavaScriptFiles].reduce((total, file) => total + gzipSize(file), 0);
 const initialCssGzip = [...initialCssFiles].reduce((total, file) => total + gzipSize(file), 0);
+const routeJavaScriptGzip = Object.fromEntries(
+  Object.keys(budgets.routes).map((routeKey) => {
+    if (!manifest[routeKey]) {
+      throw new Error(`Bundle-Budget konnte die Route ${routeKey} nicht im Vite-Manifest finden.`);
+    }
+    const routeChunkKeys = collectStaticImports(routeKey);
+    const routeFiles = new Set(
+      [...routeChunkKeys]
+        .filter((key) => !initialChunkKeys.has(key))
+        .map((key) => manifest[key]?.file)
+        .filter((file) => file?.endsWith(".js")),
+    );
+    return [
+      routeKey,
+      [...routeFiles].reduce((total, file) => total + gzipSize(file), 0),
+    ];
+  }),
+);
 
 const javascriptChunks = Object.values(manifest)
   .map((chunk) => chunk.file)
@@ -55,6 +78,9 @@ const formatKib = (bytes) => `${(bytes / KIB).toFixed(1)} KiB`;
 console.log(`Initiales JavaScript (gzip): ${formatKib(initialJavaScriptGzip)} / ${formatKib(budgets.initialJavaScriptGzip)}`);
 console.log(`Initiales CSS (gzip): ${formatKib(initialCssGzip)} / ${formatKib(budgets.initialCssGzip)}`);
 console.log(`Groesster JavaScript-Chunk: ${largestJavaScriptChunk.file} (${formatKib(largestJavaScriptChunk.bytes)}) / ${formatKib(budgets.singleJavaScriptChunk)}`);
+for (const [routeKey, gzipBytes] of Object.entries(routeJavaScriptGzip)) {
+  console.log(`Route ${routeKey} (gzip): ${formatKib(gzipBytes)} / ${formatKib(budgets.routes[routeKey])}`);
+}
 
 const violations = [];
 if (initialJavaScriptGzip > budgets.initialJavaScriptGzip) {
@@ -65,6 +91,11 @@ if (initialCssGzip > budgets.initialCssGzip) {
 }
 if (largestJavaScriptChunk.bytes > budgets.singleJavaScriptChunk) {
   violations.push(`Der Chunk ${largestJavaScriptChunk.file} ueberschreitet das Groessenbudget.`);
+}
+for (const [routeKey, gzipBytes] of Object.entries(routeJavaScriptGzip)) {
+  if (gzipBytes > budgets.routes[routeKey]) {
+    violations.push(`Die Route ${routeKey} ueberschreitet ihr gzip-Budget.`);
+  }
 }
 
 if (violations.length > 0) {

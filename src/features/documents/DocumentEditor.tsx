@@ -1,5 +1,5 @@
 // src/features/documents/DocumentEditor.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { X, Trash2, Plus, FileDown, Mail, ArrowLeft, Settings, Sparkles, Layers3 } from "lucide-react";
 
@@ -13,7 +13,7 @@ import BottomActionBar, { type MenuAction } from "@/components/BottomActionBar";
 import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
-import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { DeferredDialogFallback } from "@/components/DeferredDialogFallback";
 import { formatErrorToast } from "@/utils/errorMapping";
 import {
   INVOICE_FINALIZATION_ACKNOWLEDGEMENT,
@@ -44,13 +44,27 @@ import {
   type DocumentFormData as FormData,
   type EditorSeed,
 } from "@/features/documents/documentEditorModel";
-import { AiDocumentDraftDialog } from "@/features/documents/AiDocumentDraftDialog";
 import type { AiDocumentDraft } from "@/app/ai/aiService";
 import { DocumentCreateComposer } from "@/features/documents/DocumentCreateComposer";
 import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
 import type { PositionSuggestion } from "@/app/positions/positionSuggestionService";
-import { PositionGroupDialog } from "@/features/documents/PositionGroupDialog";
 import { normalizeDocumentCountry } from "@/domain/rules/marketScope";
+
+const SendDocumentModal = lazy(() =>
+  import("@/features/documents/SendDocumentModal").then((module) => ({
+    default: module.SendDocumentModal,
+  })),
+);
+const AiDocumentDraftDialog = lazy(() =>
+  import("@/features/documents/AiDocumentDraftDialog").then((module) => ({
+    default: module.AiDocumentDraftDialog,
+  })),
+);
+const PositionGroupDialog = lazy(() =>
+  import("@/features/documents/PositionGroupDialog").then((module) => ({
+    default: module.PositionGroupDialog,
+  })),
+);
 
 export type { EditorSeed } from "@/features/documents/documentEditorModel";
 
@@ -311,13 +325,22 @@ export function DocumentEditor({
     toast.success("Paket übernommen.");
   };
 
-  const totals = useMemo(() => {
-    const result = calculateDocumentTotals(formData.positions ?? [], toNumberOrZero(formData.vatRate), isSmallBusiness);
-    return { subtotal: result.netTotal, tax: result.taxTotal, total: result.grossTotal };
-  }, [formData.positions, formData.vatRate, isSmallBusiness]);
-
-  const taxGroups = useMemo(() => {
-    return calculateDocumentTotals(formData.positions ?? [], toNumberOrZero(formData.vatRate), isSmallBusiness).taxGroups.map((group) => ({ category: group.taxCategory, rate: group.taxRate, net: group.netAmount, tax: group.taxAmount, reason: group.taxExemptionReason ?? "" }));
+  const { totals, taxGroups } = useMemo(() => {
+    const result = calculateDocumentTotals(
+      formData.positions ?? [],
+      toNumberOrZero(formData.vatRate),
+      isSmallBusiness,
+    );
+    return {
+      totals: { subtotal: result.netTotal, tax: result.taxTotal, total: result.grossTotal },
+      taxGroups: result.taxGroups.map((group) => ({
+        category: group.taxCategory,
+        rate: group.taxRate,
+        net: group.netAmount,
+        tax: group.taxAmount,
+        reason: group.taxExemptionReason ?? "",
+      })),
+    };
   }, [formData.positions, formData.vatRate, isSmallBusiness]);
 
   useEffect(() => {
@@ -695,22 +718,44 @@ export function DocumentEditor({
     });
   };
 
-  const sendModal = (
-    <SendDocumentModal
-      isOpen={showSendModal}
-      onClose={() => setShowSendModal(false)}
-      documentType={isInvoice ? "invoice" : "offer"}
-      document={formData as any}
-      client={displayClient}
-      settings={settings}
-      defaultSubject={defaultSubject}
-      defaultMessage={defaultMessage}
-      onFinalize={isInvoice ? handleFinalizeInvoice : undefined}
-      onSent={async () => {
-        await handleSendSuccess();
-      }}
-    />
-  );
+  const sendModal = showSendModal ? (
+    <Suspense fallback={<DeferredDialogFallback label="Versand wird vorbereitet …" />}>
+      <SendDocumentModal
+        isOpen
+        onClose={() => setShowSendModal(false)}
+        documentType={isInvoice ? "invoice" : "offer"}
+        document={formData as any}
+        client={displayClient}
+        settings={settings}
+        defaultSubject={defaultSubject}
+        defaultMessage={defaultMessage}
+        onFinalize={isInvoice ? handleFinalizeInvoice : undefined}
+        onSent={async () => {
+          await handleSendSuccess();
+        }}
+      />
+    </Suspense>
+  ) : null;
+  const aiDraftDialog = showAiDraftDialog ? (
+    <Suspense fallback={<DeferredDialogFallback label="KI-Entwurf wird geladen …" />}>
+      <AiDocumentDraftDialog
+        documentType={type}
+        currency={documentCurrency}
+        vatRate={toNumberOrZero(formData.vatRate)}
+        customerId={formData.clientId}
+        onApply={applyAiDraft}
+        onClose={() => setShowAiDraftDialog(false)}
+      />
+    </Suspense>
+  ) : null;
+  const positionGroupDialog = showPositionGroups ? (
+    <Suspense fallback={<DeferredDialogFallback label="Pakete werden geladen …" />}>
+      <PositionGroupDialog
+        onApply={applyPositionGroup}
+        onClose={() => setShowPositionGroups(false)}
+      />
+    </Suspense>
+  ) : null;
 
   // ---------- Print Overlay ----------
   if (showPrint) {
@@ -999,17 +1044,8 @@ export function DocumentEditor({
           onCancel={() => onClose()}
           onSave={() => void handleSave({ closeAfterSave: true })}
         />
-        {showAiDraftDialog && (
-          <AiDocumentDraftDialog
-            documentType={type}
-            currency={documentCurrency}
-            vatRate={toNumberOrZero(formData.vatRate)}
-            customerId={formData.clientId}
-            onApply={applyAiDraft}
-            onClose={() => setShowAiDraftDialog(false)}
-          />
-        )}
-        {showPositionGroups && <PositionGroupDialog onApply={applyPositionGroup} onClose={() => setShowPositionGroups(false)} />}
+        {aiDraftDialog}
+        {positionGroupDialog}
       </>
     );
   }
@@ -1385,16 +1421,7 @@ export function DocumentEditor({
               </AppButton>
             </div>
 
-            {showAiDraftDialog && (
-              <AiDocumentDraftDialog
-                documentType={type}
-                currency={documentCurrency}
-                vatRate={toNumberOrZero(formData.vatRate)}
-                customerId={formData.clientId}
-                onApply={applyAiDraft}
-                onClose={() => setShowAiDraftDialog(false)}
-              />
-            )}
+            {aiDraftDialog}
           </>
         ) : (
           <>
@@ -1937,17 +1964,8 @@ export function DocumentEditor({
               )}
             </div>
 
-        {showAiDraftDialog && (
-          <AiDocumentDraftDialog
-            documentType={type}
-            currency={documentCurrency}
-            vatRate={toNumberOrZero(formData.vatRate)}
-            customerId={formData.clientId}
-            onApply={applyAiDraft}
-            onClose={() => setShowAiDraftDialog(false)}
-          />
-        )}
-        {showPositionGroups && <PositionGroupDialog onApply={applyPositionGroup} onClose={() => setShowPositionGroups(false)} />}
+        {aiDraftDialog}
+        {positionGroupDialog}
 
         {showActionBar && (
           <BottomActionBar

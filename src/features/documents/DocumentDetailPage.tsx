@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, type Location } from "react-router-dom";
 import { MoreVertical } from "lucide-react";
 
@@ -16,7 +16,7 @@ import {
   INVOICE_FINALIZATION_CONFIRMATION_MESSAGE,
 } from "@/domain/rules/invoiceFinalizationNotice";
 import { fetchSettings } from "@/app/settings/settingsService";
-import { SendDocumentModal } from "@/features/documents/SendDocumentModal";
+import { DeferredDialogFallback } from "@/components/DeferredDialogFallback";
 import { OfferDetailView } from "@/features/documents/OfferDetailView";
 import { InvoiceDetailView } from "@/features/documents/InvoiceDetailView";
 import { supabase } from "@/supabaseClient";
@@ -34,6 +34,12 @@ import {
   getNextDocumentAction,
   getOfferPhase,
 } from "@/features/documents/state/documentState";
+
+const SendDocumentModal = lazy(() =>
+  import("@/features/documents/SendDocumentModal").then((module) => ({
+    default: module.SendDocumentModal,
+  })),
+);
 
 const statusTone = (phase: string) => {
   if (phase === "paid" || phase === "accepted" || phase === "invoiced") return "green";
@@ -761,21 +767,23 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
     return (
       <div className="pb-4">
         {showSendModal && client && (
-          <SendDocumentModal
-            isOpen={showSendModal}
-            onClose={() => {
-              setShowSendModal(false);
-              setSendTemplateType(undefined);
-            }}
-            documentType="offer"
-            document={offer}
-            client={client}
-            settings={settings}
-            defaultSubject={defaultSubject}
-            defaultMessage={defaultMessage}
-            templateType={sendTemplateType}
-            onSent={handleSaved}
-          />
+          <Suspense fallback={<DeferredDialogFallback label="Versand wird vorbereitet …" />}>
+            <SendDocumentModal
+              isOpen
+              onClose={() => {
+                setShowSendModal(false);
+                setSendTemplateType(undefined);
+              }}
+              documentType="offer"
+              document={offer}
+              client={client}
+              settings={settings}
+              defaultSubject={defaultSubject}
+              defaultMessage={defaultMessage}
+              templateType={sendTemplateType}
+              onSent={handleSaved}
+            />
+          </Suspense>
         )}
 
         <OfferDetailView
@@ -810,21 +818,23 @@ export default function DocumentDetailPage({ forcedType, onDocumentsChange }: Do
   return (
     <div className="pb-4">
       {showSendModal && client && (
-        <SendDocumentModal
-          isOpen={showSendModal}
-          onClose={() => {
-            setShowSendModal(false);
-            setSendTemplateType(undefined);
-          }}
-          documentType="invoice"
-          document={invoice}
-          client={client}
-          settings={settings}
-          defaultSubject={defaultSubject}
-          defaultMessage={defaultMessage}
-          templateType={sendTemplateType}
-          onSent={handleSaved}
-        />
+        <Suspense fallback={<DeferredDialogFallback label="Versand wird vorbereitet …" />}>
+          <SendDocumentModal
+            isOpen
+            onClose={() => {
+              setShowSendModal(false);
+              setSendTemplateType(undefined);
+            }}
+            documentType="invoice"
+            document={invoice}
+            client={client}
+            settings={settings}
+            defaultSubject={defaultSubject}
+            defaultMessage={defaultMessage}
+            templateType={sendTemplateType}
+            onSent={handleSaved}
+          />
+        </Suspense>
       )}
 
       <InvoiceDetailView

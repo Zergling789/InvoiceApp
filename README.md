@@ -110,7 +110,7 @@ npm run build
 npm run test:ui
 ```
 
-`npm run build` prüft zusätzlich die festgelegten Bundle-Budgets. Dadurch werden unbeabsichtigte Verschlechterungen der initialen Ladegröße bereits in CI blockiert.
+`npm run build` prüft zusätzlich die festgelegten Bundle-Budgets für den Einstieg und die wichtigsten Dokumentrouten. Dadurch werden unbeabsichtigte Verschlechterungen der Ladegröße bereits in CI blockiert.
 
 ### Aktuell unterstützter Rechnungsumfang
 
