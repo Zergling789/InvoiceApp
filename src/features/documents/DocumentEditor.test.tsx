@@ -15,7 +15,15 @@ const createAiDocumentDraftMock = vi.fn();
 const saveOfferMock = vi.fn();
 
 function LocationSearchProbe() {
-  return <output data-testid="location-search">{useLocation().search}</output>;
+  const location = useLocation();
+  return (
+    <output
+      data-testid="location-search"
+      data-has-background={String(Boolean(location.state?.backgroundLocation))}
+    >
+      {location.search}
+    </output>
+  );
 }
 
 vi.mock("@/app/invoices/invoiceService", () => ({
@@ -266,7 +274,18 @@ describe("DocumentEditor send email status", () => {
         />
         <LocationSearchProbe />
       </>,
-      { route: "/app/offers/new" },
+      {
+        route: "/app/offers/new",
+        routeState: {
+          backgroundLocation: {
+            pathname: "/app/documents",
+            search: "",
+            hash: "",
+            state: null,
+            key: "documents",
+          },
+        },
+      },
     );
 
     expect(screen.getByRole("button", { name: /1 Kunde/ })).toHaveAttribute(
@@ -284,6 +303,10 @@ describe("DocumentEditor send email status", () => {
     await waitFor(() => {
       expect(screen.getByTestId("location-search")).toHaveTextContent("step=dokument");
     });
+    expect(screen.getByTestId("location-search")).toHaveAttribute(
+      "data-has-background",
+      "true",
+    );
     const number = screen.getByLabelText("Angebotsnummer");
     await user.clear(number);
     await user.type(number, "ANG-0099");

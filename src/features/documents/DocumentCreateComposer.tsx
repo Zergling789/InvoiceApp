@@ -153,12 +153,13 @@ export function DocumentCreateComposer({
     if (searchParams.get("step") !== step) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("step", step);
-      setSearchParams(nextParams, { replace: true });
+      setSearchParams(nextParams, { replace: true, state: location.state });
     }
   }, [
     searchParams,
     setSearchParams,
     step,
+    location.state,
     wizardEnabled,
   ]);
 
@@ -168,7 +169,7 @@ export function DocumentCreateComposer({
     setValidationMessage(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("step", nextStep);
-    setSearchParams(nextParams, { replace: true });
+    setSearchParams(nextParams, { replace: true, state: location.state });
     window.requestAnimationFrame(() => {
       const target = document.getElementById(`document-step-${nextStep}`);
       if (typeof target?.scrollIntoView === "function")
