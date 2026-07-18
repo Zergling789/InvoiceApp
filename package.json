@@ -16,6 +16,7 @@
     "preview": "vite preview",
     "test": "playwright test",
     "test:e2e": "playwright test",
+    "test:performance": "playwright test --config=playwright.performance.config.ts",
     "test:server": "node --test server/tests/*.test.js",
     "test:einvoice": "node --test server/tests/canonical-invoice.test.js server/tests/cii-*.test.js",
     "setup:kosit": "node scripts/einvoice/setup-kosit-validator.mjs",

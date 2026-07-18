@@ -44,3 +44,9 @@ Hinweis: Für die E-Mail-Flows ist kein SMTP-Setup nötig, da `/api/email` im Te
 Der Test `authenticated-visual-audit.spec.ts` prüft zusätzlich horizontales Seiten-Scrollen,
 globale Fehleransichten, beschädigte UTF-8-Zeichen, das angewendete Farbschema und die mobile
 Navigation. Lokal wird er ohne die drei dedizierten `E2E_SUPABASE_*`-Werte sicher übersprungen.
+
+`npm run test:performance` baut die Produktionsdateien und öffnet die mobile Rechnungserstellung
+mit deaktiviertem Browsercache unter einer reproduzierbaren 4G-Drosselung. Das Gate begrenzt Zeit
+bis zur bedienbaren Kundenauswahl, LCP, Layoutsprünge, lange Hauptthread-Aufgaben, JavaScript-Bytes,
+Request-Anzahl und die Reaktion des ersten Wizard-Schritts. Der JSON-Messbericht wird in GitHub für
+14 Tage als Artefakt `authenticated-mobile-performance` gespeichert.

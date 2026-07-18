@@ -184,6 +184,16 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Run authenticated mobile performance budget
+        run: npm run test:performance
+      - name: Upload mobile performance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-mobile-performance
+          path: test-results/performance/
+          if-no-files-found: ignore
+          retention-days: 14
 
   ci-summary:
     name: CI status report

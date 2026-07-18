@@ -11,6 +11,13 @@ export default defineConfig(({ mode }) => {
   }
   if (mode === 'development' && missingLegal.length > 0) console.warn(`Legal operator configuration incomplete: ${missingLegal.join(', ')}`);
 
+  const apiProxy = {
+    '/api': {
+      target: env.VITE_API_PROXY ?? 'http://localhost:4000',
+      changeOrigin: true,
+    },
+  };
+
   return {
     plugins: [react()],
     build: {
@@ -37,12 +44,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      proxy: {
-        '/api': {
-          target: env.VITE_API_PROXY ?? 'http://localhost:4000',
-          changeOrigin: true,
-        },
-      },
+      proxy: apiProxy,
+    },
+    preview: {
+      port: 4173,
+      host: '0.0.0.0',
+      proxy: apiProxy,
     },
     test: {
       environment: 'jsdom',

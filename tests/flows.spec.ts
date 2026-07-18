@@ -131,10 +131,10 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await expect(page.getByText("Gesendet", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "Mehr", exact: true }).click();
     await page.getByRole("button", { name: "Als angenommen markieren" }).click();
-    await page.getByRole("button", { name: "Bestaetigen" }).click();
+    await page.getByRole("button", { name: "Bestätigen" }).click();
     await expect(page.getByText("Angenommen", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "Rechnung aus Angebot erstellen" }).click();
-    await page.getByRole("button", { name: "Bestaetigen" }).click();
+    await page.getByRole("button", { name: "Bestätigen" }).click();
     await expect(page).toHaveURL(/\/app\/invoices\//);
 
     const { data: offerData } = await admin

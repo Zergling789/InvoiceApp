@@ -147,7 +147,7 @@ test.describe.serial("invoice status transitions", () => {
     await page.getByRole("button", { name: "Rechnung finalisieren", exact: true }).click();
     await expect(page.getByText(/ausschließlich einfache inländische B2B-Rechnungen/)).toBeVisible();
 
-    const confirmButton = page.getByRole("button", { name: "Bestaetigen" });
+    const confirmButton = page.getByRole("button", { name: "Bestätigen" });
     await expect(confirmButton).toBeDisabled();
     await page.getByRole("checkbox", { name: /Hinweis gelesen/ }).check();
     await expect(confirmButton).toBeEnabled();
