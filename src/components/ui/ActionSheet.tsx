@@ -36,10 +36,10 @@ export function ActionSheet({ isOpen, title, actions, onClose }: ActionSheetProp
         className="absolute inset-0 h-full w-full"
         onClick={onClose}
       />
-      <div className="relative flex max-h-[calc(100%-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl safe-bottom">
+      <div className="relative flex max-h-[calc(100%-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] shadow-2xl safe-bottom">
         {title && (
-          <div className="border-b px-5 py-4">
-            <div className="text-sm font-semibold text-gray-700">{title}</div>
+          <div className="border-b border-[var(--app-border)] px-5 py-4">
+            <div className="text-sm font-semibold">{title}</div>
           </div>
         )}
         <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-5 py-4">

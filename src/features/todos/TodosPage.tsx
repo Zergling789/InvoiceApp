@@ -524,7 +524,7 @@ export default function TodosPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link
-                    to={`/app/offers/${card.id}`}
+                    to={`/app/invoices/${card.id}`}
                     state={{ backgroundLocation: location, returnTo: `${location.pathname}${location.search}` }}
                   >
                     <AppButton>Öffnen</AppButton>
@@ -680,10 +680,10 @@ export default function TodosPage() {
           onPointerDown={() => setFabOpen(false)}
         >
           <div
-            className="w-full rounded-t-2xl bg-white p-6 shadow-xl"
+            className="w-full rounded-t-[var(--app-radius-lg)] border border-[var(--app-border)] bg-[var(--app-surface-solid)] p-6 text-[var(--app-text)] shadow-2xl"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <div className="mb-4 text-sm font-semibold text-gray-700">Schnell erstellen</div>
+            <div className="mb-4 text-sm font-semibold">Schnell erstellen</div>
             <div className="space-y-3">
               <AppButton className="w-full justify-center" onClick={() => void openNewEditor("invoice")}>
                 Neue Rechnung

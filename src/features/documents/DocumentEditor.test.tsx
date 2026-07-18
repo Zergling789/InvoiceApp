@@ -13,6 +13,7 @@ const getInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
 const createAiDocumentDraftMock = vi.fn();
 const saveOfferMock = vi.fn();
+const activityRenderMock = vi.fn();
 
 function LocationSearchProbe() {
   const location = useLocation();
@@ -51,6 +52,13 @@ vi.mock("@/app/pdf/documentPdfService", () => ({
 vi.mock("@/app/ai/aiService", () => ({
   createAiDocumentDraft: (...args: unknown[]) =>
     createAiDocumentDraftMock(...args),
+}));
+
+vi.mock("@/features/documents/ActivityTimeline", () => ({
+  ActivityTimeline: (props: unknown) => {
+    activityRenderMock(props);
+    return <div>Geladener Aktivitätsverlauf</div>;
+  },
 }));
 
 const seed = {
@@ -111,6 +119,7 @@ describe("DocumentEditor send email status", () => {
     sendDocumentEmailMock.mockReset();
     createAiDocumentDraftMock.mockReset();
     saveOfferMock.mockReset();
+    activityRenderMock.mockReset();
     saveOfferMock.mockResolvedValue(undefined);
   });
 
@@ -637,6 +646,33 @@ describe("DocumentEditor send email status", () => {
 
     const numberInput = screen.getByLabelText("Nummer");
     expect(numberInput).toBeDisabled();
+  });
+
+  it("loads the activity timeline only after the activity tab is opened", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DocumentEditor
+        type="offer"
+        seed={seed}
+        settings={settings}
+        clients={clients}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        disableOfferWizard
+        initial={{
+          id: "offer-1",
+          clientId: "client-1",
+          positions: [],
+          status: OfferStatus.DRAFT,
+        }}
+      />,
+      { route: "/app/offers/offer-1" },
+    );
+
+    expect(activityRenderMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Aktivität" }));
+    expect(await screen.findByText("Geladener Aktivitätsverlauf")).toBeVisible();
+    expect(activityRenderMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not send when email is not configured", async () => {

@@ -5,7 +5,7 @@ import { ConfirmProvider, ToastProvider, useConfirm, useToast } from "@/ui/Feedb
 
 function ErrorTrigger() {
   const toast = useToast();
-  return <button onClick={() => toast.error("Finalisierung fehlgeschlagen")}>Fehler ausl?sen</button>;
+  return <button onClick={() => toast.error("Finalisierung fehlgeschlagen")}>Fehler auslösen</button>;
 }
 
 function ConfirmTrigger() {
@@ -31,7 +31,7 @@ describe("ToastProvider", () => {
       </ToastProvider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Fehler ausl?sen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fehler auslösen" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Finalisierung fehlgeschlagen");
     expect(
@@ -49,7 +49,7 @@ describe("ConfirmProvider", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Finalisieren" }));
-    const submit = screen.getByRole("button", { name: "Bestaetigen" });
+    const submit = screen.getByRole("button", { name: "Bestätigen" });
     expect(submit).toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Ich habe geprüft." }));

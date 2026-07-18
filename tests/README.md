@@ -28,6 +28,8 @@ Optional können stattdessen `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE` gesetzt we
 - Erstellen einen Client-Datensatz.
 - Führen die UI-Flows für Angebot/ Rechnung aus.
 - Mocken `/api/email` in Playwright und schreiben die erwarteten `sent_*` Felder direkt in die DB.
+- Prüfen die geschützten Kernseiten auf Desktop und Smartphone im Hell- und Dunkelmodus.
+- Speichern Screenshots des authentifizierten visuellen Qualitätschecks als GitHub-Artefakt für sieben Tage.
 
 ## Ausführen
 
@@ -38,3 +40,7 @@ npm run test:e2e
 Die Suite prüft zusätzlich mit zwei getrennten Benutzern, dass RLS fremdes Lesen, Schreiben und Löschen blockiert. Sie erzeugt und löscht Benutzer und darf deshalb niemals gegen das Produktionsprojekt laufen. Die drei `E2E_SUPABASE_*` Secrets müssen in GitHub auf ein eigenes Testprojekt zeigen. Ohne sie wird der komplette `supabase-e2e`-Job sichtbar übersprungen.
 
 Hinweis: Für die E-Mail-Flows ist kein SMTP-Setup nötig, da `/api/email` im Test gemockt wird.
+
+Der Test `authenticated-visual-audit.spec.ts` prüft zusätzlich horizontales Seiten-Scrollen,
+globale Fehleransichten, beschädigte UTF-8-Zeichen, das angewendete Farbschema und die mobile
+Navigation. Lokal wird er ohne die drei dedizierten `E2E_SUPABASE_*`-Werte sicher übersprungen.

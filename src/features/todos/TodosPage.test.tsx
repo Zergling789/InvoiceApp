@@ -34,4 +34,30 @@ describe("TodosPage loading states", () => {
     await waitFor(() => expect(loadDashboardDataMock).toHaveBeenCalledTimes(2));
     expect(await screen.findByText(/Keine offenen To-dos/)).toBeVisible();
   });
+
+  it("opens an overdue invoice on the invoice route", async () => {
+    loadDashboardDataMock.mockResolvedValue({
+      clients: [{ id: "client-1", companyName: "Musterbetrieb" }],
+      offers: [],
+      invoices: [{
+        id: "invoice-overdue",
+        number: "RE-42",
+        clientId: "client-1",
+        date: "2026-06-01",
+        dueDate: "2026-06-15",
+        positions: [{ id: "position-1", description: "Arbeit", quantity: 1, price: 100, unit: "Std" }],
+        vatRate: 19,
+        status: "SENT",
+        isSmallBusiness: false,
+      }],
+    });
+
+    renderWithProviders(<TodosPage />, { route: "/app/todos" });
+
+    expect(await screen.findByText("Überfällige Rechnungen")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Öffnen" })).toHaveAttribute(
+      "href",
+      "/app/invoices/invoice-overdue",
+    );
+  });
 });

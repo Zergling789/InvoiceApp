@@ -129,7 +129,7 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
     return map;
   }, [clients]);
 
-  const getClientName = (id: string) => clientNameById.get(id) || "Unknown";
+  const getClientName = (id: string) => clientNameById.get(id) || "Unbekannter Kunde";
   const getItemClientName = (item: DocListItem) =>
     isInvoice ? item.clientName?.trim() || getClientName(item.clientId) : getClientName(item.clientId);
 
@@ -608,17 +608,16 @@ export function DocumentsList({ type }: { type: "offer" | "invoice" }) {
                               className="underline"
                               onClick={(event) => event.stopPropagation()}
                             >
-                              Invoice created
-                            </Link>{" "}
-                            <span className="text-gray-400">- {item.invoiceId}</span>
+                              Rechnung erstellt
+                            </Link>
                           </div>
                         )}
 
                         {!isInvoice && (
                           <div className="text-xs text-gray-500">
                             {item.sentCount && item.lastSentAt
-                              ? `Sent ${item.sentCount}x - zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
-                              : "Not sent yet"}
+                              ? `Gesendet: ${item.sentCount}× · zuletzt ${formatDate(item.lastSentAt, settings?.locale)}`
+                              : "Noch nicht gesendet"}
                           </div>
                         )}
                       </div>

@@ -14,7 +14,13 @@ const budgets = {
     "src/features/documents/DocumentsHubPage.tsx": 20 * KIB,
     "src/features/documents/DocumentDetailRoute.tsx": 28 * KIB,
     "src/features/documents/create/InvoiceCreatePage.tsx": 42 * KIB,
+    "src/features/settings/SettingsView.tsx": 12 * KIB,
   },
+};
+const routeRequiredDynamicEntries = {
+  "src/features/documents/create/InvoiceCreatePage.tsx": [
+    "src/features/documents/DocumentCreateComposer.tsx",
+  ],
 };
 
 const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
@@ -50,6 +56,12 @@ const routeJavaScriptGzip = Object.fromEntries(
       throw new Error(`Bundle-Budget konnte die Route ${routeKey} nicht im Vite-Manifest finden.`);
     }
     const routeChunkKeys = collectStaticImports(routeKey);
+    for (const dynamicEntry of routeRequiredDynamicEntries[routeKey] ?? []) {
+      if (!manifest[dynamicEntry]) {
+        throw new Error(`Bundle-Budget konnte den benötigten Teil ${dynamicEntry} nicht im Vite-Manifest finden.`);
+      }
+      collectStaticImports(dynamicEntry, routeChunkKeys);
+    }
     const routeFiles = new Set(
       [...routeChunkKeys]
         .filter((key) => !initialChunkKeys.has(key))

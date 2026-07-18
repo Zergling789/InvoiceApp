@@ -12,7 +12,6 @@ import { AppNumberInput } from "@/ui/AppNumberInput";
 import BottomActionBar, { type MenuAction } from "@/components/BottomActionBar";
 import { Alert } from "@/ui/Alert";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
-import { ActivityTimeline } from "@/features/documents/ActivityTimeline";
 import { DeferredDialogFallback } from "@/components/DeferredDialogFallback";
 import { formatErrorToast } from "@/utils/errorMapping";
 import {
@@ -45,7 +44,6 @@ import {
   type EditorSeed,
 } from "@/features/documents/documentEditorModel";
 import type { AiDocumentDraft } from "@/app/ai/aiService";
-import { DocumentCreateComposer } from "@/features/documents/DocumentCreateComposer";
 import { PositionSuggestionInput } from "@/features/documents/PositionSuggestionInput";
 import type { PositionSuggestion } from "@/app/positions/positionSuggestionService";
 import { normalizeDocumentCountry } from "@/domain/rules/marketScope";
@@ -63,6 +61,16 @@ const AiDocumentDraftDialog = lazy(() =>
 const PositionGroupDialog = lazy(() =>
   import("@/features/documents/PositionGroupDialog").then((module) => ({
     default: module.PositionGroupDialog,
+  })),
+);
+const DocumentCreateComposer = lazy(() =>
+  import("@/features/documents/DocumentCreateComposer").then((module) => ({
+    default: module.DocumentCreateComposer,
+  })),
+);
+const ActivityTimeline = lazy(() =>
+  import("@/features/documents/ActivityTimeline").then((module) => ({
+    default: module.ActivityTimeline,
   })),
 );
 
@@ -1023,27 +1031,35 @@ export function DocumentEditor({
   if (useCreateComposer) {
     return (
       <>
-        <DocumentCreateComposer
-          type={type}
-          data={formData}
-          clients={clients}
-          currency={documentCurrency}
-          locale={locale}
-          totals={totals}
-          disabled={disabled}
-          saving={saving}
-          isEditing={composerEditing}
-          onChange={setFormData}
-          onClientChange={handleClientChange}
-          onAddPosition={addPosition}
-          onUpdatePosition={updatePosition}
-          onRemovePosition={removePosition}
-          onOpenAi={() => setShowAiDraftDialog(true)}
-          onOpenGroups={() => setShowPositionGroups(true)}
-          onPreview={() => setShowPrint(true)}
-          onCancel={() => onClose()}
-          onSave={() => void handleSave({ closeAfterSave: true })}
-        />
+        <Suspense
+          fallback={
+            <div className="grid min-h-[18rem] place-items-center p-6 text-sm text-[var(--app-muted)]" role="status">
+              Dokumenteditor wird geladen …
+            </div>
+          }
+        >
+          <DocumentCreateComposer
+            type={type}
+            data={formData}
+            clients={clients}
+            currency={documentCurrency}
+            locale={locale}
+            totals={totals}
+            disabled={disabled}
+            saving={saving}
+            isEditing={composerEditing}
+            onChange={setFormData}
+            onClientChange={handleClientChange}
+            onAddPosition={addPosition}
+            onUpdatePosition={updatePosition}
+            onRemovePosition={removePosition}
+            onOpenAi={() => setShowAiDraftDialog(true)}
+            onOpenGroups={() => setShowPositionGroups(true)}
+            onPreview={() => setShowPrint(true)}
+            onCancel={() => onClose()}
+            onSave={() => void handleSave({ closeAfterSave: true })}
+          />
+        </Suspense>
         {aiDraftDialog}
         {positionGroupDialog}
       </>
@@ -1488,7 +1504,11 @@ export function DocumentEditor({
 
               {showTabs && activeTab === "activity" ? (
                 <div className="mt-4">
-                  <ActivityTimeline docType={type} docId={formData.id} />
+                  <Suspense
+                    fallback={<div className="text-sm text-[var(--app-muted)]" role="status">Aktivitäten werden geladen …</div>}
+                  >
+                    <ActivityTimeline docType={type} docId={formData.id} />
+                  </Suspense>
                 </div>
               ) : (
               <div className="space-y-6">
@@ -1625,7 +1645,7 @@ export function DocumentEditor({
                     </select>
                   </div>
                   {formData.serviceDate ? <div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-date">Leistungsdatum</label><input id="document-service-date" type="date" className="w-full border rounded p-2" value={formData.serviceDate} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, serviceDate: event.target.value })} /></div> : <><div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-start">Leistung von</label><input id="document-service-start" type="date" className="w-full border rounded p-2" value={formData.servicePeriodStart ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, servicePeriodStart: event.target.value })} /></div><div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-service-end">Leistung bis</label><input id="document-service-end" type="date" className="w-full border rounded p-2" value={formData.servicePeriodEnd ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, servicePeriodEnd: event.target.value })} /></div></>}
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-buyer-reference">Bestellnummer / Buyer Reference (optional)</label><input id="document-buyer-reference" className="w-full border rounded p-2" value={formData.buyerReference ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, buyerReference: event.target.value })} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-buyer-reference">Bestellnummer (optional)</label><input id="document-buyer-reference" className="w-full border rounded p-2" value={formData.buyerReference ?? ""} disabled={invoiceMetaDisabled} onChange={(event) => setFormData({ ...formData, buyerReference: event.target.value })} /></div>
                   {!isSmallBusiness && (
                     <div>
                       <label
@@ -1800,7 +1820,7 @@ export function DocumentEditor({
 
               <div className="mt-4 border-t pt-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Next steps / Result
+                  Nächster Schritt
                 </div>
                 <div className="mt-2 text-sm text-gray-700 space-y-1">
                   {formData.status === OfferStatus.REJECTED && (
@@ -1810,16 +1830,14 @@ export function DocumentEditor({
                     <div className="text-green-700">Angebot angenommen</div>
                   )}
                   {formData.invoiceId && (
-                    <div>
-                      Invoice created: <span className="text-gray-500">{formData.invoiceId}</span>
-                    </div>
+                    <div>Rechnung wurde erstellt</div>
                   )}
                   {formData.sentCount && formData.lastSentAt ? (
                     <div className="text-gray-500">
-                      Sent {formData.sentCount}x - zuletzt {formatDate(formData.lastSentAt, locale)}
+                      Gesendet: {formData.sentCount}× · zuletzt {formatDate(formData.lastSentAt, locale)}
                     </div>
                   ) : (
-                    <div className="text-gray-500">Not sent yet</div>
+                    <div className="text-gray-500">Noch nicht gesendet</div>
                   )}
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useId, useMemo, useState } from "react";
 
 import { AppButton } from "@/ui/AppButton";
 
@@ -63,12 +63,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={toast.id}
             role={toast.kind === "error" ? "alert" : "status"}
             className={[
-              "rounded-lg px-4 py-3 text-sm shadow-lg border",
+              "rounded-xl border px-4 py-3 text-sm shadow-lg",
               toast.kind === "success"
-                ? "bg-green-50 text-green-800 border-green-200"
+                ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
                 : toast.kind === "error"
-                ? "bg-red-50 text-red-800 border-red-200"
-                : "bg-blue-50 text-blue-800 border-blue-200",
+                ? "border-red-500/25 bg-red-500/10 text-red-800 dark:text-red-200"
+                : "border-blue-500/25 bg-blue-500/10 text-blue-800 dark:text-blue-200",
             ].join(" ")}
           >
             {toast.message}
@@ -80,6 +80,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const titleId = useId();
   const [acknowledged, setAcknowledged] = useState(false);
   const [dialog, setDialog] = useState<{
     title: string;
@@ -108,12 +109,17 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={api}>
       {children}
       {dialog && (
-        <div className="app-visual-viewport fixed inset-x-0 z-[90] flex items-end justify-center bg-gray-900/50 p-0 sm:items-center sm:p-4">
-          <div className="max-h-full w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-5 shadow-xl safe-bottom sm:max-h-[90%] sm:rounded-xl sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-900">{dialog.title}</h3>
-            <p className="mt-2 whitespace-pre-line text-sm text-gray-600">{dialog.message}</p>
+        <div className="app-visual-viewport fixed inset-x-0 z-[90] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4">
+          <div
+            className="max-h-full w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[var(--app-radius-lg)] border border-[var(--app-border)] bg-[var(--app-surface-solid)] p-5 text-[var(--app-text)] shadow-2xl safe-bottom sm:max-h-[90%] sm:rounded-[var(--app-radius-lg)] sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+          >
+            <h3 id={titleId} className="text-lg font-semibold">{dialog.title}</h3>
+            <p className="mt-2 whitespace-pre-line text-sm text-[var(--app-muted)]">{dialog.message}</p>
             {dialog.acknowledgementLabel && (
-              <label className="mt-4 flex items-start gap-3 rounded-lg border border-gray-200 p-3 text-sm text-gray-700">
+              <label className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--app-border)] p-3 text-sm">
                 <input
                   className="mt-0.5 h-4 w-4"
                   type="checkbox"
@@ -132,7 +138,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 disabled={Boolean(dialog.acknowledgementLabel) && !acknowledged}
                 onClick={() => close(true)}
               >
-                Bestaetigen
+                Bestätigen
               </AppButton>
             </div>
           </div>

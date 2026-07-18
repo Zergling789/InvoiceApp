@@ -2952,6 +2952,24 @@ app.get("/api/health/ready", async (req, res) => {
   });
 });
 
+// API clients must always receive the stable JSON error contract. Without
+// these final handlers, malformed JSON and unknown endpoints fall back to
+// Express' HTML error pages and cannot be mapped to a useful in-app message.
+app.use("/api", (req, res) =>
+  sendError(res, 404, "API_NOT_FOUND", "Der angeforderte API-Endpunkt wurde nicht gefunden.", req),
+);
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err?.type === "entity.too.large") {
+    return sendError(res, 413, "PAYLOAD_TOO_LARGE", "Die Anfrage ist zu groß.", req);
+  }
+  if (err?.type === "entity.parse.failed" || (err instanceof SyntaxError && err?.status === 400)) {
+    return sendError(res, 400, "INVALID_JSON", "Die Anfrage enthält ungültige Daten.", req);
+  }
+  return sendUnexpectedError(res, err, req);
+});
+
 if (process.env.SERVER_TEST_MODE !== "1" && !process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`PDF server listening on http://localhost:${PORT}`);

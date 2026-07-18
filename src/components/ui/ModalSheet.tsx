@@ -53,16 +53,16 @@ export function ModalSheet({
         />
       )}
       <div
-        className={`relative z-10 flex h-full w-full min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[92%] sm:rounded-xl ${width === "wide" ? "sm:max-w-6xl" : "sm:max-w-4xl"}`}
+        className={`relative z-10 flex h-full w-full min-h-0 flex-col overflow-hidden rounded-t-[var(--app-radius-lg)] border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] shadow-2xl sm:h-[92%] sm:rounded-[var(--app-radius-lg)] ${width === "wide" ? "sm:max-w-6xl" : "sm:max-w-4xl"}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <div className="flex shrink-0 items-center gap-3 border-b px-4 py-4 safe-top sm:px-6">
+        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--app-border)] px-4 py-4 safe-top sm:px-6">
           <AppButton variant="ghost" onClick={onClose} aria-label="Zurück">
             <ArrowLeft size={18} />
           </AppButton>
-          <h2 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
         </div>
         <div
           className={

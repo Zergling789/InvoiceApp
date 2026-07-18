@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { SenderIdentity, UserSettings } from "@/types";
 import { AppButton } from "@/ui/AppButton";
@@ -9,19 +9,19 @@ import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import { supabase } from "@/supabaseClient";
 
 import { fetchSettings, saveSettings } from "@/app/settings/settingsService";
-import {
-  createSenderIdentity,
-  disableSenderIdentity,
-  listSenderIdentities,
-  resendSenderIdentity,
-  sendTestEmail,
-  setDefaultSenderIdentity,
-} from "@/app/senderIdentities/senderIdentitiesService";
 import { trackEvent } from "@/lib/track";
 import { SMALL_BUSINESS_DEFAULT_NOTE } from "@/utils/smallBusiness";
-import { BrandingSettingsSection } from "@/features/settings/BrandingSettingsSection";
-import { cancelAccountDeletion, downloadAccountData, getAccountDeletionStatus, requestAccountDeletion, type AccountDeletionRequest } from "@/app/account/accountDataService";
+import type { AccountDeletionRequest } from "@/app/account/accountDataService";
 import { logError } from "@/utils/errors";
+
+const BrandingSettingsSection = lazy(() =>
+  import("@/features/settings/BrandingSettingsSection").then((module) => ({
+    default: module.BrandingSettingsSection,
+  })),
+);
+const loadSenderIdentityService = () =>
+  import("@/app/senderIdentities/senderIdentitiesService");
+const loadAccountDataService = () => import("@/app/account/accountDataService");
 
 const SETTINGS_SECTIONS = [
   { id: "company", label: "Firma & Steuer" },
@@ -74,6 +74,19 @@ function clampPaymentTerms(value: unknown) {
   return Math.min(365, Math.max(0, Math.trunc(toNumberOrFallback(value, 14))));
 }
 
+function formatDeletionStatus(status: string) {
+  const labels: Record<string, string> = {
+    REQUESTED: "Beantragt",
+    COOLING_OFF: "In der Widerrufsfrist",
+    CLAIMED: "Zur Bearbeitung vorgemerkt",
+    PROCESSING: "Wird bearbeitet",
+    BLOCKED_PENDING_REVIEW: "Wird manuell geprüft",
+    CANCELED: "Widerrufen",
+    COMPLETED: "Abgeschlossen",
+  };
+  return labels[status] ?? "Wird geprüft";
+}
+
 export default function SettingsView() {
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
   const { confirm } = useConfirm();
@@ -86,7 +99,7 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [senderIdentities, setSenderIdentities] = useState<SenderIdentity[]>([]);
-  const [senderLoading, setSenderLoading] = useState(true);
+  const [senderLoading, setSenderLoading] = useState(false);
   const [senderEmail, setSenderEmail] = useState("");
   const [senderDisplayName, setSenderDisplayName] = useState("");
   const [senderBusyId, setSenderBusyId] = useState<string | null>(null);
@@ -95,6 +108,8 @@ export default function SettingsView() {
   const [deletionPassword, setDeletionPassword] = useState("");
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
   const [deletionStatus, setDeletionStatus] = useState<AccountDeletionRequest | null>(null);
+  const senderIdentitiesRequestedRef = useRef(false);
+  const deletionStatusRequestedRef = useRef(false);
 
   const warnings = useMemo(() => {
     const w: string[] = [];
@@ -133,35 +148,64 @@ export default function SettingsView() {
     })();
   }, [reloadToken]);
 
-  useEffect(() => { getAccountDeletionStatus().then(({ request }) => setDeletionStatus(request)).catch(() => undefined); }, []);
-
   useEffect(() => {
+    if (activeSection !== "email" || senderIdentitiesRequestedRef.current) return;
+    senderIdentitiesRequestedRef.current = true;
     let mounted = true;
+    let completed = false;
     (async () => {
       setSenderLoading(true);
       try {
+        const { listSenderIdentities } = await loadSenderIdentityService();
         const items = await listSenderIdentities();
         if (mounted) setSenderIdentities(items);
       } catch (e) {
         logError(e);
+        senderIdentitiesRequestedRef.current = false;
         if (mounted) setSenderIdentities([]);
       } finally {
+        completed = true;
         if (mounted) setSenderLoading(false);
       }
     })();
     return () => {
       mounted = false;
+      if (!completed) senderIdentitiesRequestedRef.current = false;
     };
-  }, []);
+  }, [activeSection]);
 
   useEffect(() => {
+    if (activeSection !== "account" || deletionStatusRequestedRef.current) return;
+    deletionStatusRequestedRef.current = true;
+    let mounted = true;
+    let completed = false;
+    void loadAccountDataService()
+      .then(({ getAccountDeletionStatus }) => getAccountDeletionStatus())
+      .then(({ request }) => {
+        if (mounted) setDeletionStatus(request);
+      })
+      .catch(() => {
+        deletionStatusRequestedRef.current = false;
+      })
+      .finally(() => {
+        completed = true;
+      });
+    return () => {
+      mounted = false;
+      if (!completed) deletionStatusRequestedRef.current = false;
+    };
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "email") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [activeSection]);
 
   const reloadSenderIdentities = async () => {
     setSenderLoading(true);
     try {
+      const { listSenderIdentities } = await loadSenderIdentityService();
       const items = await listSenderIdentities();
       setSenderIdentities(items);
     } finally {
@@ -178,6 +222,7 @@ export default function SettingsView() {
     trackEvent("sender_identity_add_started");
     setSenderBusyId("create");
     try {
+      const { createSenderIdentity } = await loadSenderIdentityService();
       await createSenderIdentity({ email, displayName: senderDisplayName.trim() || undefined });
       trackEvent("sender_identity_verification_sent");
       setSenderEmail("");
@@ -195,6 +240,7 @@ export default function SettingsView() {
   const handleResend = async (id: string) => {
     setSenderBusyId(id);
     try {
+      const { resendSenderIdentity } = await loadSenderIdentityService();
       await resendSenderIdentity(id);
       trackEvent("sender_identity_verification_sent");
       await reloadSenderIdentities();
@@ -215,6 +261,7 @@ export default function SettingsView() {
     if (!ok) return;
     setSenderBusyId(id);
     try {
+      const { disableSenderIdentity } = await loadSenderIdentityService();
       await disableSenderIdentity(id);
       await reloadSenderIdentities();
     } catch (e) {
@@ -228,6 +275,7 @@ export default function SettingsView() {
   const handleTestEmail = async (id: string) => {
     setSenderBusyId(id);
     try {
+      const { sendTestEmail } = await loadSenderIdentityService();
       await sendTestEmail(id);
       trackEvent("sender_identity_test_email_sent");
       toast.success("Testmail wurde gesendet.");
@@ -242,6 +290,7 @@ export default function SettingsView() {
   const handleDefaultChange = async (value: string) => {
     const next = value || null;
     try {
+      const { setDefaultSenderIdentity } = await loadSenderIdentityService();
       await setDefaultSenderIdentity(next);
       setSettings((prev) => ({ ...prev, defaultSenderIdentityId: next }));
       trackEvent("default_sender_identity_updated");
@@ -283,6 +332,7 @@ export default function SettingsView() {
   const handleDataExport = async () => {
     setAccountAction("export");
     try {
+      const { downloadAccountData } = await loadAccountDataService();
       await downloadAccountData();
       toast.success("Datenexport wurde erstellt.");
     } catch (error) {
@@ -304,6 +354,7 @@ export default function SettingsView() {
     if (!accepted) return;
     setAccountAction("delete");
     try {
+      const { requestAccountDeletion } = await loadAccountDataService();
       const result = await requestAccountDeletion(deletionPassword, deletionConfirmation);
       const scheduled = result.request.scheduled_for ?? result.request.scheduledFor;
       toast.success(result.alreadyRequested ? "Ein Löschauftrag ist bereits aktiv." : `Löschauftrag erstellt${scheduled ? ` (geplant: ${new Date(scheduled).toLocaleDateString("de-DE")})` : ""}.`);
@@ -318,7 +369,7 @@ export default function SettingsView() {
 
   const handleDeletionCancel = async () => {
     setAccountAction("delete");
-    try { const { request } = await cancelAccountDeletion(); setDeletionStatus(request); toast.success("Löschauftrag wurde widerrufen."); }
+    try { const { cancelAccountDeletion } = await loadAccountDataService(); const { request } = await cancelAccountDeletion(); setDeletionStatus(request); toast.success("Löschauftrag wurde widerrufen."); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Löschauftrag konnte nicht widerrufen werden."); }
     finally { setAccountAction(null); }
   };
@@ -534,7 +585,7 @@ export default function SettingsView() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tage (Custom)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tage bei eigener Auswahl</label>
             <AppNumberInput
               className="w-full border rounded p-2"
               value={clampPaymentTerms(settings.defaultPaymentTerms)}
@@ -555,7 +606,7 @@ export default function SettingsView() {
 
       <AppCard className="space-y-4">
         <div className="border-b pb-3">
-          <h2 className="text-sm font-semibold text-gray-700">Dokument-Defaults</h2>
+          <h2 className="text-sm font-semibold text-gray-700">Dokument-Standardwerte</h2>
           <p className="text-sm text-gray-500">Standardwerte für Angebote und Rechnungen.</p>
         </div>
 
@@ -596,7 +647,7 @@ export default function SettingsView() {
         </div>
 
         <div className="border-t pt-4 space-y-4">
-          <div className="text-sm font-semibold text-gray-700">Locale & Währung</div>
+          <div className="text-sm font-semibold text-gray-700">Sprache und Währung</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sprache/Region</label>
@@ -634,7 +685,7 @@ export default function SettingsView() {
           <div className="text-sm font-semibold text-gray-700">Nummernkreise</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Prefix Rechnungen</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kürzel für Rechnungen</label>
               <input
                 className="w-full border rounded p-2"
                 value={settings.prefixInvoice ?? ""}
@@ -642,7 +693,7 @@ export default function SettingsView() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Prefix Angebote</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kürzel für Angebote</label>
               <input
                 className="w-full border rounded p-2"
                 value={settings.prefixOffer ?? ""}
@@ -650,7 +701,7 @@ export default function SettingsView() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Padding</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Anzahl Ziffern</label>
               <AppNumberInput
                 className="w-full border rounded p-2"
                 value={settings.numberPadding ?? 4}
@@ -667,10 +718,18 @@ export default function SettingsView() {
           </div>
         </div>
 
-        <BrandingSettingsSection settings={settings} onChange={setSettings} />
+        <Suspense
+          fallback={
+            <div className="rounded-xl border border-[var(--app-border)] p-5 text-sm text-[var(--app-muted)]" role="status">
+              Dokumentgestaltung wird geladen …
+            </div>
+          }
+        >
+          <BrandingSettingsSection settings={settings} onChange={setSettings} />
+        </Suspense>
 
         <div className="border-t border-[var(--app-border)] pt-4">
-          <label className="mb-1 block text-sm font-medium">Footer (Dokumente)</label>
+          <label className="mb-1 block text-sm font-medium">Fußzeile auf Dokumenten</label>
           <textarea
             className="w-full border rounded p-2"
             rows={2}
@@ -828,7 +887,7 @@ export default function SettingsView() {
           </AppButton>
         </div>
         <div className="space-y-3 border-t border-red-200 pt-4">
-          {deletionStatus && !["CANCELED", "COMPLETED"].includes(deletionStatus.status) && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><div>Aktueller Status: {deletionStatus.status}</div><div>Geplante Verarbeitung: {new Date(deletionStatus.scheduled_for).toLocaleDateString("de-DE")}</div>{["REQUESTED", "COOLING_OFF"].includes(deletionStatus.status) && <AppButton className="mt-2" variant="secondary" onClick={() => void handleDeletionCancel()} disabled={accountAction !== null}>Löschauftrag widerrufen</AppButton>}</div>}
+          {deletionStatus && !["CANCELED", "COMPLETED"].includes(deletionStatus.status) && <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200"><div>Aktueller Status: {formatDeletionStatus(deletionStatus.status)}</div><div>Geplante Verarbeitung: {new Date(deletionStatus.scheduled_for).toLocaleDateString("de-DE")}</div>{["REQUESTED", "COOLING_OFF"].includes(deletionStatus.status) && <AppButton className="mt-2" variant="secondary" onClick={() => void handleDeletionCancel()} disabled={accountAction !== null}>Löschauftrag widerrufen</AppButton>}</div>}
           <div>
             <div className="text-sm font-medium text-red-700">Account löschen</div>
             <div className="text-xs text-gray-500">Der Auftrag wird mit einer siebentägigen Prüf- und Bearbeitungsfrist angelegt. Aufbewahrungspflichtige Rechnungs- und Abrechnungsdaten werden nicht unkontrolliert gelöscht.</div>
@@ -851,8 +910,8 @@ export default function SettingsView() {
 
       <AppCard className="space-y-4">
         <div className="border-b pb-3">
-          <h2 className="text-sm font-semibold text-gray-700">Danger Zone</h2>
-          <p className="text-sm text-gray-500">Sensible Aktionen für deinen Account.</p>
+          <h2 className="text-sm font-semibold text-gray-700">Kontosicherheit</h2>
+          <p className="text-sm text-gray-500">Sensible Aktionen für dein Konto.</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm text-gray-600">Du wirst sofort aus der App abgemeldet.</div>
