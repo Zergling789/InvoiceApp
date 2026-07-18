@@ -1,10 +1,24 @@
 import type { Offer } from "@/domain/types";
 import { normalizeOffer } from "@/domain/models/Offer";
-import { dbDeleteOffer, dbGetOffer, dbListOffers, dbUpsertOffer } from "@/db/offersDb";
+import {
+  dbDeleteOffer,
+  dbGetOffer,
+  dbListOffers,
+  dbListOffersPage,
+  dbUpsertOffer,
+} from "@/db/offersDb";
+import type { CursorPage, CursorPageOptions } from "@/db/cursorPagination";
 
 export async function listOffers(): Promise<Offer[]> {
   const offers = await dbListOffers();
   return offers.map(normalizeOffer);
+}
+
+export async function listOffersPage(
+  options: CursorPageOptions = {},
+): Promise<CursorPage<Offer>> {
+  const page = await dbListOffersPage(options);
+  return { ...page, items: page.items.map(normalizeOffer) };
 }
 
 export async function getOffer(id: string): Promise<Offer | null> {

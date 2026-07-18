@@ -2,6 +2,13 @@ import { supabase } from "@/supabaseClient";
 import type { Database } from "@/lib/supabase.types";
 import { OfferStatus } from "@/types";
 import type { Offer } from "@/types";
+import {
+  buildDescendingCursorFilter,
+  createCursorPage,
+  normalizePageSize,
+  type CursorPage,
+  type CursorPageOptions,
+} from "@/db/cursorPagination";
 
 type DbOfferRow = Database["public"]["Tables"]["offers"]["Row"];
 type DbOfferInsert = Database["public"]["Tables"]["offers"]["Insert"];
@@ -38,6 +45,29 @@ async function requireUserId(): Promise<string> {
   return user.id;
 }
 
+const toOffer = (r: DbOfferRow): Offer => ({
+  id: r.id,
+  createdAt: r.created_at,
+  number: r.number,
+  clientId: r.client_id,
+  projectId: r.project_id ?? undefined,
+  currency: r.currency ?? "EUR",
+  date: r.date,
+  validUntil: r.valid_until ?? "",
+  positions: (Array.isArray(r.positions) ? r.positions : []) as unknown as Offer["positions"],
+  introText: r.intro_text ?? "",
+  footerText: r.footer_text ?? "",
+  vatRate: Number(r.vat_rate ?? 0),
+  status: normalizeOfferStatus(r.status),
+  sentAt: r.sent_at ?? null,
+  lastSentAt: r.last_sent_at ?? null,
+  lastSentTo: r.last_sent_to ?? null,
+  sentCount: Number(r.sent_count ?? 0),
+  sentVia: (r.sent_via as Offer["sentVia"]) ?? null,
+  invoiceId: r.invoice_id ?? null,
+  rejectionReason: r.rejection_reason ?? null,
+});
+
 // ---------- LIST ----------
 export async function dbListOffers(): Promise<Offer[]> {
   const uid = await requireUserId();
@@ -50,28 +80,29 @@ export async function dbListOffers(): Promise<Offer[]> {
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    createdAt: r.created_at,
-    number: r.number,
-    clientId: r.client_id,
-    projectId: r.project_id ?? undefined,
-    currency: r.currency ?? "EUR",
-    date: r.date,
-    validUntil: r.valid_until ?? "",
-    positions: (Array.isArray(r.positions) ? r.positions : []) as unknown as Offer["positions"],
-    introText: r.intro_text ?? "",
-    footerText: r.footer_text ?? "",
-    vatRate: Number(r.vat_rate ?? 0),
-    status: normalizeOfferStatus(r.status),
-    sentAt: r.sent_at ?? null,
-    lastSentAt: r.last_sent_at ?? null,
-    lastSentTo: r.last_sent_to ?? null,
-    sentCount: Number(r.sent_count ?? 0),
-    sentVia: (r.sent_via as Offer["sentVia"]) ?? null,
-    invoiceId: r.invoice_id ?? null,
-    rejectionReason: r.rejection_reason ?? null,
-  }));
+  return ((data ?? []) as DbOfferRow[]).map(toOffer);
+}
+
+export async function dbListOffersPage(
+  options: CursorPageOptions = {},
+): Promise<CursorPage<Offer>> {
+  const uid = await requireUserId();
+  const pageSize = normalizePageSize(options.pageSize);
+  let query = supabase
+    .from("offers")
+    .select(OFFER_FIELDS)
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (options.cursor) {
+    query = query.or(buildDescendingCursorFilter(options.cursor));
+  }
+
+  const { data, error } = await query.limit(pageSize + 1);
+  if (error) throw new Error(error.message);
+
+  return createCursorPage((data ?? []) as DbOfferRow[], pageSize, toOffer);
 }
 
 // ---------- GET ----------
@@ -87,28 +118,7 @@ export async function dbGetOffer(id: string): Promise<Offer> {
 
   if (error) throw new Error(error.message);
 
-  return {
-    id: data.id,
-    createdAt: data.created_at,
-    number: data.number,
-    clientId: data.client_id,
-    projectId: data.project_id ?? undefined,
-    currency: data.currency ?? "EUR",
-    date: data.date,
-    validUntil: data.valid_until ?? "",
-    positions: (Array.isArray(data.positions) ? data.positions : []) as unknown as Offer["positions"],
-    introText: data.intro_text ?? "",
-    footerText: data.footer_text ?? "",
-    vatRate: Number(data.vat_rate ?? 0),
-    status: normalizeOfferStatus(data.status),
-    sentAt: data.sent_at ?? null,
-    lastSentAt: data.last_sent_at ?? null,
-    lastSentTo: data.last_sent_to ?? null,
-    sentCount: Number(data.sent_count ?? 0),
-    sentVia: (data.sent_via as Offer["sentVia"]) ?? null,
-    invoiceId: data.invoice_id ?? null,
-    rejectionReason: data.rejection_reason ?? null,
-  };
+  return toOffer(data as DbOfferRow);
 }
 
 // ---------- UPSERT ----------

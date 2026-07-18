@@ -6,19 +6,19 @@ import { renderWithProviders } from "@/test/renderWithProviders";
 import { OfferStatus } from "@/types";
 
 const listClientsMock = vi.fn();
-const listOffersMock = vi.fn();
-const listInvoicesMock = vi.fn();
+const listOffersPageMock = vi.fn();
+const listInvoicesPageMock = vi.fn();
 
 vi.mock("@/app/clients/clientService", () => ({
   listSummaries: () => listClientsMock(),
 }));
 
 vi.mock("@/app/offers/offerService", () => ({
-  listOffers: () => listOffersMock(),
+  listOffersPage: (options: unknown) => listOffersPageMock(options),
 }));
 
 vi.mock("@/app/invoices/invoiceService", () => ({
-  listInvoices: () => listInvoicesMock(),
+  listInvoicesPage: (options: unknown) => listInvoicesPageMock(options),
 }));
 
 vi.mock("@/app/settings/settingsService", () => ({
@@ -27,6 +27,7 @@ vi.mock("@/app/settings/settingsService", () => ({
 
 describe("DocumentsHubPage table view", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     listClientsMock.mockResolvedValue([
       {
         id: "client-1",
@@ -39,20 +40,25 @@ describe("DocumentsHubPage table view", () => {
         notes: "",
       },
     ]);
-    listOffersMock.mockResolvedValue([
-      {
-        id: "offer-1",
-        number: "ANG-0154",
-        clientId: "client-1",
-        date: "2026-07-16",
-        validUntil: "2026-07-30",
-        positions: [{ id: "p1", description: "Beratung", quantity: 1, unit: "Std", price: 100 }],
-        vatRate: 19,
-        currency: "EUR",
-        status: OfferStatus.DRAFT,
-      },
-    ]);
-    listInvoicesMock.mockResolvedValue([]);
+    listOffersPageMock.mockResolvedValue({
+      items: [
+        {
+          id: "offer-1",
+          createdAt: "2026-07-16T10:00:00.000Z",
+          number: "ANG-0154",
+          clientId: "client-1",
+          date: "2026-07-16",
+          validUntil: "2026-07-30",
+          positions: [{ id: "p1", description: "Beratung", quantity: 1, unit: "Std", price: 100 }],
+          vatRate: 19,
+          currency: "EUR",
+          status: OfferStatus.DRAFT,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
+    listInvoicesPageMock.mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
   });
 
   it("shows separate document, person, company, amount and status columns", async () => {
@@ -96,5 +102,107 @@ describe("DocumentsHubPage table view", () => {
     fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
     await waitFor(() => expect(listClientsMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry));
     expect(await screen.findByRole("row", { name: /ANG-0154.*Fabian.*Heimlich/i })).toBeVisible();
+  });
+
+  it("loads the next cursor page without replacing documents already shown", async () => {
+    listOffersPageMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "offer-1",
+            createdAt: "2026-07-16T10:00:00.000Z",
+            number: "ANG-0154",
+            clientId: "client-1",
+            date: "2026-07-16",
+            validUntil: "2026-07-30",
+            positions: [],
+            vatRate: 19,
+            currency: "EUR",
+            status: OfferStatus.DRAFT,
+          },
+        ],
+        nextCursor: { createdAt: "2026-07-16T10:00:00.000Z", id: "offer-1" },
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "offer-2",
+            createdAt: "2026-07-15T10:00:00.000Z",
+            number: "ANG-0153",
+            clientId: "client-1",
+            date: "2026-07-15",
+            validUntil: "2026-07-29",
+            positions: [],
+            vatRate: 19,
+            currency: "EUR",
+            status: OfferStatus.DRAFT,
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      });
+
+    renderWithProviders(<DocumentsHubPage />, { route: "/app/documents" });
+
+    expect((await screen.findAllByText("ANG-0154"))[0]).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Weitere Dokumente laden" }));
+
+    expect((await screen.findAllByText("ANG-0153"))[0]).toBeVisible();
+    expect(screen.getAllByText("ANG-0154")[0]).toBeVisible();
+    expect(listOffersPageMock).toHaveBeenLastCalledWith({
+      cursor: { createdAt: "2026-07-16T10:00:00.000Z", id: "offer-1" },
+      pageSize: 24,
+    });
+  });
+
+  it("loads remaining pages before presenting a filtered result", async () => {
+    listOffersPageMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "offer-1",
+            createdAt: "2026-07-16T10:00:00.000Z",
+            number: "ANG-0154",
+            clientId: "client-1",
+            date: "2026-07-16",
+            validUntil: "2026-07-30",
+            positions: [],
+            vatRate: 19,
+            currency: "EUR",
+            status: OfferStatus.DRAFT,
+          },
+        ],
+        nextCursor: { createdAt: "2026-07-16T10:00:00.000Z", id: "offer-1" },
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "offer-2",
+            createdAt: "2026-07-15T10:00:00.000Z",
+            number: "ANG-0999",
+            clientId: "client-1",
+            date: "2026-07-15",
+            validUntil: "2026-07-29",
+            positions: [],
+            vatRate: 19,
+            currency: "EUR",
+            status: OfferStatus.DRAFT,
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      });
+
+    renderWithProviders(<DocumentsHubPage />, { route: "/app/documents" });
+    await screen.findAllByText("ANG-0154");
+
+    fireEvent.change(screen.getByPlaceholderText("Suche nach Nummer oder Kunde"), {
+      target: { value: "ANG-0999" },
+    });
+
+    expect((await screen.findAllByText("ANG-0999"))[0]).toBeVisible();
+    expect(screen.queryByText("ANG-0154")).not.toBeInTheDocument();
   });
 });

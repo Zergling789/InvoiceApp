@@ -26,10 +26,25 @@ import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
 import { getClientDisplayName, getClientPersonName, type ClientSummary } from "@/domain/models/Client";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
 import { DocumentResults, type DocumentRow } from "@/features/documents/DocumentResults";
+import type { CursorPage, DocumentCursor } from "@/db/cursorPagination";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
 const URL_STATUSES = new Set<CombinedStatus>(["draft", "issued", "sent", "overdue", "paid", "canceled", "accepted", "rejected", "invoiced"]);
+const DOCUMENT_PAGE_SIZE = 24;
+const FILTER_PAGE_SIZE = 100;
+
+type PageState = {
+  nextCursor: DocumentCursor | null;
+  hasMore: boolean;
+};
+
+const initialPageState: PageState = { nextCursor: null, hasMore: false };
+
+const appendUniqueDocuments = <T extends { id: string }>(current: T[], next: T[]) => {
+  const knownIds = new Set(current.map((item) => item.id));
+  return [...current, ...next.filter((item) => !knownIds.has(item.id))];
+};
 
 const splitPersonName = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -96,6 +111,10 @@ export default function DocumentsHubPage() {
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [offerPage, setOfferPage] = useState<PageState>(initialPageState);
+  const [invoicePage, setInvoicePage] = useState<PageState>(initialPageState);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
@@ -103,55 +122,44 @@ export default function DocumentsHubPage() {
   const [searchParams] = useSearchParams();
   const lastRefreshTokenRef = useRef<number | null>(null);
   const [highlightedDocument, setHighlightedDocument] = useState<CreatedDocumentTarget | null>(null);
+  const loadGenerationRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
-  const refreshDocuments = async () => {
+  const refreshDocuments = useCallback(async () => {
+    const generation = ++loadGenerationRef.current;
+    loadingMoreRef.current = false;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
+    setLoadMoreError(false);
     try {
       const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
         clientService.listSummaries(),
-        offerService.listOffers(),
-        invoiceService.listInvoices(),
+        offerService.listOffersPage({ pageSize: DOCUMENT_PAGE_SIZE }),
+        invoiceService.listInvoicesPage({ pageSize: DOCUMENT_PAGE_SIZE }),
         fetchSettings(),
       ]);
+      if (generation !== loadGenerationRef.current) return;
       setClients(clientData);
-      setOffers(offerData);
-      setInvoices(invoiceData);
+      setOffers(offerData.items);
+      setInvoices(invoiceData.items);
+      setOfferPage({ nextCursor: offerData.nextCursor, hasMore: offerData.hasMore });
+      setInvoicePage({ nextCursor: invoiceData.nextCursor, hasMore: invoiceData.hasMore });
       setSettings(settingsData);
     } catch (e) {
+      if (generation !== loadGenerationRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
-          clientService.listSummaries(),
-          offerService.listOffers(),
-          invoiceService.listInvoices(),
-          fetchSettings(),
-        ]);
-        if (!mounted) return;
-        setClients(clientData);
-        setOffers(offerData);
-        setInvoices(invoiceData);
-        setSettings(settingsData);
-      } catch (e) {
-        if (mounted) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
+    void refreshDocuments();
     return () => {
-      mounted = false;
+      loadGenerationRef.current += 1;
     };
-  }, []);
+  }, [refreshDocuments]);
 
   useEffect(() => {
     const navigationState = location.state as DocumentRefreshState | null;
@@ -206,6 +214,7 @@ export default function DocumentsHubPage() {
 
   useEffect(() => {
     setSelectedStatuses([]);
+    setLoadMoreError(false);
   }, [mode]);
 
   useEffect(() => {
@@ -219,6 +228,66 @@ export default function DocumentsHubPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [newMenuOpen, statusMenuOpen]);
+
+  const hasActiveFilters = Boolean(debouncedSearch || selectedStatuses.length);
+  const hasMoreForMode =
+    mode === "offer"
+      ? offerPage.hasMore
+      : mode === "invoice"
+        ? invoicePage.hasMore
+        : offerPage.hasMore || invoicePage.hasMore;
+
+  const loadMoreDocuments = useCallback(async (pageSize = DOCUMENT_PAGE_SIZE) => {
+    if (loadingMoreRef.current) return;
+
+    const loadOffers = mode !== "invoice" && offerPage.hasMore && offerPage.nextCursor;
+    const loadInvoices = mode !== "offer" && invoicePage.hasMore && invoicePage.nextCursor;
+    if (!loadOffers && !loadInvoices) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    const generation = loadGenerationRef.current;
+
+    try {
+      const [nextOffers, nextInvoices]: [CursorPage<Offer> | null, CursorPage<Invoice> | null] =
+        await Promise.all([
+          loadOffers
+            ? offerService.listOffersPage({ cursor: offerPage.nextCursor, pageSize })
+            : Promise.resolve(null),
+          loadInvoices
+            ? invoiceService.listInvoicesPage({ cursor: invoicePage.nextCursor, pageSize })
+            : Promise.resolve(null),
+        ]);
+
+      if (generation !== loadGenerationRef.current) return;
+      if (nextOffers) {
+        setOffers((current) => appendUniqueDocuments(current, nextOffers.items));
+        setOfferPage({ nextCursor: nextOffers.nextCursor, hasMore: nextOffers.hasMore });
+      }
+      if (nextInvoices) {
+        setInvoices((current) => appendUniqueDocuments(current, nextInvoices.items));
+        setInvoicePage({ nextCursor: nextInvoices.nextCursor, hasMore: nextInvoices.hasMore });
+      }
+    } catch {
+      if (generation === loadGenerationRef.current) setLoadMoreError(true);
+    } finally {
+      loadingMoreRef.current = false;
+      if (generation === loadGenerationRef.current) setLoadingMore(false);
+    }
+  }, [invoicePage, mode, offerPage]);
+
+  useEffect(() => {
+    if (!hasActiveFilters || loading || loadingMore || loadMoreError || !hasMoreForMode) return;
+    void loadMoreDocuments(FILTER_PAGE_SIZE);
+  }, [
+    hasActiveFilters,
+    hasMoreForMode,
+    loadMoreDocuments,
+    loadMoreError,
+    loading,
+    loadingMore,
+  ]);
 
   const clientById = useMemo(() => {
     const map = new Map<string, ClientSummary>();
@@ -562,6 +631,20 @@ export default function DocumentsHubPage() {
           title="Dokumente konnten nicht geladen werden"
           onRetry={() => void refreshDocuments()}
         />
+      ) : hasActiveFilters && loadMoreError ? (
+        <LoadErrorCard
+          title="Suche konnte nicht vollständig geladen werden"
+          onRetry={() => {
+            setLoadMoreError(false);
+            void loadMoreDocuments();
+          }}
+        />
+      ) : hasActiveFilters && (hasMoreForMode || loadingMore) ? (
+        <AppCard>
+          <div className="text-sm text-gray-500" role="status">
+            Lade alle Dokumente für die vollständige Suche...
+          </div>
+        </AppCard>
       ) : filteredRows.length === 0 ? (
         <AppCard>
           <div className="text-sm text-gray-500">Keine Dokumente gefunden.</div>
@@ -572,6 +655,23 @@ export default function DocumentsHubPage() {
           highlightedDocument={highlightedDocument}
           onOpen={openDocument}
         />
+      )}
+
+      {!loading && !error && !hasActiveFilters && hasMoreForMode && (
+        <div className="flex flex-col items-center gap-2">
+          {loadMoreError && (
+            <p className="text-sm text-red-600" role="alert">
+              Weitere Dokumente konnten nicht geladen werden.
+            </p>
+          )}
+          <AppButton
+            variant="secondary"
+            disabled={loadingMore}
+            onClick={() => void loadMoreDocuments()}
+          >
+            {loadingMore ? "Weitere Dokumente werden geladen..." : "Weitere Dokumente laden"}
+          </AppButton>
+        </div>
       )}
 
       <div className="mobile-fab sm:hidden">

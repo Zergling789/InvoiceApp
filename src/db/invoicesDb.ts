@@ -3,6 +3,13 @@ import type { Database } from "@/lib/supabase.types";
 import { InvoiceStatus } from "@/types";
 import type { Invoice } from "@/types";
 import { calcDueDate } from "@/domain/rules/invoiceRules";
+import {
+  buildDescendingCursorFilter,
+  createCursorPage,
+  normalizePageSize,
+  type CursorPage,
+  type CursorPageOptions,
+} from "@/db/cursorPagination";
 
 type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
 type DbInvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"];
@@ -55,6 +62,58 @@ async function requireUserId(): Promise<string> {
   return user.id;
 }
 
+const toInvoice = (r: DbInvoiceRow): Invoice => ({
+  id: r.id,
+  createdAt: r.created_at,
+  number: r.invoice_number ?? r.number ?? null,
+  offerId: r.offer_id ?? undefined,
+  clientId: r.client_id,
+  clientName: r.client_name ?? "",
+  clientCompanyName: r.client_company_name ?? null,
+  clientContactPerson: r.client_contact_person ?? null,
+  clientEmail: r.client_email ?? null,
+  clientPhone: r.client_phone ?? null,
+  clientVatId: r.client_vat_id ?? null,
+  clientAddress: r.client_address ?? null,
+  clientStreet: r.client_street,
+  clientHouseNumber: r.client_house_number,
+  clientPostalCode: r.client_postal_code,
+  clientCity: r.client_city,
+  clientElectronicAddress: r.client_electronic_address,
+  clientElectronicAddressScheme: r.client_electronic_address_scheme,
+  projectId: r.project_id ?? undefined,
+  date: r.invoice_date ?? r.date,
+  serviceDate: r.service_date ?? undefined,
+  servicePeriodStart: r.service_period_start ?? undefined,
+  servicePeriodEnd: r.service_period_end ?? undefined,
+  sellerCountry: r.seller_country ?? "DE",
+  customerCountry: r.customer_country ?? "DE",
+  customerType: r.customer_type === "PRIVATE" ? "PRIVATE" : "BUSINESS",
+  serviceCountry: r.service_country ?? "DE",
+  currency: r.currency ?? "EUR",
+  buyerReference: r.buyer_reference ?? undefined,
+  paymentTermsDays: Number(r.payment_terms_days ?? 14),
+  dueDate: r.due_date ?? "",
+  paymentDate: r.payment_date ?? undefined,
+  paidAt: r.paid_at ?? null,
+  canceledAt: r.canceled_at ?? null,
+  isOverdue: computeIsOverdue(r),
+  positions: (Array.isArray(r.positions) ? r.positions : []) as unknown as Invoice["positions"],
+  introText: r.intro_text ?? "",
+  footerText: r.footer_text ?? "",
+  vatRate: Number(r.vat_rate ?? 0),
+  isSmallBusiness: Boolean(r.is_small_business ?? false),
+  smallBusinessNote: r.small_business_note ?? null,
+  status: normalizeInvoiceStatus(r.status),
+  isLocked: Boolean(r.is_locked ?? false),
+  finalizedAt: r.finalized_at ?? null,
+  sentAt: r.sent_at ?? null,
+  lastSentAt: r.last_sent_at ?? null,
+  lastSentTo: r.last_sent_to ?? null,
+  sentCount: Number(r.sent_count ?? 0),
+  sentVia: (r.sent_via as Invoice["sentVia"]) ?? null,
+});
+
 // ---------- LIST ----------
 export async function dbListInvoices(): Promise<Invoice[]> {
   const uid = await requireUserId();
@@ -67,47 +126,29 @@ export async function dbListInvoices(): Promise<Invoice[]> {
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    createdAt: r.created_at,
-    number: r.invoice_number ?? r.number ?? null,
-    offerId: r.offer_id ?? undefined,
-    clientId: r.client_id,
-    clientName: r.client_name ?? "",
-    clientCompanyName: r.client_company_name ?? null,
-    clientContactPerson: r.client_contact_person ?? null,
-    clientEmail: r.client_email ?? null,
-    clientPhone: r.client_phone ?? null,
-    clientVatId: r.client_vat_id ?? null,
-    clientAddress: r.client_address ?? null,
-    clientStreet: r.client_street, clientHouseNumber: r.client_house_number, clientPostalCode: r.client_postal_code, clientCity: r.client_city, clientElectronicAddress: r.client_electronic_address, clientElectronicAddressScheme: r.client_electronic_address_scheme,
-    projectId: r.project_id ?? undefined,
-    date: r.invoice_date ?? r.date,
-    serviceDate: r.service_date ?? undefined,
-    servicePeriodStart: r.service_period_start ?? undefined,
-    servicePeriodEnd: r.service_period_end ?? undefined,
-    sellerCountry: r.seller_country ?? "DE", customerCountry: r.customer_country ?? "DE", customerType: (r.customer_type === "PRIVATE" ? "PRIVATE" : "BUSINESS"), serviceCountry: r.service_country ?? "DE", currency: r.currency ?? "EUR", buyerReference: r.buyer_reference ?? undefined,
-    paymentTermsDays: Number(r.payment_terms_days ?? 14),
-    dueDate: r.due_date ?? "",
-    paymentDate: r.payment_date ?? undefined,
-    paidAt: r.paid_at ?? null,
-    canceledAt: r.canceled_at ?? null,
-    isOverdue: computeIsOverdue(r),
-    positions: (Array.isArray(r.positions) ? r.positions : []) as unknown as Invoice["positions"],
-    introText: r.intro_text ?? "",
-    footerText: r.footer_text ?? "",
-    vatRate: Number(r.vat_rate ?? 0),
-    isSmallBusiness: Boolean(r.is_small_business ?? false),
-    smallBusinessNote: r.small_business_note ?? null,
-    status: normalizeInvoiceStatus(r.status),
-    isLocked: Boolean(r.is_locked ?? false),
-    finalizedAt: r.finalized_at ?? null,
-    sentAt: r.sent_at ?? null,
-    lastSentAt: r.last_sent_at ?? null,
-    lastSentTo: r.last_sent_to ?? null,
-    sentCount: Number(r.sent_count ?? 0),
-    sentVia: (r.sent_via as Invoice["sentVia"]) ?? null,
-  }));
+  return ((data ?? []) as DbInvoiceRow[]).map(toInvoice);
+}
+
+export async function dbListInvoicesPage(
+  options: CursorPageOptions = {},
+): Promise<CursorPage<Invoice>> {
+  const uid = await requireUserId();
+  const pageSize = normalizePageSize(options.pageSize);
+  let query = supabase
+    .from("invoices")
+    .select(INVOICE_FIELDS)
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (options.cursor) {
+    query = query.or(buildDescendingCursorFilter(options.cursor));
+  }
+
+  const { data, error } = await query.limit(pageSize + 1);
+  if (error) throw new Error(error.message);
+
+  return createCursorPage((data ?? []) as DbInvoiceRow[], pageSize, toInvoice);
 }
 
 // ---------- GET ----------
@@ -123,47 +164,7 @@ export async function dbGetInvoice(id: string): Promise<Invoice> {
 
   if (error) throw new Error(error.message);
 
-  return {
-    id: data.id,
-    createdAt: data.created_at,
-    number: data.invoice_number ?? data.number ?? null,
-    offerId: data.offer_id ?? undefined,
-    clientId: data.client_id,
-    clientName: data.client_name ?? "",
-    clientCompanyName: data.client_company_name ?? null,
-    clientContactPerson: data.client_contact_person ?? null,
-    clientEmail: data.client_email ?? null,
-    clientPhone: data.client_phone ?? null,
-    clientVatId: data.client_vat_id ?? null,
-    clientAddress: data.client_address ?? null,
-    clientStreet: data.client_street, clientHouseNumber: data.client_house_number, clientPostalCode: data.client_postal_code, clientCity: data.client_city, clientElectronicAddress: data.client_electronic_address, clientElectronicAddressScheme: data.client_electronic_address_scheme,
-    projectId: data.project_id ?? undefined,
-    date: data.invoice_date ?? data.date,
-    serviceDate: data.service_date ?? undefined,
-    servicePeriodStart: data.service_period_start ?? undefined,
-    servicePeriodEnd: data.service_period_end ?? undefined,
-    sellerCountry: data.seller_country ?? "DE", customerCountry: data.customer_country ?? "DE", customerType: (data.customer_type === "PRIVATE" ? "PRIVATE" : "BUSINESS"), serviceCountry: data.service_country ?? "DE", currency: data.currency ?? "EUR", buyerReference: data.buyer_reference ?? undefined,
-    paymentTermsDays: Number(data.payment_terms_days ?? 14),
-    dueDate: data.due_date ?? "",
-    paymentDate: data.payment_date ?? undefined,
-    paidAt: data.paid_at ?? null,
-    canceledAt: data.canceled_at ?? null,
-    isOverdue: computeIsOverdue(data),
-    positions: (Array.isArray(data.positions) ? data.positions : []) as unknown as Invoice["positions"],
-    introText: data.intro_text ?? "",
-    footerText: data.footer_text ?? "",
-    vatRate: Number(data.vat_rate ?? 0),
-    isSmallBusiness: Boolean(data.is_small_business ?? false),
-    smallBusinessNote: data.small_business_note ?? null,
-    status: normalizeInvoiceStatus(data.status),
-    isLocked: Boolean(data.is_locked ?? false),
-    finalizedAt: data.finalized_at ?? null,
-    sentAt: data.sent_at ?? null,
-    lastSentAt: data.last_sent_at ?? null,
-    lastSentTo: data.last_sent_to ?? null,
-    sentCount: Number(data.sent_count ?? 0),
-    sentVia: (data.sent_via as Invoice["sentVia"]) ?? null,
-  };
+  return toInvoice(data as DbInvoiceRow);
 }
 
 // ---------- UPSERT ----------

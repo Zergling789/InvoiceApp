@@ -1,10 +1,24 @@
 import type { Invoice } from "@/domain/types";
 import { normalizeInvoice } from "@/domain/models/Invoice";
-import { dbDeleteInvoice, dbGetInvoice, dbListInvoices, dbUpsertInvoice } from "@/db/invoicesDb";
+import {
+  dbDeleteInvoice,
+  dbGetInvoice,
+  dbListInvoices,
+  dbListInvoicesPage,
+  dbUpsertInvoice,
+} from "@/db/invoicesDb";
+import type { CursorPage, CursorPageOptions } from "@/db/cursorPagination";
 
 export async function listInvoices(): Promise<Invoice[]> {
   const invoices = await dbListInvoices();
   return invoices.map(normalizeInvoice);
+}
+
+export async function listInvoicesPage(
+  options: CursorPageOptions = {},
+): Promise<CursorPage<Invoice>> {
+  const page = await dbListInvoicesPage(options);
+  return { ...page, items: page.items.map(normalizeInvoice) };
 }
 
 export async function getInvoice(id: string): Promise<Invoice | null> {
