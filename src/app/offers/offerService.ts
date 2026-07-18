@@ -1,7 +1,7 @@
 import type { Offer } from "@/types";
 import * as repo from "@/data/repositories/offersRepo";
 import { supabase } from "@/supabaseClient";
-import type { CursorPageOptions } from "@/db/cursorPagination";
+import type { DocumentPageOptions } from "@/db/cursorPagination";
 
 export type OfferDecision = "ACCEPTED" | "REJECTED";
 
@@ -25,7 +25,7 @@ const createOfferWorkflowError = (error: { code?: string; message?: string }) =>
 };
 
 export const listOffers = (): Promise<Offer[]> => repo.listOffers();
-export const listOffersPage = (options: CursorPageOptions = {}) => repo.listOffersPage(options);
+export const listOffersPage = (options: DocumentPageOptions = {}) => repo.listOffersPage(options);
 export const getOffer = (id: string) => repo.getOffer(id);
 export const saveOffer = (offer: Offer) => repo.saveOffer(offer);
 export const deleteOffer = (id: string) => repo.deleteOffer(id);

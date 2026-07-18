@@ -14,6 +14,12 @@ export type CursorPageOptions = {
   pageSize?: number;
 };
 
+export type DocumentPageOptions = CursorPageOptions & {
+  search?: string;
+  phases?: string[];
+  today?: string;
+};
+
 const DEFAULT_PAGE_SIZE = 24;
 const MAX_PAGE_SIZE = 100;
 

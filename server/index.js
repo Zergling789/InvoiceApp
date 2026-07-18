@@ -1785,6 +1785,17 @@ app.get("/api/public/documents/:token", async (req, res) => {
     const link = await loadRecipientLink(req.params.token);
     if (!link) return sendError(res, 404, "RECIPIENT_LINK_INVALID", "Dieser Link ist ungültig oder abgelaufen.", req);
     const payload = await loadDocumentPayloadFromDb({ type: link.document_type, docId: link.document_id, userId: link.user_id });
+    const { error: viewEventError } = await requireSupabase().rpc(
+      "record_recipient_document_view",
+      { p_link_id: link.id },
+    );
+    if (viewEventError) {
+      logEvent("warn", "recipient_view_notification_failed", {
+        requestId: req.requestId,
+        documentType: link.document_type,
+        errorCode: "RECIPIENT_VIEW_EVENT_FAILED",
+      });
+    }
     return res.json({ type: link.document_type, doc: payload.doc, client: payload.client, settings: { companyName: payload.settings.companyName, address: payload.settings.address, iban: payload.settings.iban, bic: payload.settings.bic, bankName: payload.settings.bankName, currency: payload.settings.currency, locale: payload.settings.locale }, response: link.response, responseReason: link.response_reason, expiresAt: link.expires_at });
   } catch (err) { logRequestError(req, err, "RECIPIENT_DOCUMENT_FAILED"); return sendError(res, 500, "RECIPIENT_DOCUMENT_FAILED", "Dokument konnte nicht geladen werden.", req); }
 });

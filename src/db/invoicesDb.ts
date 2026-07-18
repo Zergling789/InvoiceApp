@@ -8,7 +8,7 @@ import {
   createCursorPage,
   normalizePageSize,
   type CursorPage,
-  type CursorPageOptions,
+  type DocumentPageOptions,
 } from "@/db/cursorPagination";
 
 type DbInvoiceRow = Database["public"]["Tables"]["invoices"]["Row"];
@@ -130,10 +130,28 @@ export async function dbListInvoices(): Promise<Invoice[]> {
 }
 
 export async function dbListInvoicesPage(
-  options: CursorPageOptions = {},
+  options: DocumentPageOptions = {},
 ): Promise<CursorPage<Invoice>> {
   const uid = await requireUserId();
   const pageSize = normalizePageSize(options.pageSize);
+  const hasFilters = Boolean(options.search?.trim() || options.phases?.length);
+
+  if (hasFilters) {
+    const { data, error } = await supabase
+      .rpc("list_invoice_documents_page", {
+        p_search: options.search?.trim().slice(0, 100) || null,
+        p_client_ids: null,
+        p_phases: options.phases?.length ? options.phases : null,
+        p_cursor_created_at: options.cursor?.createdAt ?? null,
+        p_cursor_id: options.cursor?.id ?? null,
+        p_today: options.today ?? new Date().toISOString().slice(0, 10),
+        p_limit: pageSize + 1,
+      })
+      .overrideTypes<DbInvoiceRow[], { merge: false }>();
+    if (error) throw new Error(error.message);
+    return createCursorPage(data ?? [], pageSize, toInvoice);
+  }
+
   let query = supabase
     .from("invoices")
     .select(INVOICE_FIELDS)

@@ -51,4 +51,22 @@ describe("DocumentResults", () => {
 
     expect(onOpen).toHaveBeenCalledWith(rows[0]);
   });
+
+  it("shows the acceptance date for accepted offers", () => {
+    render(
+      <DocumentResults
+        rows={[{
+          ...rows[0],
+          statusLabel: "Angenommen",
+          statusTone: "green",
+          statusKey: "accepted",
+          statusChangedAt: "2026-07-18T12:00:00.000Z",
+        }]}
+        highlightedDocument={null}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("Angenommen: 16.07.2026")).toHaveLength(2);
+  });
 });

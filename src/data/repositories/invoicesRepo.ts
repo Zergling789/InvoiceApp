@@ -7,7 +7,7 @@ import {
   dbListInvoicesPage,
   dbUpsertInvoice,
 } from "@/db/invoicesDb";
-import type { CursorPage, CursorPageOptions } from "@/db/cursorPagination";
+import type { CursorPage, DocumentPageOptions } from "@/db/cursorPagination";
 
 export async function listInvoices(): Promise<Invoice[]> {
   const invoices = await dbListInvoices();
@@ -15,7 +15,7 @@ export async function listInvoices(): Promise<Invoice[]> {
 }
 
 export async function listInvoicesPage(
-  options: CursorPageOptions = {},
+  options: DocumentPageOptions = {},
 ): Promise<CursorPage<Invoice>> {
   const page = await dbListInvoicesPage(options);
   return { ...page, items: page.items.map(normalizeInvoice) };

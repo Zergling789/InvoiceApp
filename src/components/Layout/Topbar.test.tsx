@@ -16,6 +16,18 @@ vi.mock("@/supabaseClient", () => ({
   },
 }));
 
+vi.mock("@/app/notifications/useNotifications", () => ({
+  useNotifications: () => ({
+    notifications: [],
+    unreadCount: 0,
+    isLoading: false,
+    error: null,
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 describe("Topbar", () => {
   beforeEach(() => {
     window.localStorage.setItem("theme", "light");

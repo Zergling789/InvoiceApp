@@ -7,6 +7,7 @@ import { BetaFeedback } from "@/components/BetaFeedback";
 import { supabase } from "@/supabaseClient";
 import { useToast } from "@/ui/FeedbackProvider";
 import type { NavItem } from "./Sidebar";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 
 type TopbarProps = {
   brand?: string;
@@ -45,28 +46,31 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
           <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-[var(--app-text)] text-sm font-bold text-[var(--app-bg)]">F</span>
           {brand}
         </Link>
-        <nav className="hidden md:flex items-center gap-2">
-          <ThemeToggle />
-          <NavLink to={settingsHref} className={linkClass}>
-            <Settings size={16} /> Einstellungen
-          </NavLink>
+        <div className="flex items-center gap-2">
+          <NotificationCenter />
+          <nav className="hidden items-center gap-2 md:flex">
+            <ThemeToggle />
+            <NavLink to={settingsHref} className={linkClass}>
+              <Settings size={16} /> Einstellungen
+            </NavLink>
+            <button
+              type="button"
+              className={linkClass({ isActive: false })}
+              onClick={handleSignOut}
+              disabled={signingOut}
+            >
+              <LogOut size={16} /> {signingOut ? "Abmelden..." : "Abmelden"}
+            </button>
+          </nav>
           <button
             type="button"
-            className={linkClass({ isActive: false })}
-            onClick={handleSignOut}
-            disabled={signingOut}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] md:hidden"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Menü öffnen"
           >
-            <LogOut size={16} /> {signingOut ? "Abmelden..." : "Abmelden"}
+            <Menu size={20} />
           </button>
-        </nav>
-        <button
-          type="button"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] md:hidden"
-          onClick={() => setMenuOpen(true)}
-          aria-label="Menü öffnen"
-        >
-          <Menu size={20} />
-        </button>
+        </div>
       </div>
       {menuOpen && (
         <div className="app-visual-viewport fixed inset-x-0 z-40 flex items-start justify-end bg-black/50 p-4 safe-top backdrop-blur-sm md:hidden">

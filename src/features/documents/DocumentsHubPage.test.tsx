@@ -91,7 +91,7 @@ describe("DocumentsHubPage table view", () => {
   });
 
   it("shows one retry state instead of an empty document list after a load failure", async () => {
-    listClientsMock.mockRejectedValueOnce(new Error("private database detail"));
+    listClientsMock.mockRejectedValue(new Error("private database detail"));
     renderWithProviders(<DocumentsHubPage />, { route: "/app/documents" });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Dokumente konnten nicht geladen werden");
@@ -99,6 +99,15 @@ describe("DocumentsHubPage table view", () => {
     expect(screen.queryByText("Keine Dokumente gefunden.")).not.toBeInTheDocument();
 
     const callsBeforeRetry = listClientsMock.mock.calls.length;
+    listClientsMock.mockResolvedValue([
+      {
+        id: "client-1",
+        companyName: "Beispiel GmbH",
+        firstName: "Fabian",
+        lastName: "Heimlich",
+        contactPerson: "Fabian Heimlich",
+      },
+    ]);
     fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
     await waitFor(() => expect(listClientsMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry));
     expect(await screen.findByRole("row", { name: /ANG-0154.*Fabian.*Heimlich/i })).toBeVisible();
@@ -156,7 +165,7 @@ describe("DocumentsHubPage table view", () => {
     });
   });
 
-  it("loads remaining pages before presenting a filtered result", async () => {
+  it("passes search to the first server-filtered page", async () => {
     listOffersPageMock
       .mockResolvedValueOnce({
         items: [
@@ -199,10 +208,31 @@ describe("DocumentsHubPage table view", () => {
     await screen.findAllByText("ANG-0154");
 
     fireEvent.change(screen.getByPlaceholderText("Suche nach Nummer oder Kunde"), {
-      target: { value: "ANG-0999" },
+      target: { value: "Beispiel" },
     });
 
     expect((await screen.findAllByText("ANG-0999"))[0]).toBeVisible();
     expect(screen.queryByText("ANG-0154")).not.toBeInTheDocument();
+    expect(listOffersPageMock).toHaveBeenLastCalledWith({
+      pageSize: 24,
+      search: "Beispiel",
+    });
+  });
+
+  it("filters offer phases on the server without requesting unrelated invoices", async () => {
+    renderWithProviders(<DocumentsHubPage />, { route: "/app/documents" });
+    await screen.findAllByText("ANG-0154");
+    const invoiceCallsBeforeFilter = listInvoicesPageMock.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Status" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Angenommen" }));
+
+    await waitFor(() =>
+      expect(listOffersPageMock).toHaveBeenLastCalledWith({
+        pageSize: 24,
+        phases: ["accepted"],
+      }),
+    );
+    expect(listInvoicesPageMock).toHaveBeenCalledTimes(invoiceCallsBeforeFilter);
   });
 });

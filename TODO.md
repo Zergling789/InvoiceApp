@@ -37,9 +37,9 @@ Abschlusskriterium: Alle Routen laufen, Settings bearbeitbar, Angebote/Rechnunge
 4. ✅ **Dokumentdetails:** Die öffentliche mobile Angebotsansicht ist bei 390 × 844 Pixeln ohne horizontalen Seiten-Scroll automatisiert geprüft und bis zu den Aktivitäten bedienbar.
 5. ✅ **Authentifizierter Rechnungsflow vorbereitet:** Ein dedizierter Smartphone-E2E-Test deckt Kunde anlegen → Rechnung erstellen → speichern → Dokumentliste neu laden → öffnen → finalisieren einschließlich Datenbankstatus und Sperre ab. Er läuft ausschließlich mit den getrennten Supabase-E2E-Secrets in GitHub CI.
 6. ✅ **Weitere mobile Arbeitsflächen:** PDF-Vorschau, Paketwahl, Paketeditor, To-do-Schnellmenü und mobile Hauptnavigation verwenden ebenfalls den sichtbaren Viewport und Safe-Area-Abstände.
-7. ⏳ **Noch offen:** Den neuen authentifizierten Test nach dem gebündelten Push in GitHub CI erfolgreich ausführen und ergänzende Gerätekontrollen mit tatsächlich geöffneter virtueller Tastatur auf iOS und Android durchführen.
+7. ⏳ **Noch offen:** Der authentifizierte Smartphone-Test läuft in GitHub CI. Ergänzend bleiben reale Gerätekontrollen mit tatsächlich geöffneter virtueller Tastatur auf iOS und Android erforderlich.
 
-**Phase 3 weitgehend umgesetzt:** Das systemweite mobile Fundament, der öffentliche Dokumentworkflow und der authentifizierte Rechnungsworkflow sind implementiert. Der Abschluss hängt noch von der Ausführung des neuen Supabase-E2E-Tests in GitHub CI und den realen iOS-/Android-Tastaturkontrollen ab.
+**Phase 3 weitgehend umgesetzt:** Das systemweite mobile Fundament, der öffentliche Dokumentworkflow und der authentifizierte Rechnungsworkflow sind implementiert und laufen automatisiert. Für den vollständigen Abschluss fehlen noch reale iOS-/Android-Tastaturkontrollen.
 
 ## Master-Roadmap Phase 4 – Dokumentenworkflow
 
@@ -51,9 +51,10 @@ Abschlusskriterium: Alle Routen laufen, Settings bearbeitbar, Angebote/Rechnunge
 6. ⛔ **Bewusst noch nicht unterstützt – Gutschrift:** Es existiert noch kein vollständiges Datenmodell mit eigener Nummerierung, Statuslogik, PDF-Ausgabe und steuerlicher Validierung. Ein Rechnungsstorno erzeugt deshalb ausdrücklich keine Gutschrift. Dieser Prozess wird erst als eigener, zusammenhängender Meilenstein umgesetzt.
 7. ✅ **Versandaktionen vereinheitlichen:** Standardversand, Zahlungserinnerung, Mahnung und Angebotsnachfrage besitzen eindeutige Titel, Aktions- und Erfolgstexte. Rechnungsentwürfe zeigen keinen wirkungslosen direkten Senden-Button mehr; `Finalisieren & senden` validiert den finalisierten Zustand korrekt und verhindert doppelte Ausführungen.
 8. ✅ **Versandfehler ohne Doppelsenden:** SMTP-Verbindungen besitzen feste Verbindungs-, Begrüßungs- und Socket-Timeouts. Nur ein eindeutig vor dem Versand auftretender PDF-Engine-Reset wird automatisch wiederholt. Bei Netzwerk- oder SMTP-Timeouts zeigt die App dauerhaft „Versandstatus prüfen“ und blockiert einen vorschnellen zweiten Versand. Wurde die Nachricht bereits vom Mailserver angenommen, aber die Statusaktualisierung schlägt fehl, wird dies als eigener maschinenlesbarer Zustand gemeldet.
-9. ⏳ **Noch offen:** Den aktualisierten authentifizierten Angebot-zu-Rechnung-Ablauf nach dem gebündelten Push mit den GitHub-E2E-Secrets ausführen und die reale E-Mail-Zustellung prüfen. Zustellbestätigungen und spätere Bounces sind mit dem derzeit providerunabhängigen SMTP-Versand nicht zuverlässig erkennbar; dafür ist später eine gezielte Provider-Webhook-Integration erforderlich.
+9. ✅ **In-App-Benachrichtigungen:** Annahme, Ablehnung und die erste Ansicht im Empfängerportal erzeugen atomare, deduplizierte Benachrichtigungen für den Dokumentbesitzer. Die mandantenfähige Glocke aktualisiert sich per Supabase Realtime, zeigt ungelesene Ereignisse und führt direkt zum betroffenen Dokument.
+10. ⏳ **Noch offen:** Der authentifizierte Angebot-zu-Rechnung-Ablauf läuft mit den GitHub-E2E-Secrets. Offen bleiben die Prüfung der realen E-Mail-Zustellung sowie eine spätere Provider-Webhook-Integration für verlässliche Zustellbestätigungen und Bounces.
 
-**Phase 4 weitgehend umgesetzt:** Der Kernablauf für Angebote und Rechnungen ist vereinheitlicht und gegen Fehlbedienung sowie versehentlichen Doppelversand abgesichert. Der bewusste Ausschluss von Gutschriften verhindert, dass ein fachlich unvollständiger Prozess als marktreif erscheint. Offen bleiben reale Provider-Zustelltests und die spätere Entscheidung für eine Bounce-Webhook-Integration.
+**Phase 4 weitgehend umgesetzt:** Der Kernablauf für Angebote und Rechnungen ist vereinheitlicht, automatisiert geprüft und gegen Fehlbedienung sowie versehentlichen Doppelversand abgesichert. Empfängerreaktionen werden dem Besitzer ohne Neuladen sichtbar gemacht. Der bewusste Ausschluss von Gutschriften verhindert, dass ein fachlich unvollständiger Prozess als marktreif erscheint. Offen bleiben reale Provider-Zustelltests und die spätere Entscheidung für eine Bounce-Webhook-Integration.
 
 ## Master-Roadmap Phase 5 – KI vorbereiten
 
@@ -101,6 +102,15 @@ Abschlusskriterium: Alle Routen laufen, Settings bearbeitbar, Angebote/Rechnunge
 10. ✅ **Sortierabfragen indizieren:** Zusammengesetzte Indizes auf Nutzer, Erstellzeitpunkt und ID bedienen Eigentümerfilter, Sortierung und Cursor gemeinsam. Der E2E-Abfrageplan verwendet dafür einen Index-Only-Scan.
 11. ✅ **Kunden- und Projektlisten paginieren:** Beide Übersichten laden stabile Seiten über Erstellzeitpunkt und ID. Kundensuche sowie Projektname und Status werden vor dem Limit in Supabase gefiltert; weitere Seiten lassen sich ohne Duplikate nachladen.
 12. ✅ **Projektkennzahlen vollständig halten:** Laufende Projekte und geplanter Auftragswert kommen aus einer eigentümergebundenen `security invoker`-Funktion und bleiben dadurch unabhängig von der aktuell geladenen Seite korrekt.
-13. ⏳ **Als Nächstes:** Dokumentfilter vollständig in die Datenbankabfrage verschieben und die großen Einstellungs- und Editorbereiche anhand realer Nutzungsprofile weiter aufteilen.
+13. ✅ **Dokumentfilter serverseitig ausführen:** Suche, Kundennamen und fachliche Statusphasen werden vor Cursor und Limit in eigentümergebundenen `security invoker`-Funktionen ausgewertet. Aktive Filter laden dadurch nur noch passende Seiten statt den vollständigen Dokumentbestand in den Browser nachzuladen.
+14. ⏳ **Als Nächstes:** Die großen Einstellungs- und Editorbereiche anhand realer Nutzungsprofile weiter aufteilen und anschließend Ladezeit, Interaktionslatenz und Re-Render-Verhalten erneut messen.
 
-**Phase 8 fortgeführt:** Das initiale JavaScript bleibt rund 39 Prozent kleiner. Zusätzlich sinkt der JavaScript-Transfer der Rechnungserstellung von rund 44,3 KiB auf 37,6 KiB gzip und der Dokumentdetailseite von 28,4 KiB auf 24,9 KiB gzip. Dokument-, Kunden- und Projektübersichten sind nun cursor-paginiert; Projektkennzahlen werden separat und vollständig aggregiert.
+**Phase 8 fortgeführt:** Das initiale JavaScript bleibt rund 39 Prozent kleiner. Zusätzlich sinkt der JavaScript-Transfer der Rechnungserstellung von rund 44,3 KiB auf 37,6 KiB gzip und der Dokumentdetailseite von 28,4 KiB auf 24,9 KiB gzip. Dokument-, Kunden- und Projektübersichten sind cursor-paginiert; Suche und Statusfilter laufen vor dem Seitenlimit in der Datenbank, Projektkennzahlen werden separat und vollständig aggregiert.
+
+## Master-Roadmap Phase 9 – Tests
+
+1. ✅ **Mehrstufige Testbasis:** Fachregeln, Services, UI-Komponenten, Serverrouten, Migrationen, RLS-Isolation, Browser-Smoke-Tests und zentrale Nutzerabläufe besitzen automatisierte Tests in getrennten CI-Jobs.
+2. ✅ **Qualitäts-Gates:** Typecheck, UI- und Servertests, Produktionsbuild, Dependency-Audit, Supabase-Integration, Browser-Smoke, E-Rechnungs- und Generatorprüfungen blockieren fehlerhafte Änderungen.
+3. ⏳ **Fortlaufende Aufgabe:** Jede weitere Roadmap-Verbesserung erhält passende Regressionstests. Vor Public Beta sind die vollständige API-Negativmatrix, reale iOS-/Android-Tastaturtests, E-Mail-Provider-Zustelltests und ein isolierter Restore-Test nachzuholen.
+
+**Phase 9 ist als laufendes Qualitäts-Gate aktiv:** Die automatisierte Basis ist breit vorhanden. Die verbleibenden Tests benötigen teilweise reale Geräte oder freigegebene externe Infrastruktur und können deshalb nicht allein durch lokale Mocks als abgeschlossen gelten.

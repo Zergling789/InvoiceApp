@@ -2,10 +2,10 @@ import type { Invoice } from "@/types";
 import * as repo from "@/data/repositories/invoicesRepo";
 import { apiFetch } from "@/app/api/apiClient";
 import { readApiError } from "@/app/api/apiError";
-import type { CursorPageOptions } from "@/db/cursorPagination";
+import type { DocumentPageOptions } from "@/db/cursorPagination";
 
 export const listInvoices = (): Promise<Invoice[]> => repo.listInvoices();
-export const listInvoicesPage = (options: CursorPageOptions = {}) => repo.listInvoicesPage(options);
+export const listInvoicesPage = (options: DocumentPageOptions = {}) => repo.listInvoicesPage(options);
 export const getInvoice = (id: string) => repo.getInvoice(id);
 export const saveInvoice = (invoice: Invoice) => repo.saveInvoice(invoice);
 export const deleteInvoice = (id: string) => repo.deleteInvoice(id);

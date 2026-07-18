@@ -7,14 +7,14 @@ import {
   createCursorPage,
   normalizePageSize,
   type CursorPage,
-  type CursorPageOptions,
+  type DocumentPageOptions,
 } from "@/db/cursorPagination";
 
 type DbOfferRow = Database["public"]["Tables"]["offers"]["Row"];
 type DbOfferInsert = Database["public"]["Tables"]["offers"]["Insert"];
 
 const OFFER_FIELDS =
-  "id,created_at,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,rejection_reason,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
+  "id,created_at,updated_at,number,client_id,project_id,currency,date,valid_until,positions,intro_text,footer_text,vat_rate,status,rejection_reason,sent_at,last_sent_at,last_sent_to,sent_count,sent_via,invoice_id" as const;
 
 const normalizeOfferStatus = (status: string | null | undefined): OfferStatus => {
   switch ((status ?? "").toUpperCase()) {
@@ -48,6 +48,7 @@ async function requireUserId(): Promise<string> {
 const toOffer = (r: DbOfferRow): Offer => ({
   id: r.id,
   createdAt: r.created_at,
+  updatedAt: r.updated_at,
   number: r.number,
   clientId: r.client_id,
   projectId: r.project_id ?? undefined,
@@ -84,10 +85,27 @@ export async function dbListOffers(): Promise<Offer[]> {
 }
 
 export async function dbListOffersPage(
-  options: CursorPageOptions = {},
+  options: DocumentPageOptions = {},
 ): Promise<CursorPage<Offer>> {
   const uid = await requireUserId();
   const pageSize = normalizePageSize(options.pageSize);
+  const hasFilters = Boolean(options.search?.trim() || options.phases?.length);
+
+  if (hasFilters) {
+    const { data, error } = await supabase
+      .rpc("list_offer_documents_page", {
+        p_search: options.search?.trim().slice(0, 100) || null,
+        p_client_ids: null,
+        p_phases: options.phases?.length ? options.phases : null,
+        p_cursor_created_at: options.cursor?.createdAt ?? null,
+        p_cursor_id: options.cursor?.id ?? null,
+        p_limit: pageSize + 1,
+      })
+      .overrideTypes<DbOfferRow[], { merge: false }>();
+    if (error) throw new Error(error.message);
+    return createCursorPage(data ?? [], pageSize, toOffer);
+  }
+
   let query = supabase
     .from("offers")
     .select(OFFER_FIELDS)

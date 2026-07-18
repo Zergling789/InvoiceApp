@@ -123,9 +123,9 @@ export type Database = {
         Relationships: []
       }
       document_recipient_links: {
-        Row: { created_at: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id: string; responded_at: string | null; response: string | null; response_reason: string | null; revoked_at: string | null; token_hash: string; user_id: string }
-        Insert: { created_at?: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; id?: string; responded_at?: string | null; response?: string | null; response_reason?: string | null; revoked_at?: string | null; token_hash: string; user_id: string }
-        Update: { created_at?: string; document_id?: string; document_type?: string; document_updated_at?: string; expires_at?: string; id?: string; responded_at?: string | null; response?: string | null; response_reason?: string | null; revoked_at?: string | null; token_hash?: string; user_id?: string }
+        Row: { created_at: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; first_viewed_at: string | null; id: string; responded_at: string | null; response: string | null; response_reason: string | null; revoked_at: string | null; token_hash: string; user_id: string }
+        Insert: { created_at?: string; document_id: string; document_type: string; document_updated_at: string; expires_at: string; first_viewed_at?: string | null; id?: string; responded_at?: string | null; response?: string | null; response_reason?: string | null; revoked_at?: string | null; token_hash: string; user_id: string }
+        Update: { created_at?: string; document_id?: string; document_type?: string; document_updated_at?: string; expires_at?: string; first_viewed_at?: string | null; id?: string; responded_at?: string | null; response?: string | null; response_reason?: string | null; revoked_at?: string | null; token_hash?: string; user_id?: string }
         Relationships: []
       }
       audit_events: {
@@ -581,6 +581,54 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          action_url: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          event_key: string | null
+          id: string
+          is_read: boolean
+          message: string
+          metadata: Json
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          action_url?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_key?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          metadata?: Json
+          read_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          action_url?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_key?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          metadata?: Json
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       offers: {
         Row: {
           client_id: string
@@ -1000,6 +1048,144 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_notification: {
+        Args: {
+          p_action_url?: string | null
+          p_entity_id?: string | null
+          p_entity_type?: string | null
+          p_event_key?: string | null
+          p_message: string
+          p_metadata?: Json
+          p_title: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      record_recipient_document_view: {
+        Args: { p_link_id: string }
+        Returns: boolean
+      }
+      respond_to_offer_link: {
+        Args: {
+          p_link_id: string
+          p_rejection_reason?: string | null
+          p_response: string
+        }
+        Returns: string
+      }
+      list_invoice_documents_page: {
+        Args: {
+          p_client_ids: string[] | null
+          p_cursor_created_at: string | null
+          p_cursor_id: string | null
+          p_limit: number
+          p_phases: string[] | null
+          p_search: string | null
+          p_today: string
+        }
+        Returns: {
+          branding_snapshot: Json | null
+          buyer_reference: string | null
+          canceled_at: string | null
+          client_address: string | null
+          client_city: string | null
+          client_company_name: string | null
+          client_contact_person: string | null
+          client_electronic_address: string | null
+          client_electronic_address_scheme: string | null
+          client_email: string | null
+          client_house_number: string | null
+          client_id: string
+          client_name: string
+          client_phone: string | null
+          client_postal_code: string | null
+          client_street: string | null
+          client_vat_id: string | null
+          created_at: string
+          currency: string
+          customer_country: string
+          customer_type: string
+          date: string
+          due_date: string
+          finalized_at: string | null
+          footer_text: string
+          id: string
+          intro_text: string
+          invoice_date: string
+          invoice_number: string | null
+          is_locked: boolean
+          is_small_business: boolean
+          last_sent_at: string | null
+          last_sent_to: string | null
+          number: string | null
+          offer_id: string | null
+          paid_at: string | null
+          payment_date: string | null
+          payment_terms_days: number
+          positions: Json
+          project_id: string | null
+          seller_country: string
+          sent_at: string | null
+          sent_count: number
+          sent_via: string | null
+          service_country: string
+          service_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
+          small_business_note: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          vat_rate: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      list_offer_documents_page: {
+        Args: {
+          p_client_ids: string[] | null
+          p_cursor_created_at: string | null
+          p_cursor_id: string | null
+          p_limit: number
+          p_phases: string[] | null
+          p_search: string | null
+        }
+        Returns: {
+          client_id: string
+          created_at: string
+          currency: string
+          date: string
+          footer_text: string
+          id: string
+          intro_text: string
+          invoice_id: string | null
+          last_sent_at: string | null
+          last_sent_to: string | null
+          number: string
+          positions: Json
+          project_id: string | null
+          rejection_reason: string | null
+          sent_at: string | null
+          sent_count: number
+          sent_via: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          valid_until: string | null
+          vat_rate: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "offers"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_project_metrics: {
         Args: Record<PropertyKey, never>
         Returns: {

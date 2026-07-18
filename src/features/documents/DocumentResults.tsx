@@ -23,6 +23,7 @@ export type DocumentRow = {
   dueDate?: string;
   validUntil?: string;
   isOverdue?: boolean;
+  statusChangedAt?: string;
 };
 
 type DocumentResultsProps = {
@@ -87,6 +88,11 @@ export const DocumentResults = memo(function DocumentResults({
                         {row.type === "invoice" ? "Fällig" : "Gültig bis"}: {formatDate(deadline, "de-DE")}
                       </div>
                     )}
+                    {row.statusKey === "accepted" && row.statusChangedAt && (
+                      <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        Angenommen: {formatDate(row.statusChangedAt, "de-DE")}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-4 text-right font-semibold tabular-nums">{row.amountLabel}</td>
                   <td className="px-4 py-4 text-right"><AppBadge color={row.statusTone}>{row.statusLabel}</AppBadge></td>
@@ -128,6 +134,14 @@ export const DocumentResults = memo(function DocumentResults({
                     <span>•</span>
                     <span className={row.isOverdue ? "font-medium text-red-600" : ""}>
                       Fällig: {formatDate(row.dueDate, "de-DE")}
+                    </span>
+                  </>
+                )}
+                {row.statusKey === "accepted" && row.statusChangedAt && (
+                  <>
+                    <span>•</span>
+                    <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                      Angenommen: {formatDate(row.statusChangedAt, "de-DE")}
                     </span>
                   </>
                 )}

@@ -7,7 +7,7 @@ import {
   dbListOffersPage,
   dbUpsertOffer,
 } from "@/db/offersDb";
-import type { CursorPage, CursorPageOptions } from "@/db/cursorPagination";
+import type { CursorPage, DocumentPageOptions } from "@/db/cursorPagination";
 
 export async function listOffers(): Promise<Offer[]> {
   const offers = await dbListOffers();
@@ -15,7 +15,7 @@ export async function listOffers(): Promise<Offer[]> {
 }
 
 export async function listOffersPage(
-  options: CursorPageOptions = {},
+  options: DocumentPageOptions = {},
 ): Promise<CursorPage<Offer>> {
   const page = await dbListOffersPage(options);
   return { ...page, items: page.items.map(normalizeOffer) };

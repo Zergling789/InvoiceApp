@@ -26,13 +26,15 @@ import { sortDocumentsNewestFirst } from "@/features/documents/sortDocuments";
 import { getClientDisplayName, getClientPersonName, type ClientSummary } from "@/domain/models/Client";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
 import { DocumentResults, type DocumentRow } from "@/features/documents/DocumentResults";
-import type { CursorPage, DocumentCursor } from "@/db/cursorPagination";
+import type { CursorPage, DocumentCursor, DocumentPageOptions } from "@/db/cursorPagination";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 type FilterMode = "all" | "offer" | "invoice";
 type CombinedStatus = OfferPhase | InvoicePhase;
 const URL_STATUSES = new Set<CombinedStatus>(["draft", "issued", "sent", "overdue", "paid", "canceled", "accepted", "rejected", "invoiced"]);
 const DOCUMENT_PAGE_SIZE = 24;
-const FILTER_PAGE_SIZE = 100;
+const OFFER_PHASES = new Set<CombinedStatus>(["draft", "sent", "accepted", "rejected", "invoiced"]);
+const INVOICE_PHASES = new Set<CombinedStatus>(["draft", "issued", "sent", "overdue", "paid", "canceled"]);
 
 type PageState = {
   nextCursor: DocumentCursor | null;
@@ -45,6 +47,31 @@ const appendUniqueDocuments = <T extends { id: string }>(current: T[], next: T[]
   const knownIds = new Set(current.map((item) => item.id));
   return [...current, ...next.filter((item) => !knownIds.has(item.id))];
 };
+
+const formatLocalIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildDocumentPageOptions = ({
+  cursor,
+  search,
+  phases,
+  today,
+}: {
+  cursor?: DocumentCursor | null;
+  search: string;
+  phases: CombinedStatus[];
+  today?: string;
+}): DocumentPageOptions => ({
+  pageSize: DOCUMENT_PAGE_SIZE,
+  ...(cursor ? { cursor } : {}),
+  ...(search ? { search } : {}),
+  ...(phases.length ? { phases } : {}),
+  ...(today ? { today } : {}),
+});
 
 const splitPersonName = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -104,10 +131,12 @@ export default function DocumentsHubPage() {
   const location = useLocation();
   const [mode, setMode] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search.trim(), 250);
   const [selectedStatuses, setSelectedStatuses] = useState<CombinedStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -123,7 +152,54 @@ export default function DocumentsHubPage() {
   const lastRefreshTokenRef = useRef<number | null>(null);
   const [highlightedDocument, setHighlightedDocument] = useState<CreatedDocumentTarget | null>(null);
   const loadGenerationRef = useRef(0);
+  const referenceGenerationRef = useRef(0);
   const loadingMoreRef = useRef(false);
+
+  const refreshReferenceData = useCallback(async () => {
+    const generation = ++referenceGenerationRef.current;
+    setReferenceLoading(true);
+    setReferenceError(null);
+    try {
+      const [clientData, settingsData] = await Promise.all([
+        clientService.listSummaries(),
+        fetchSettings(),
+      ]);
+      if (generation !== referenceGenerationRef.current) return;
+      setClients(clientData);
+      setSettings(settingsData);
+    } catch (caught) {
+      if (generation !== referenceGenerationRef.current) return;
+      setReferenceError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      if (generation === referenceGenerationRef.current) setReferenceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshReferenceData();
+    return () => {
+      referenceGenerationRef.current += 1;
+    };
+  }, [refreshReferenceData]);
+
+  const clientById = useMemo(() => {
+    const map = new Map<string, ClientSummary>();
+    clients.forEach((client) => map.set(client.id, client));
+    return map;
+  }, [clients]);
+
+  const selectedOfferPhases = useMemo(
+    () => selectedStatuses.filter((status) => OFFER_PHASES.has(status)),
+    [selectedStatuses],
+  );
+  const selectedInvoicePhases = useMemo(
+    () => selectedStatuses.filter((status) => INVOICE_PHASES.has(status)),
+    [selectedStatuses],
+  );
+  const shouldLoadOffers =
+    mode !== "invoice" && (selectedStatuses.length === 0 || selectedOfferPhases.length > 0);
+  const shouldLoadInvoices =
+    mode !== "offer" && (selectedStatuses.length === 0 || selectedInvoicePhases.length > 0);
 
   const refreshDocuments = useCallback(async () => {
     const generation = ++loadGenerationRef.current;
@@ -133,33 +209,45 @@ export default function DocumentsHubPage() {
     setError(null);
     setLoadMoreError(false);
     try {
-      const [clientData, offerData, invoiceData, settingsData] = await Promise.all([
-        clientService.listSummaries(),
-        offerService.listOffersPage({ pageSize: DOCUMENT_PAGE_SIZE }),
-        invoiceService.listInvoicesPage({ pageSize: DOCUMENT_PAGE_SIZE }),
-        fetchSettings(),
+      const [offerData, invoiceData] = await Promise.all([
+        shouldLoadOffers
+          ? offerService.listOffersPage(
+              buildDocumentPageOptions({
+                search: debouncedSearch,
+                phases: selectedOfferPhases,
+              }),
+            )
+          : Promise.resolve(null),
+        shouldLoadInvoices
+          ? invoiceService.listInvoicesPage(
+              buildDocumentPageOptions({
+                search: debouncedSearch,
+                phases: selectedInvoicePhases,
+                today: formatLocalIsoDate(new Date()),
+              }),
+            )
+          : Promise.resolve(null),
       ]);
       if (generation !== loadGenerationRef.current) return;
-      setClients(clientData);
-      setOffers(offerData.items);
-      setInvoices(invoiceData.items);
-      setOfferPage({ nextCursor: offerData.nextCursor, hasMore: offerData.hasMore });
-      setInvoicePage({ nextCursor: invoiceData.nextCursor, hasMore: invoiceData.hasMore });
-      setSettings(settingsData);
+      setOffers(offerData?.items ?? []);
+      setInvoices(invoiceData?.items ?? []);
+      setOfferPage(offerData ? { nextCursor: offerData.nextCursor, hasMore: offerData.hasMore } : initialPageState);
+      setInvoicePage(invoiceData ? { nextCursor: invoiceData.nextCursor, hasMore: invoiceData.hasMore } : initialPageState);
     } catch (e) {
       if (generation !== loadGenerationRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       if (generation === loadGenerationRef.current) setLoading(false);
     }
-  }, []);
+  }, [debouncedSearch, selectedInvoicePhases, selectedOfferPhases, shouldLoadInvoices, shouldLoadOffers]);
 
   useEffect(() => {
+    if (referenceLoading || referenceError) return;
     void refreshDocuments();
     return () => {
       loadGenerationRef.current += 1;
     };
-  }, [refreshDocuments]);
+  }, [referenceError, referenceLoading, refreshDocuments]);
 
   useEffect(() => {
     const navigationState = location.state as DocumentRefreshState | null;
@@ -169,7 +257,7 @@ export default function DocumentsHubPage() {
     setHighlightedDocument(navigationState.highlightDocument ?? null);
     void refreshDocuments();
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: {} });
-  }, [location.hash, location.pathname, location.search, location.state, navigate]);
+  }, [location.hash, location.pathname, location.search, location.state, navigate, refreshDocuments]);
 
   useEffect(() => {
     if (!highlightedDocument || loading) return;
@@ -208,11 +296,6 @@ export default function DocumentsHubPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
-    return () => window.clearTimeout(handle);
-  }, [search]);
-
-  useEffect(() => {
     setSelectedStatuses([]);
     setLoadMoreError(false);
   }, [mode]);
@@ -229,7 +312,6 @@ export default function DocumentsHubPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [newMenuOpen, statusMenuOpen]);
 
-  const hasActiveFilters = Boolean(debouncedSearch || selectedStatuses.length);
   const hasMoreForMode =
     mode === "offer"
       ? offerPage.hasMore
@@ -240,8 +322,8 @@ export default function DocumentsHubPage() {
   const loadMoreDocuments = useCallback(async (pageSize = DOCUMENT_PAGE_SIZE) => {
     if (loadingMoreRef.current) return;
 
-    const loadOffers = mode !== "invoice" && offerPage.hasMore && offerPage.nextCursor;
-    const loadInvoices = mode !== "offer" && invoicePage.hasMore && invoicePage.nextCursor;
+    const loadOffers = shouldLoadOffers && offerPage.hasMore && offerPage.nextCursor;
+    const loadInvoices = shouldLoadInvoices && invoicePage.hasMore && invoicePage.nextCursor;
     if (!loadOffers && !loadInvoices) return;
 
     loadingMoreRef.current = true;
@@ -253,10 +335,25 @@ export default function DocumentsHubPage() {
       const [nextOffers, nextInvoices]: [CursorPage<Offer> | null, CursorPage<Invoice> | null] =
         await Promise.all([
           loadOffers
-            ? offerService.listOffersPage({ cursor: offerPage.nextCursor, pageSize })
+            ? offerService.listOffersPage({
+                ...buildDocumentPageOptions({
+                  cursor: offerPage.nextCursor,
+                  search: debouncedSearch,
+                  phases: selectedOfferPhases,
+                }),
+                pageSize,
+              })
             : Promise.resolve(null),
           loadInvoices
-            ? invoiceService.listInvoicesPage({ cursor: invoicePage.nextCursor, pageSize })
+            ? invoiceService.listInvoicesPage({
+                ...buildDocumentPageOptions({
+                  cursor: invoicePage.nextCursor,
+                  search: debouncedSearch,
+                  phases: selectedInvoicePhases,
+                  today: formatLocalIsoDate(new Date()),
+                }),
+                pageSize,
+              })
             : Promise.resolve(null),
         ]);
 
@@ -275,25 +372,7 @@ export default function DocumentsHubPage() {
       loadingMoreRef.current = false;
       if (generation === loadGenerationRef.current) setLoadingMore(false);
     }
-  }, [invoicePage, mode, offerPage]);
-
-  useEffect(() => {
-    if (!hasActiveFilters || loading || loadingMore || loadMoreError || !hasMoreForMode) return;
-    void loadMoreDocuments(FILTER_PAGE_SIZE);
-  }, [
-    hasActiveFilters,
-    hasMoreForMode,
-    loadMoreDocuments,
-    loadMoreError,
-    loading,
-    loadingMore,
-  ]);
-
-  const clientById = useMemo(() => {
-    const map = new Map<string, ClientSummary>();
-    clients.forEach((client) => map.set(client.id, client));
-    return map;
-  }, [clients]);
+  }, [debouncedSearch, invoicePage, offerPage, selectedInvoicePhases, selectedOfferPhases, shouldLoadInvoices, shouldLoadOffers]);
 
   const statusOptions = useMemo((): CombinedStatus[] => {
     if (mode === "offer") {
@@ -396,6 +475,7 @@ export default function DocumentsHubPage() {
               statusLabel: formatOfferPhaseLabel(phase),
               statusTone: offerStatusTone(phase),
               statusKey: phase,
+              statusChangedAt: phase === "accepted" ? offer.updatedAt : undefined,
               validUntil: offer.validUntil,
             };
           });
@@ -406,21 +486,6 @@ export default function DocumentsHubPage() {
   const sortedRows = useMemo(() => {
     return sortDocumentsNewestFirst(rows);
   }, [rows]);
-
-  const filteredRows = useMemo(() => {
-    let next = sortedRows;
-    if (debouncedSearch) {
-      next = next.filter((row) =>
-        [row.number, row.clientName, row.firstName, row.lastName, row.companyName].some((value) =>
-          value.toLowerCase().includes(debouncedSearch),
-        )
-      );
-    }
-    if (selectedStatuses.length) {
-      next = next.filter((row) => selectedStatuses.includes(row.statusKey));
-    }
-    return next;
-  }, [sortedRows, debouncedSearch, selectedStatuses]);
 
   const toggleStatus = (status: CombinedStatus) => {
     setSelectedStatuses((prev) =>
@@ -451,6 +516,9 @@ export default function DocumentsHubPage() {
     setNewMenuOpen(false);
     navigate("/app/customers/new", { state: { backgroundLocation: location } });
   };
+
+  const pageLoading = referenceLoading || (!referenceError && loading);
+  const pageError = referenceError || error;
 
   return (
     <div className="space-y-6">
@@ -500,6 +568,7 @@ export default function DocumentsHubPage() {
           <input
             className="min-w-0 flex-1 border rounded-lg px-3 py-2 text-sm"
             placeholder="Suche nach Nummer oder Kunde"
+            aria-label="Dokumente durchsuchen"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -622,42 +691,28 @@ export default function DocumentsHubPage() {
 
       </div>
 
-      {loading ? (
+      {pageLoading ? (
         <AppCard>
           <div className="text-sm text-gray-500">Lade Dokumente...</div>
         </AppCard>
-      ) : error ? (
+      ) : pageError ? (
         <LoadErrorCard
           title="Dokumente konnten nicht geladen werden"
-          onRetry={() => void refreshDocuments()}
+          onRetry={() => void (referenceError ? refreshReferenceData() : refreshDocuments())}
         />
-      ) : hasActiveFilters && loadMoreError ? (
-        <LoadErrorCard
-          title="Suche konnte nicht vollständig geladen werden"
-          onRetry={() => {
-            setLoadMoreError(false);
-            void loadMoreDocuments();
-          }}
-        />
-      ) : hasActiveFilters && (hasMoreForMode || loadingMore) ? (
-        <AppCard>
-          <div className="text-sm text-gray-500" role="status">
-            Lade alle Dokumente für die vollständige Suche...
-          </div>
-        </AppCard>
-      ) : filteredRows.length === 0 ? (
+      ) : sortedRows.length === 0 ? (
         <AppCard>
           <div className="text-sm text-gray-500">Keine Dokumente gefunden.</div>
         </AppCard>
       ) : (
         <DocumentResults
-          rows={filteredRows}
+          rows={sortedRows}
           highlightedDocument={highlightedDocument}
           onOpen={openDocument}
         />
       )}
 
-      {!loading && !error && !hasActiveFilters && hasMoreForMode && (
+      {!pageLoading && !pageError && hasMoreForMode && (
         <div className="flex flex-col items-center gap-2">
           {loadMoreError && (
             <p className="text-sm text-red-600" role="alert">
