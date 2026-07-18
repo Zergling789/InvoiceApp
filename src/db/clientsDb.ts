@@ -2,6 +2,14 @@ import { supabase } from "@/supabaseClient";
 import type { Database } from "@/lib/supabase.types";
 import type { Client } from "@/types";
 import type { ClientSummary } from "@/domain/models/Client";
+import {
+  buildDescendingCursorFilter,
+  buildIlikeAnyFilter,
+  createCursorPage,
+  normalizePageSize,
+  type CursorPage,
+  type CursorPageOptions,
+} from "@/db/cursorPagination";
 
 type DbClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type DbClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
@@ -9,6 +17,10 @@ type DbClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 const CLIENT_FIELDS =
   "id,user_id,company_name,contact_person,email,address,notes,customer_number,first_name,last_name,job_title,department,phone,mobile,website,street,house_number,address_addition,postal_code,city,state,country,legal_form,industry,vat_id,tax_number,registration_number,invoice_email,billing_address,payment_terms_days,currency,default_vat_rate,preferred_language,preferred_delivery_method,source,tags,last_contact_at,next_follow_up_at,updated_at,created_at" as const;
 const CLIENT_SUMMARY_FIELDS = "id,company_name,contact_person,first_name,last_name" as const;
+const CLIENT_PAGE_FIELDS =
+  "id,created_at,company_name,contact_person,email,address,customer_number,first_name,last_name,phone,mobile,street,house_number,postal_code,city" as const;
+
+export type ClientPageOptions = CursorPageOptions & { search?: string };
 
 async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -20,6 +32,7 @@ async function requireUserId(): Promise<string> {
 function toClient(r: DbClientRow): Client {
   return {
     id: r.id,
+    createdAt: r.created_at,
     companyName: r.company_name ?? "",
     contactPerson: r.contact_person ?? "",
     email: r.email ?? "",
@@ -86,6 +99,46 @@ export async function dbListClientSummaries(): Promise<ClientSummary[]> {
     firstName: row.first_name ?? "",
     lastName: row.last_name ?? "",
   }));
+}
+
+export async function dbListClientsPage(
+  options: ClientPageOptions = {},
+): Promise<CursorPage<Client>> {
+  const uid = await requireUserId();
+  const pageSize = normalizePageSize(options.pageSize);
+  let query = supabase
+    .from("clients")
+    .select(CLIENT_PAGE_FIELDS)
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (options.search?.trim()) {
+    query = query.or(
+      buildIlikeAnyFilter(
+        [
+          "company_name",
+          "contact_person",
+          "first_name",
+          "last_name",
+          "customer_number",
+          "email",
+          "phone",
+          "mobile",
+          "city",
+        ],
+        options.search,
+      ),
+    );
+  }
+  if (options.cursor) {
+    query = query.or(buildDescendingCursorFilter(options.cursor));
+  }
+
+  const { data, error } = await query.limit(pageSize + 1);
+  if (error) throw new Error(error.message);
+
+  return createCursorPage((data ?? []) as DbClientRow[], pageSize, toClient);
 }
 
 // ---------- GET ----------

@@ -1000,6 +1000,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_project_metrics: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          active_count: number
+          planned_value: number
+        }[]
+      }
       save_position_group: {
         Args: {
           p_category: string

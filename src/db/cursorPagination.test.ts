@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDescendingCursorFilter,
+  buildIlikeAnyFilter,
+  buildInFilter,
   createCursorPage,
   normalizePageSize,
 } from "@/db/cursorPagination";
@@ -40,5 +42,14 @@ describe("cursor pagination", () => {
     expect(normalizePageSize(0)).toBe(1);
     expect(normalizePageSize(500)).toBe(100);
     expect(normalizePageSize()).toBe(24);
+  });
+
+  it("escapes user search values before composing PostgREST filters", () => {
+    expect(buildIlikeAnyFilter(["name", "email"], "  50%_Müller  ")).toBe(
+      'name.ilike."%50\\\\%\\\\_Müller%",email.ilike."%50\\\\%\\\\_Müller%"',
+    );
+    expect(buildInFilter("client_id", ["client-1", "client-2"])).toBe(
+      'client_id.in.("client-1","client-2")',
+    );
   });
 });

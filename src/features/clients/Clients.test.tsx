@@ -6,23 +6,44 @@ import { Route, Routes } from "react-router-dom";
 import Clients from "./Clients";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
-let clientsState: { clients: Array<Record<string, unknown>>; loading: boolean; error: string | null };
+let clientsState: {
+  clients: Array<Record<string, unknown>>;
+  loading: boolean;
+  loadingMore: boolean;
+  error: string | null;
+  loadMoreError: string | null;
+  hasMore: boolean;
+};
 const refreshMock = vi.fn();
+const loadMoreMock = vi.fn();
 
 vi.mock("@/app/clients/clientQueries", () => ({
-  useClients: () => ({ ...clientsState, refresh: refreshMock }),
+  useClientPages: (search: string) => ({
+    ...clientsState,
+    clients: search
+      ? clientsState.clients.filter((client) =>
+          JSON.stringify(client).toLocaleLowerCase("de-DE").includes(search.toLocaleLowerCase("de-DE")),
+        )
+      : clientsState.clients,
+    refresh: refreshMock,
+    loadMore: loadMoreMock,
+  }),
 }));
 
 describe("Clients", () => {
   beforeEach(() => {
     refreshMock.mockReset();
+    loadMoreMock.mockReset();
     clientsState = {
       clients: [
         { id: "client-1", companyName: "Acme GmbH", firstName: "Anna", lastName: "Müller", contactPerson: "Anna Müller", email: "anna@acme.de", address: "", notes: "", city: "Berlin" },
         { id: "client-2", companyName: "", firstName: "Peter", lastName: "Schmidt", contactPerson: "Peter Schmidt", email: "", address: "", notes: "", city: "Hamburg" },
       ],
       loading: false,
+      loadingMore: false,
       error: null,
+      loadMoreError: null,
+      hasMore: false,
     };
   });
 
@@ -30,8 +51,8 @@ describe("Clients", () => {
     const user = userEvent.setup();
     renderWithProviders(<Clients />, { route: "/app/clients" });
     await user.type(screen.getByLabelText("Kunden durchsuchen"), "hamburg");
+    await waitFor(() => expect(screen.queryByText("Acme GmbH")).not.toBeInTheDocument());
     expect(screen.getByText("Peter Schmidt")).toBeInTheDocument();
-    expect(screen.queryByText("Acme GmbH")).not.toBeInTheDocument();
   });
 
   it("opens editing on a dedicated route", async () => {
@@ -63,5 +84,14 @@ describe("Clients", () => {
     });
 
     await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("loads another customer page on request", async () => {
+    const user = userEvent.setup();
+    clientsState.hasMore = true;
+    renderWithProviders(<Clients />, { route: "/app/clients" });
+
+    await user.click(screen.getByRole("button", { name: "Weitere Kunden laden" }));
+    expect(loadMoreMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -51,6 +51,7 @@ export interface SenderIdentity {
 
 export interface Client {
   id: string;
+  createdAt?: string;
   companyName: string;
   contactPerson: string;
   email: string;
@@ -91,6 +92,7 @@ export interface Client {
 
 export interface Project {
   id: string;
+  createdAt?: string;
   clientId: string;
   name: string;
   budgetType: "hourly" | "fixed";

@@ -1,38 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Building2, Mail, MapPin, Plus, ScanLine, Search, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { useClients } from "@/app/clients/clientQueries";
+import { useClientPages } from "@/app/clients/clientQueries";
 import { getClientDisplayName, getClientPersonName } from "@/domain/models/Client";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
-
-function searchableClientText(client: Parameters<typeof getClientDisplayName>[0] & {
-  customerNumber?: string;
-  email?: string;
-  phone?: string;
-  mobile?: string;
-  city?: string;
-}) {
-  return [
-    getClientDisplayName(client),
-    getClientPersonName(client),
-    client.customerNumber,
-    client.email,
-    client.phone,
-    client.mobile,
-    client.city,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLocaleLowerCase("de-DE");
-}
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 export default function Clients() {
-  const { clients, loading, error, refresh } = useClients();
   const location = useLocation();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim());
+  const {
+    clients,
+    loading,
+    loadingMore,
+    error,
+    loadMoreError,
+    hasMore,
+    refresh,
+    loadMore,
+  } = useClientPages(debouncedQuery);
 
   useEffect(() => {
     const refreshToken = (location.state as { refreshDocuments?: number } | null)?.refreshDocuments;
@@ -43,12 +33,6 @@ export default function Clients() {
       state: {},
     });
   }, [location.hash, location.pathname, location.search, location.state, navigate, refresh]);
-
-  const filteredClients = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("de-DE");
-    if (!normalizedQuery) return clients;
-    return clients.filter((client) => searchableClientText(client).includes(normalizedQuery));
-  }, [clients, query]);
 
   const createClient = (scanBusinessCard = false) => {
     navigate("/app/customers/new", {
@@ -82,18 +66,19 @@ export default function Clients() {
 
       {loading ? (
         <AppCard className="p-6 text-sm text-[var(--app-muted)]">Kunden werden geladen …</AppCard>
-      ) : !error && clients.length === 0 ? (
+      ) : !error && clients.length === 0 && !debouncedQuery ? (
         <AppCard className="grid justify-items-center p-8 text-center sm:p-12">
           <span className="grid h-14 w-14 place-items-center rounded-full bg-[var(--app-primary)]/10 text-[var(--app-primary)]"><UserRound size={25} /></span>
           <h2 className="mt-4 text-lg font-semibold">Noch keine Kunden</h2>
           <p className="mt-2 max-w-md text-sm text-[var(--app-muted)]">Lege deinen ersten Kunden an. Danach stehen die Daten direkt für Angebote und Rechnungen bereit.</p>
           <AppButton className="mt-5" onClick={() => createClient()}><Plus size={17} /> Ersten Kunden anlegen</AppButton>
         </AppCard>
-      ) : !error && filteredClients.length === 0 ? (
+      ) : !error && clients.length === 0 ? (
         <AppCard className="p-8 text-center"><h2 className="font-semibold">Kein Kunde gefunden</h2><p className="mt-1 text-sm text-[var(--app-muted)]">Prüfe den Suchbegriff oder lösche die Suche.</p><AppButton variant="secondary" className="mt-4" onClick={() => setQuery("")}>Suche löschen</AppButton></AppCard>
       ) : !error ? (
+        <>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filteredClients.map((client) => {
+          {clients.map((client) => {
             const personName = getClientPersonName(client);
             const address = [[client.street, client.houseNumber].filter(Boolean).join(" "), [client.postalCode, client.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || client.address;
             return (
@@ -107,6 +92,19 @@ export default function Clients() {
             );
           })}
         </div>
+        {hasMore && (
+          <div className="flex flex-col items-center gap-2 pt-2">
+            {loadMoreError && (
+              <p role="alert" className="text-sm text-red-600">
+                Weitere Kunden konnten nicht geladen werden.
+              </p>
+            )}
+            <AppButton variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? "Weitere Kunden werden geladen..." : "Weitere Kunden laden"}
+            </AppButton>
+          </div>
+        )}
+        </>
       ) : null}
     </div>
   );

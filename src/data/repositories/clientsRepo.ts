@@ -1,6 +1,15 @@
 import type { Client } from "@/domain/types";
 import { normalizeClient, type ClientSummary } from "@/domain/models/Client";
-import { dbDeleteClient, dbGetClientById, dbListClients, dbListClientSummaries, dbUpsertClient } from "@/db/clientsDb";
+import {
+  dbDeleteClient,
+  dbGetClientById,
+  dbListClients,
+  dbListClientsPage,
+  dbListClientSummaries,
+  dbUpsertClient,
+  type ClientPageOptions,
+} from "@/db/clientsDb";
+import type { CursorPage } from "@/db/cursorPagination";
 
 export async function listClients(): Promise<Client[]> {
   const result = await dbListClients();
@@ -9,6 +18,13 @@ export async function listClients(): Promise<Client[]> {
 
 export async function listClientSummaries(): Promise<ClientSummary[]> {
   return dbListClientSummaries();
+}
+
+export async function listClientsPage(
+  options: ClientPageOptions = {},
+): Promise<CursorPage<Client>> {
+  const page = await dbListClientsPage(options);
+  return { ...page, items: page.items.map(normalizeClient) };
 }
 
 export async function getClient(id: string): Promise<Client | null> {

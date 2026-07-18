@@ -22,13 +22,30 @@ export function normalizePageSize(pageSize?: number): number {
   return Math.min(MAX_PAGE_SIZE, Math.max(1, Math.trunc(pageSize ?? DEFAULT_PAGE_SIZE)));
 }
 
-const quotePostgrestValue = (value: string) =>
+export const quotePostgrestValue = (value: string) =>
   `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
 export function buildDescendingCursorFilter(cursor: DocumentCursor): string {
   const createdAt = quotePostgrestValue(cursor.createdAt);
   const id = quotePostgrestValue(cursor.id);
   return `created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`;
+}
+
+export function buildIlikeAnyFilter(
+  columns: string[],
+  search: string,
+  extraFilters: string[] = [],
+): string {
+  const escapedSearch = search.trim().slice(0, 100).replace(/[\\%_]/g, "\\$&");
+  const pattern = quotePostgrestValue(`%${escapedSearch}%`);
+  return [
+    ...columns.map((column) => `${column}.ilike.${pattern}`),
+    ...extraFilters,
+  ].join(",");
+}
+
+export function buildInFilter(column: string, values: string[]): string {
+  return `${column}.in.(${values.map(quotePostgrestValue).join(",")})`;
 }
 
 export function createCursorPage<Row extends { id: string; created_at: string }, Item>(
