@@ -119,7 +119,6 @@ test.describe.serial("authentifizierter visueller Qualitätscheck", () => {
       vat_rate: 19,
       currency: "EUR",
       status: "ACCEPTED",
-      accepted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).select("id").single();
     if (offerError || !offer?.id) throw offerError ?? new Error("Visual offer seed failed.");
