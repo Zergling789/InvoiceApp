@@ -92,11 +92,6 @@ export function DocumentCreateComposer({
   const navigate = useNavigate();
   const location = useLocation();
   const requestedStep = searchParams.get("step") as DocumentStep | null;
-  const [step, setStep] = useState<DocumentStep>(() =>
-    documentSteps.some((item) => item.key === requestedStep)
-      ? (requestedStep as DocumentStep)
-      : "kunde",
-  );
   const [validationMessage, setValidationMessage] = useState<string | null>(
     null,
   );
@@ -134,7 +129,6 @@ export function DocumentCreateComposer({
         Number(position.price) >= 0,
       ),
     );
-  const stepIndex = documentSteps.findIndex((item) => item.key === step);
   const highestReachableIndex = clientValid
     ? documentValid
       ? positionsValid
@@ -142,27 +136,26 @@ export function DocumentCreateComposer({
         : 2
       : 1
     : 0;
+  const requestedStepIndex = documentSteps.findIndex(
+    (item) => item.key === requestedStep,
+  );
+  const stepIndex =
+    requestedStepIndex < 0
+      ? 0
+      : Math.min(requestedStepIndex, highestReachableIndex);
+  const step = documentSteps[stepIndex].key;
   const summaryDate = data.date
     ? new Date(`${data.date}T00:00:00`).toLocaleDateString(locale)
     : "Noch nicht angegeben";
 
   useEffect(() => {
     if (!wizardEnabled) return;
-    const requestedIndex = documentSteps.findIndex(
-      (item) => item.key === requestedStep,
-    );
-    const nextIndex =
-      requestedIndex < 0 ? 0 : Math.min(requestedIndex, highestReachableIndex);
-    const nextStep = documentSteps[nextIndex].key;
-    if (nextStep !== step) setStep(nextStep);
-    if (searchParams.get("step") !== nextStep) {
+    if (searchParams.get("step") !== step) {
       const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("step", nextStep);
+      nextParams.set("step", step);
       setSearchParams(nextParams, { replace: true });
     }
   }, [
-    highestReachableIndex,
-    requestedStep,
     searchParams,
     setSearchParams,
     step,
@@ -173,7 +166,6 @@ export function DocumentCreateComposer({
     const nextIndex = documentSteps.findIndex((item) => item.key === nextStep);
     if (nextIndex > highestReachableIndex) return;
     setValidationMessage(null);
-    setStep(nextStep);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("step", nextStep);
     setSearchParams(nextParams, { replace: true });

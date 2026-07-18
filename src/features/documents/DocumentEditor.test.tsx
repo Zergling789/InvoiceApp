@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, beforeEach, describe, it, expect } from "vitest";
+import { useLocation } from "react-router-dom";
 
 import { DocumentEditor } from "./DocumentEditor";
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -12,6 +13,10 @@ const getInvoiceMock = vi.fn();
 const sendDocumentEmailMock = vi.fn();
 const createAiDocumentDraftMock = vi.fn();
 const saveOfferMock = vi.fn();
+
+function LocationSearchProbe() {
+  return <output data-testid="location-search">{useLocation().search}</output>;
+}
 
 vi.mock("@/app/invoices/invoiceService", () => ({
   saveInvoice: (...args: unknown[]) => saveInvoiceMock(...args),
@@ -242,22 +247,25 @@ describe("DocumentEditor send email status", () => {
   it("führt schrittweise durch die Angebotserstellung und erhält Eingaben", async () => {
     const user = userEvent.setup();
     renderWithProviders(
-      <DocumentEditor
-        type="offer"
-        seed={{ ...seed, id: "offer-wizard", number: "ANG-0001" }}
-        settings={settings}
-        clients={clients}
-        onClose={vi.fn()}
-        onSaved={vi.fn()}
-        useCreateComposer
-        initial={{
-          clientId: "",
-          positions: [],
-          status: OfferStatus.DRAFT,
-          validUntil: "2025-01-31",
-          currency: "EUR",
-        }}
-      />,
+      <>
+        <DocumentEditor
+          type="offer"
+          seed={{ ...seed, id: "offer-wizard", number: "ANG-0001" }}
+          settings={settings}
+          clients={clients}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+          useCreateComposer
+          initial={{
+            clientId: "",
+            positions: [],
+            status: OfferStatus.DRAFT,
+            validUntil: "2025-01-31",
+            currency: "EUR",
+          }}
+        />
+        <LocationSearchProbe />
+      </>,
       { route: "/app/offers/new" },
     );
 
@@ -273,6 +281,9 @@ describe("DocumentEditor send email status", () => {
     await user.click(
       screen.getByRole("button", { name: "Weiter zu Dokumentdaten" }),
     );
+    await waitFor(() => {
+      expect(screen.getByTestId("location-search")).toHaveTextContent("step=dokument");
+    });
     const number = screen.getByLabelText("Angebotsnummer");
     await user.clear(number);
     await user.type(number, "ANG-0099");
