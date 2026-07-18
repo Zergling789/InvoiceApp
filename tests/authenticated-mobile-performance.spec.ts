@@ -39,7 +39,7 @@ async function login(page: Page, user: TestUser) {
   await expect(page).toHaveURL(/\/app/);
 
   const legalConsent = page.getByLabel(/Ich akzeptiere die Nutzungsbedingungen/);
-  const dashboardHeading = page.getByRole("heading", { name: "Dashboard", exact: true });
+  const dashboardHeading = page.getByRole("heading", { name: /^Hallo /, level: 1 });
   await expect(legalConsent.or(dashboardHeading).first()).toBeVisible();
   if (await legalConsent.isVisible()) {
     await legalConsent.check();

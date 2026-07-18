@@ -32,7 +32,7 @@ async function login(page: Page, user: TestUser, theme: Theme) {
   await expect(page).toHaveURL(/\/app/);
 
   const legalConsent = page.getByLabel(/Ich akzeptiere die Nutzungsbedingungen/);
-  const dashboardHeading = page.getByRole("heading", { name: "Dashboard", exact: true });
+  const dashboardHeading = page.getByRole("heading", { name: /^Hallo /, level: 1 });
   await expect(legalConsent.or(dashboardHeading).first()).toBeVisible();
   if (await legalConsent.isVisible()) {
     await legalConsent.check();
@@ -173,7 +173,7 @@ test.describe.serial("authentifizierter visueller Qualitätscheck", () => {
         await login(page, user, theme);
 
         const routes = [
-          { path: "/app", name: "dashboard", heading: "Dashboard" },
+          { path: "/app", name: "dashboard", heading: /^Hallo / },
           { path: "/app/todos", name: "todos", heading: "To-dos" },
           { path: "/app/documents", name: "documents", heading: "Dokumente" },
           { path: "/app/clients", name: "clients", heading: "Kunden" },
