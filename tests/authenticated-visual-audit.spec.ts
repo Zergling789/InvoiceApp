@@ -148,6 +148,7 @@ test.describe.serial("authentifizierter visueller Qualitätscheck", () => {
 
     const { error: projectError } = await admin.from("projects").insert({
       user_id: user.id,
+      created_by: user.id,
       client_id: clientId,
       name: "Terrasse Musterstraße",
       status: "active",
