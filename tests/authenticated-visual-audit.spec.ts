@@ -201,7 +201,7 @@ test.describe.serial("authentifizierter visueller Qualitätscheck", () => {
         if (viewport.name === "mobile") {
           await page.getByRole("button", { name: "Menü öffnen" }).click();
           await expect(page.getByRole("navigation", { name: "Mobile Navigation" })).toBeVisible();
-          await expect(page.getByRole("link", { name: "Dokumente" })).toBeVisible();
+          await expect(page.getByRole("link", { name: "Projekte" })).toBeVisible();
           await expect(page.getByRole("button", { name: "Feedback", exact: true })).toBeVisible();
           await page.getByRole("button", { name: "Menü schließen" }).click();
           await expect(page.getByRole("navigation", { name: "Mobile Navigation" })).toBeHidden();
