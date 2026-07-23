@@ -18,6 +18,7 @@ test.describe.serial("project organization isolation", () => {
   let ownerCustomerId: string;
   let attackerCustomerId: string;
   let ownerProjectId: string;
+  let ownerTaskId: string;
 
   test.beforeAll(async () => {
     owner = await createTestUser();
@@ -47,6 +48,53 @@ test.describe.serial("project organization isolation", () => {
     const attackerClient = await createAuthenticatedClient(attacker);
     expect((await attackerClient.from("projects").select("id").eq("id", ownerProjectId)).data).toEqual([]);
     expect((await attackerClient.from("project_activities").select("id").eq("project_id", ownerProjectId)).data).toEqual([]);
+  });
+
+  test("task mutations are organization-scoped and activity events are idempotent", async () => {
+    const ownerClient = await createAuthenticatedClient(owner);
+    const attackerClient = await createAuthenticatedClient(attacker);
+    const creation = await ownerClient.rpc("create_project_task", {
+      p_project_id: ownerProjectId,
+      p_task: { title: "Materialliste prüfen", priority: "high" },
+    });
+    expect(creation.error).toBeNull();
+    ownerTaskId = creation.data?.id;
+    expect(ownerTaskId).toBeTruthy();
+
+    expect(
+      (await attackerClient.from("project_tasks").select("id").eq("id", ownerTaskId)).data,
+    ).toEqual([]);
+    expect(
+      (
+        await attackerClient.rpc("update_project_task", {
+          p_task_id: ownerTaskId,
+          p_patch: { status: "completed" },
+        })
+      ).error,
+    ).not.toBeNull();
+
+    const directInsert = await ownerClient.from("project_tasks").insert({
+      organization_id: owner.id,
+      project_id: ownerProjectId,
+      title: "Direkter Schreibversuch",
+      created_by: owner.id,
+    });
+    expect(directInsert.error).not.toBeNull();
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const completion = await ownerClient.rpc("update_project_task", {
+        p_task_id: ownerTaskId,
+        p_patch: { status: "completed" },
+      });
+      expect(completion.error).toBeNull();
+    }
+
+    const activities = await ownerClient
+      .from("project_activities")
+      .select("id")
+      .eq("event_key", `task:${ownerTaskId}:completed`);
+    expect(activities.error).toBeNull();
+    expect(activities.data).toHaveLength(1);
   });
 
   test("a foreign customer cannot be assigned to a project", async () => {
@@ -88,4 +136,3 @@ test.describe.serial("project organization isolation", () => {
     expect(result.error).not.toBeNull();
   });
 });
-

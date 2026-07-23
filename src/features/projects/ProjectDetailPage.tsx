@@ -18,6 +18,7 @@ import * as projectService from "@/app/projects/projectService";
 import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as clientService from "@/app/clients/clientService";
+import * as projectTaskService from "@/app/tasks/projectTaskService";
 import type { Client, Invoice, Offer, Project } from "@/types";
 import type {
   ProjectActivity,
@@ -40,6 +41,8 @@ import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
+import type { ProjectTaskAssignee } from "@/db/projectTasksDb";
+import { ProjectTaskPanel } from "./ProjectTaskPanel";
 
 type Tab = "uebersicht" | "aktivitaeten" | "dokumente" | "aufgaben" | "termine" | "dateien";
 const tabs: { value: Tab; label: string; icon: typeof History }[] = [
@@ -68,6 +71,7 @@ export default function ProjectDetailPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [activities, setActivities] = useState<ProjectActivity[]>([]);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
+  const [taskAssignees, setTaskAssignees] = useState<ProjectTaskAssignee[]>([]);
   const [appointments, setAppointments] = useState<ProjectAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -81,13 +85,14 @@ export default function ProjectDetailPage() {
     setLoading(true);
     setError(false);
     try {
-      const [projectData, offerData, invoiceData, activityData, taskData, appointmentData] =
+      const [projectData, offerData, invoiceData, activityData, taskData, assigneeData, appointmentData] =
         await Promise.all([
           projectService.getProject(projectId),
           offerService.listOffersForProject(projectId),
           invoiceService.listInvoicesForProject(projectId),
           projectService.getProjectActivities(projectId),
-          projectService.getProjectTasks(projectId),
+          projectTaskService.listProjectTasks({ projectId, limit: 100 }),
+          projectTaskService.listProjectTaskAssignees(projectId),
           projectService.getProjectAppointments(projectId),
         ]);
       if (!projectData) throw new Error("project_not_found");
@@ -98,6 +103,7 @@ export default function ProjectDetailPage() {
       setInvoices(invoiceData);
       setActivities(activityData);
       setTasks(taskData);
+      setTaskAssignees(assigneeData);
       setAppointments(appointmentData);
       setNextActionLabel(projectData.nextActionLabel ?? "");
       setNextActionAt(projectData.nextActionAt?.slice(0, 16) ?? "");
@@ -182,7 +188,7 @@ export default function ProjectDetailPage() {
           </div>
           <div className="space-y-5">
             <AppCard className="p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Dokumente</h2><button className="text-sm font-semibold text-[var(--app-primary)]" onClick={() => setSearchParams({ tab: "dokumente" })}>Alle öffnen</button></div><div className="mt-4 space-y-3 text-sm"><div className="flex justify-between"><span>Angebote</span><strong>{offers.length}</strong></div><div className="flex justify-between"><span>Rechnungen</span><strong>{invoices.length}</strong></div></div></AppCard>
-            <AppCard className="p-5"><h2 className="font-semibold">Offene Aufgaben</h2>{tasks.length ? <ul className="mt-3 space-y-2 text-sm">{tasks.slice(0, 5).map((task) => <li key={task.id} className="flex justify-between gap-3"><span>{task.title}</span><span className="text-[var(--app-muted)]">{formatDate(task.dueAt)}</span></li>)}</ul> : <p className="mt-2 text-sm text-[var(--app-muted)]">Keine offenen Aufgaben.</p>}</AppCard>
+            <AppCard className="p-5"><h2 className="font-semibold">Offene Aufgaben</h2>{tasks.some((task) => task.status === "open" || task.status === "in_progress") ? <ul className="mt-3 space-y-2 text-sm">{tasks.filter((task) => task.status === "open" || task.status === "in_progress").slice(0, 5).map((task) => <li key={task.id} className="flex justify-between gap-3"><span>{task.title}</span><span className="text-[var(--app-muted)]">{formatDate(task.dueAt)}</span></li>)}</ul> : <p className="mt-2 text-sm text-[var(--app-muted)]">Keine offenen Aufgaben.</p>}</AppCard>
             <AppCard className="p-5"><h2 className="font-semibold">Nächste Termine</h2>{appointments.length ? <ul className="mt-3 space-y-2 text-sm">{appointments.slice(0, 5).map((appointment) => <li key={appointment.id}><div className="font-medium">{appointment.title}</div><div className="text-[var(--app-muted)]">{formatDate(appointment.startsAt, true)}</div></li>)}</ul> : <p className="mt-2 text-sm text-[var(--app-muted)]">Noch keine Termine.</p>}</AppCard>
           </div>
         </div>
@@ -190,7 +196,17 @@ export default function ProjectDetailPage() {
 
       {tab === "aktivitaeten" && <ActivityTimeline activities={activities} />}
       {tab === "dokumente" && <Documents project={project} offers={offers} invoices={invoices} />}
-      {tab === "aufgaben" && <PreparedSection title="Aufgaben" description={tasks.length ? `${tasks.length} offene Aufgaben sind diesem Projekt zugeordnet.` : "Noch keine Aufgaben. Das Datenfundament für projektbezogene Aufgaben ist vorbereitet."} />}
+      {tab === "aufgaben" && (
+        <ProjectTaskPanel
+          projectId={project.id}
+          tasks={tasks}
+          assignees={taskAssignees}
+          onTasksChange={setTasks}
+          onActivitiesChange={async () => {
+            setActivities(await projectService.getProjectActivities(project.id));
+          }}
+        />
+      )}
       {tab === "termine" && <PreparedSection title="Termine" description={appointments.length ? `${appointments.length} kommende Termine sind diesem Projekt zugeordnet.` : "Noch keine Termine. Besichtigungen und Projekttermine können auf diesem Fundament ergänzt werden."} />}
       {tab === "dateien" && <PreparedSection title="Dateien & Fotos" description="Der Projektbereich ist vorbereitet. Upload und Baustellendokumentation folgen in einem späteren Arbeitspaket." />}
     </div>

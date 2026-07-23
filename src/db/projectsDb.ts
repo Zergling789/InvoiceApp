@@ -195,7 +195,7 @@ export async function dbGetProjectTasks(projectId: string): Promise<ProjectTask[
   await dbGetCurrentUserId();
   const { data, error } = await supabase
     .from("project_tasks")
-    .select("id,project_id,title,status,priority,due_at")
+    .select("id,organization_id,project_id,customer_id,title,description,status,priority,due_at,assigned_user_id,completed_at,created_by,created_at,updated_at")
     .eq("project_id", projectId)
     .in("status", ["open", "in_progress"])
     .order("due_at", { ascending: true, nullsFirst: false })
@@ -203,11 +203,19 @@ export async function dbGetProjectTasks(projectId: string): Promise<ProjectTask[
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => ({
     id: row.id,
+    organizationId: row.organization_id,
     projectId: row.project_id,
+    customerId: row.customer_id,
     title: row.title,
+    description: row.description,
     status: row.status as ProjectTask["status"],
     priority: row.priority as ProjectTask["priority"],
     dueAt: row.due_at,
+    assignedUserId: row.assigned_user_id,
+    completedAt: row.completed_at,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }));
 }
 

@@ -26,6 +26,16 @@ export type ProjectPhase = (typeof PROJECT_PHASES)[number];
 export const PROJECT_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 export type ProjectPriority = (typeof PROJECT_PRIORITIES)[number];
 
+export const PROJECT_TASK_STATUSES = ["open", "in_progress", "completed", "cancelled"] as const;
+export type ProjectTaskStatus = (typeof PROJECT_TASK_STATUSES)[number];
+
+export const PROJECT_TASK_STATUS_LABELS: Record<ProjectTaskStatus, string> = {
+  open: "Offen",
+  in_progress: "In Arbeit",
+  completed: "Erledigt",
+  cancelled: "Abgebrochen",
+};
+
 export const PROJECT_TYPES = [
   { value: "terrace", label: "Terrasse" },
   { value: "paving", label: "Pflasterarbeiten" },
@@ -108,11 +118,19 @@ export type ProjectActivity = {
 
 export type ProjectTask = {
   id: string;
+  organizationId: string;
   projectId?: string | null;
+  customerId?: string | null;
   title: string;
-  status: "open" | "in_progress" | "completed" | "cancelled";
+  description?: string | null;
+  status: ProjectTaskStatus;
   priority: ProjectPriority;
   dueAt?: string | null;
+  assignedUserId?: string | null;
+  completedAt?: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ProjectAppointment = {
@@ -152,4 +170,3 @@ export type ProjectPrimaryAction = {
   label: string;
   to: string;
 };
-

@@ -13,7 +13,7 @@ import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
 import type { Client, Invoice, Offer, Project, UserSettings } from "@/types";
-import type { ProjectActivity } from "@/domain/projects";
+import type { ProjectActivity, ProjectTask } from "@/domain/projects";
 import { PROJECT_PHASE_LABELS, PROJECT_PRIORITY_LABELS } from "@/domain/projects";
 import { formatMoney } from "@/utils/money";
 import {
@@ -36,6 +36,7 @@ type DashboardData = {
   invoices: Invoice[];
   projects: Project[];
   projectActivities: ProjectActivity[];
+  projectTasks: ProjectTask[];
 };
 
 const MAX_ACTIONS = 7;
@@ -44,7 +45,7 @@ export default function Dashboard() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [], projects: [], projectActivities: [] });
+  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [], projects: [], projectActivities: [], projectTasks: [] });
   const [company, setCompany] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -61,6 +62,7 @@ export default function Dashboard() {
           invoices: dashboard.invoices ?? [],
           projects: dashboard.projects ?? [],
           projectActivities: dashboard.projectActivities ?? [],
+          projectTasks: dashboard.projectTasks ?? [],
         });
         setCompany(settings.companyName || null);
         setSettings(settings);
@@ -184,7 +186,41 @@ export default function Dashboard() {
         };
       });
 
-    const actionItems = [...overdueActions, ...openInvoiceActions, ...offerFollowUpActions].slice(0, MAX_ACTIONS);
+    const projectTaskActions = data.projectTasks
+      .filter((task) => task.projectId)
+      .slice()
+      .sort((a, b) => {
+        const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
+        const byPriority = priorityRank[a.priority] - priorityRank[b.priority];
+        if (byPriority !== 0) return byPriority;
+        return (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999");
+      })
+      .map<ActionItem>((task) => {
+        const project = data.projects.find((entry) => entry.id === task.projectId);
+        const overdue = task.dueAt ? new Date(task.dueAt) < today : false;
+        return {
+          id: `project-task-${task.id}`,
+          title: task.title,
+          subtitle: project ? `Projekt ${project.name}` : "Projektaufgabe",
+          amountLabel: PROJECT_PRIORITY_LABELS[task.priority],
+          ageLabel: task.dueAt
+            ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(task.dueAt))
+            : "ohne Fälligkeit",
+          statusLabel: overdue ? "Überfällig" : task.status === "in_progress" ? "In Arbeit" : "Offen",
+          tone: overdue ? "critical" : task.priority === "urgent" ? "warning" : "neutral",
+          primaryCta: {
+            label: "Aufgabe öffnen",
+            to: `/app/projects/${task.projectId}?tab=aufgaben`,
+          },
+        };
+      });
+
+    const actionItems = [
+      ...projectTaskActions,
+      ...overdueActions,
+      ...openInvoiceActions,
+      ...offerFollowUpActions,
+    ].slice(0, MAX_ACTIONS);
 
     const offerBuckets = openOffers.reduce<Record<string, number>>((acc, offer) => {
       const ageDays = getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today);

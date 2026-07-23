@@ -12,9 +12,14 @@ const getClientMock = vi.fn();
 vi.mock("@/app/projects/projectService", () => ({
   getProject: (...args: unknown[]) => getProjectMock(...args),
   getProjectActivities: vi.fn().mockResolvedValue([]),
-  getProjectTasks: vi.fn().mockResolvedValue([]),
   getProjectAppointments: vi.fn().mockResolvedValue([]),
   updateProject: vi.fn(),
+}));
+vi.mock("@/app/tasks/projectTaskService", () => ({
+  listProjectTasks: vi.fn().mockResolvedValue([]),
+  listProjectTaskAssignees: vi.fn().mockResolvedValue([]),
+  createProjectTask: vi.fn(),
+  updateProjectTask: vi.fn(),
 }));
 vi.mock("@/app/offers/offerService", () => ({
   listOffersForProject: vi.fn().mockResolvedValue([]),

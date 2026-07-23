@@ -1174,6 +1174,18 @@ export type Database = {
         Args: { p_project_id: string; p_event: string; p_event_key?: string | null }
         Returns: Database["public"]["Tables"]["projects"]["Row"]
       }
+      create_project_task: {
+        Args: { p_project_id: string; p_task: Json }
+        Returns: Database["public"]["Tables"]["project_tasks"]["Row"]
+      }
+      update_project_task: {
+        Args: { p_task_id: string; p_patch: Json }
+        Returns: Database["public"]["Tables"]["project_tasks"]["Row"]
+      }
+      list_project_task_assignees: {
+        Args: { p_project_id: string }
+        Returns: { user_id: string; display_name: string }[]
+      }
       list_projects_page: {
         Args: {
           p_search?: string | null

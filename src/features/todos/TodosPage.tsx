@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import type { Client, Invoice, Offer, UserSettings } from "@/types";
+import type { Client, Invoice, Offer, Project, UserSettings } from "@/types";
+import type { ProjectTask } from "@/domain/projects";
+import { PROJECT_PRIORITY_LABELS, PROJECT_TASK_STATUS_LABELS } from "@/domain/projects";
 import { loadDashboardData } from "@/app/dashboard/dashboardService";
 import { fetchSettings } from "@/app/settings/settingsService";
 import {
@@ -44,6 +46,8 @@ type DashboardData = {
   clients: Client[];
   offers: Offer[];
   invoices: Invoice[];
+  projects: Project[];
+  projectTasks: ProjectTask[];
 };
 
 type TodoCard = {
@@ -61,7 +65,7 @@ type TodoCard = {
   };
 };
 
-type FilterType = "all" | "invoices" | "offers";
+type FilterType = "all" | "tasks" | "invoices" | "offers";
 
 const DAY_MS = 86400000;
 
@@ -80,7 +84,13 @@ export default function TodosPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
+  const [data, setData] = useState<DashboardData>({
+    clients: [],
+    offers: [],
+    invoices: [],
+    projects: [],
+    projectTasks: [],
+  });
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
   const [sendIntent, setSendIntent] = useState<"reminder" | "dunning" | "followup" | null>(null);
@@ -97,7 +107,13 @@ export default function TodosPage() {
       try {
         const [nextData, settingsData] = await Promise.all([loadDashboardData(), fetchSettings()]);
         if (mounted) {
-          setData(nextData);
+          setData({
+            clients: nextData.clients ?? [],
+            offers: nextData.offers ?? [],
+            invoices: nextData.invoices ?? [],
+            projects: nextData.projects ?? [],
+            projectTasks: nextData.projectTasks ?? [],
+          });
           setSettings(settingsData);
         }
       } catch (e) {
@@ -119,8 +135,9 @@ export default function TodosPage() {
     return map;
   }, [data.clients]);
 
-  const showInvoices = filter !== "offers";
-  const showOffers = filter !== "invoices";
+  const showInvoices = filter === "all" || filter === "invoices";
+  const showOffers = filter === "all" || filter === "offers";
+  const showTasks = filter === "all" || filter === "tasks";
   const today = useMemo(() => new Date(), []);
 
   const overdueInvoices = useMemo(
@@ -289,6 +306,7 @@ export default function TodosPage() {
   });
 
   const totalCards =
+    (showTasks ? data.projectTasks.length : 0) +
     overdueInvoiceCards.length +
     openInvoiceCards.length +
     followUpOfferCards.length +
@@ -453,6 +471,13 @@ export default function TodosPage() {
           Alle
         </AppButton>
         <AppButton
+          variant={filter === "tasks" ? "primary" : "secondary"}
+          onClick={() => setFilter("tasks")}
+          className="min-w-[110px] justify-center"
+        >
+          Projektaufgaben
+        </AppButton>
+        <AppButton
           variant={filter === "invoices" ? "primary" : "secondary"}
           onClick={() => setFilter("invoices")}
           className="min-w-[110px] justify-center"
@@ -499,6 +524,50 @@ export default function TodosPage() {
             </Link>
           </div>
         </AppCard>
+      )}
+
+      {!loading && !error && showTasks && data.projectTasks.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Projektaufgaben</h2>
+            <span className="text-sm text-gray-500">{data.projectTasks.length}</span>
+          </div>
+          <div className="space-y-3">
+            {data.projectTasks.map((task) => {
+              const project = data.projects.find((entry) => entry.id === task.projectId);
+              const overdue = task.dueAt ? new Date(task.dueAt) < today : false;
+              return (
+                <AppCard key={task.id} className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm text-gray-500">
+                        {project?.name ?? "Projektaufgabe"}
+                      </div>
+                      <div className="text-base font-semibold text-gray-900">{task.title}</div>
+                    </div>
+                    <AppBadge color={overdue ? "red" : task.status === "in_progress" ? "blue" : "gray"}>
+                      {overdue ? "Überfällig" : PROJECT_TASK_STATUS_LABELS[task.status]}
+                    </AppBadge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                    <span>{PROJECT_PRIORITY_LABELS[task.priority]}</span>
+                    <span>•</span>
+                    <span>
+                      {task.dueAt
+                        ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(task.dueAt))
+                        : "Ohne Fälligkeit"}
+                    </span>
+                  </div>
+                  {task.projectId && (
+                    <Link to={`/app/projects/${task.projectId}?tab=aufgaben`}>
+                      <AppButton>Aufgabe öffnen</AppButton>
+                    </Link>
+                  )}
+                </AppCard>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {!loading && !error && overdueInvoiceCards.length > 0 && (
