@@ -19,6 +19,7 @@ test.describe.serial("project organization isolation", () => {
   let attackerCustomerId: string;
   let ownerProjectId: string;
   let ownerTaskId: string;
+  let ownerAppointmentId: string;
 
   test.beforeAll(async () => {
     owner = await createTestUser();
@@ -95,6 +96,56 @@ test.describe.serial("project organization isolation", () => {
       .eq("event_key", `task:${ownerTaskId}:completed`);
     expect(activities.error).toBeNull();
     expect(activities.data).toHaveLength(1);
+  });
+
+  test("appointment mutations are organization-scoped and direct writes are blocked", async () => {
+    const ownerClient = await createAuthenticatedClient(owner);
+    const attackerClient = await createAuthenticatedClient(attacker);
+    const creation = await ownerClient.rpc("create_project_appointment", {
+      p_project_id: ownerProjectId,
+      p_appointment: {
+        title: "Besichtigung",
+        startsAt: "2026-08-01T08:00:00.000Z",
+        endsAt: "2026-08-01T09:00:00.000Z",
+        appointmentType: "site_visit",
+      },
+    });
+    expect(creation.error).toBeNull();
+    ownerAppointmentId = creation.data?.id;
+    expect(ownerAppointmentId).toBeTruthy();
+
+    expect(
+      (
+        await attackerClient
+          .from("project_appointments")
+          .select("id")
+          .eq("id", ownerAppointmentId)
+      ).data,
+    ).toEqual([]);
+    expect(
+      (
+        await attackerClient.rpc("update_project_appointment", {
+          p_appointment_id: ownerAppointmentId,
+          p_patch: { title: "Fremder Termin" },
+        })
+      ).error,
+    ).not.toBeNull();
+
+    const directInsert = await ownerClient.from("project_appointments").insert({
+      organization_id: owner.id,
+      project_id: ownerProjectId,
+      title: "Direkter Schreibversuch",
+      starts_at: "2026-08-02T08:00:00.000Z",
+      ends_at: "2026-08-02T09:00:00.000Z",
+      created_by: owner.id,
+    });
+    expect(directInsert.error).not.toBeNull();
+
+    const invalidType = await ownerClient.rpc("update_project_appointment", {
+      p_appointment_id: ownerAppointmentId,
+      p_patch: { appointmentType: "made_up" },
+    });
+    expect(invalidType.error).not.toBeNull();
   });
 
   test("a foreign customer cannot be assigned to a project", async () => {

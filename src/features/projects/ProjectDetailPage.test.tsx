@@ -12,8 +12,12 @@ const getClientMock = vi.fn();
 vi.mock("@/app/projects/projectService", () => ({
   getProject: (...args: unknown[]) => getProjectMock(...args),
   getProjectActivities: vi.fn().mockResolvedValue([]),
-  getProjectAppointments: vi.fn().mockResolvedValue([]),
   updateProject: vi.fn(),
+}));
+vi.mock("@/app/calendar/projectAppointmentService", () => ({
+  listProjectAppointments: vi.fn().mockResolvedValue([]),
+  createProjectAppointment: vi.fn(),
+  updateProjectAppointment: vi.fn(),
 }));
 vi.mock("@/app/tasks/projectTaskService", () => ({
   listProjectTasks: vi.fn().mockResolvedValue([]),
@@ -97,5 +101,18 @@ describe("ProjectDetailPage", () => {
       "href",
       expect.stringContaining("projectId=project-1"),
     );
+  });
+
+  it("öffnet die Terminerstellung aus der phasenabhängigen Hauptaktion", async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/app/projects/:projectId" element={<ProjectDetailPage />} />
+      </Routes>,
+      { route: "/app/projects/project-1?tab=termine&action=new" },
+    );
+
+    expect(await screen.findByRole("heading", { name: "Terrasse Müller" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Neuer Termin" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Terminart")).toHaveValue("site_visit");
   });
 });

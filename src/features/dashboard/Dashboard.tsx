@@ -13,8 +13,8 @@ import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
 import type { Client, Invoice, Offer, Project, UserSettings } from "@/types";
-import type { ProjectActivity, ProjectTask } from "@/domain/projects";
-import { PROJECT_PHASE_LABELS, PROJECT_PRIORITY_LABELS } from "@/domain/projects";
+import type { ProjectActivity, ProjectAppointmentWithProject, ProjectTask } from "@/domain/projects";
+import { PROJECT_APPOINTMENT_TYPE_LABELS, PROJECT_PHASE_LABELS, PROJECT_PRIORITY_LABELS } from "@/domain/projects";
 import { formatMoney } from "@/utils/money";
 import {
   bucketOfferAge,
@@ -37,6 +37,7 @@ type DashboardData = {
   projects: Project[];
   projectActivities: ProjectActivity[];
   projectTasks: ProjectTask[];
+  projectAppointments: ProjectAppointmentWithProject[];
 };
 
 const MAX_ACTIONS = 7;
@@ -45,7 +46,7 @@ export default function Dashboard() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [], projects: [], projectActivities: [], projectTasks: [] });
+  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [], projects: [], projectActivities: [], projectTasks: [], projectAppointments: [] });
   const [company, setCompany] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -63,6 +64,7 @@ export default function Dashboard() {
           projects: dashboard.projects ?? [],
           projectActivities: dashboard.projectActivities ?? [],
           projectTasks: dashboard.projectTasks ?? [],
+          projectAppointments: dashboard.projectAppointments ?? [],
         });
         setCompany(settings.companyName || null);
         setSettings(settings);
@@ -332,6 +334,48 @@ export default function Dashboard() {
             return <Link key={project.id} to={`/app/projects/${project.id}`}><AppCard className="p-4 hover:border-[var(--app-primary)]/40"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{project.name}</div><div className="mt-1 text-sm text-[var(--app-muted)]">{customer?.companyName || customer?.contactPerson || "Noch kein Kunde"}</div></div><span className="text-xs font-semibold text-[var(--app-muted)]">{PROJECT_PRIORITY_LABELS[project.priority]}</span></div><div className="mt-3 flex items-center justify-between gap-3 text-sm"><span>{PROJECT_PHASE_LABELS[project.phase]}</span><span className="truncate text-[var(--app-muted)]">{project.nextActionLabel || "Keine nächste Aktion"}</span></div></AppCard></Link>;
           })}
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader
+          title="Nächste Termine"
+          subtitle="Die kommenden 14 Tage aus deinen Projekten."
+          action={<Link to="/app/calendar"><AppButton variant="secondary">Kalender öffnen</AppButton></Link>}
+        />
+        {data.projectAppointments.length === 0 && !loading ? (
+          <AppCard className="p-6 text-sm text-[var(--app-muted)]">
+            Keine Projekttermine in den kommenden 14 Tagen.
+          </AppCard>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {data.projectAppointments.slice(0, 6).map((appointment) => (
+              <Link
+                key={appointment.id}
+                to={
+                  appointment.projectId
+                    ? `/app/projects/${appointment.projectId}?tab=termine`
+                    : "/app/calendar"
+                }
+              >
+                <AppCard className="h-full p-4 hover:border-[var(--app-primary)]/40">
+                  <div className="text-xs font-semibold text-[var(--app-primary)]">
+                    {new Intl.DateTimeFormat("de-DE", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(appointment.startsAt))}
+                  </div>
+                  <div className="mt-2 font-semibold">{appointment.title}</div>
+                  <div className="mt-1 text-sm text-[var(--app-muted)]">
+                    {appointment.projectTitle ?? "Projekttermin"}
+                  </div>
+                  <div className="mt-3 text-xs text-[var(--app-muted)]">
+                    {PROJECT_APPOINTMENT_TYPE_LABELS[appointment.appointmentType]}
+                  </div>
+                </AppCard>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="space-y-4">

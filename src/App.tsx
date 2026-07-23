@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useLocation, type Location } from "react-router-dom";
-import { BriefcaseBusiness, FileText, LayoutDashboard, ListTodo, Menu, PackageSearch, ReceiptText, Users } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, FileText, LayoutDashboard, ListTodo, Menu, PackageSearch, ReceiptText, Users } from "lucide-react";
 
 import AppShell from "@/components/Layout/AppShell";
 import type { NavItem } from "@/components/Layout/Sidebar";
@@ -19,6 +19,7 @@ const CustomerEditPage = lazy(() => import("@/features/clients/CustomerEditPage"
 const ProjectCreatePage = lazy(() => import("@/features/projects/ProjectCreatePage"));
 const ProjectDetailPage = lazy(() => import("@/features/projects/ProjectDetailPage"));
 const TodosPage = lazy(() => import("@/features/todos/TodosPage"));
+const CalendarPage = lazy(() => import("@/features/calendar/CalendarPage"));
 const MorePage = lazy(() => import("@/features/more/MorePage"));
 const SettingsView = lazy(() => import("@/features/settings/SettingsView"));
 const VerifyEmailResult = lazy(() => import("@/features/settings/VerifyEmailResult"));
@@ -47,6 +48,7 @@ const navItems: NavItem[] = [
   { to: "/app", label: "Übersicht", icon: <LayoutDashboard size={16} />, end: true },
   { to: "/app/projects", label: "Projekte", icon: <BriefcaseBusiness size={16} /> },
   { to: "/app/clients", label: "Kunden", icon: <Users size={16} /> },
+  { to: "/app/calendar", label: "Kalender", icon: <CalendarDays size={16} /> },
   { to: "/app/todos", label: "Aufgaben", icon: <ListTodo size={16} /> },
   { to: "/app/documents?type=offer", search: "?type=offer", label: "Angebote", icon: <FileText size={16} /> },
   { to: "/app/documents?type=invoice", search: "?type=invoice", label: "Rechnungen", icon: <ReceiptText size={16} /> },
@@ -88,6 +90,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="todos" element={<TodosPage />} />
+          <Route path="calendar" element={<CalendarPage />} />
           <Route path="documents" element={<DocumentsHubPage />} />
           <Route path="clients" element={<Clients />} />
           <Route path="clients/:id/edit" element={<CustomerEditPage />} />

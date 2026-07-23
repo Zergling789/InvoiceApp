@@ -19,6 +19,7 @@ import * as offerService from "@/app/offers/offerService";
 import * as invoiceService from "@/app/invoices/invoiceService";
 import * as clientService from "@/app/clients/clientService";
 import * as projectTaskService from "@/app/tasks/projectTaskService";
+import * as appointmentService from "@/app/calendar/projectAppointmentService";
 import type { Client, Invoice, Offer, Project } from "@/types";
 import type {
   ProjectActivity,
@@ -43,6 +44,7 @@ import { LoadErrorCard } from "@/components/LoadErrorCard";
 import { useConfirm, useToast } from "@/ui/FeedbackProvider";
 import type { ProjectTaskAssignee } from "@/db/projectTasksDb";
 import { ProjectTaskPanel } from "./ProjectTaskPanel";
+import { ProjectAppointmentPanel } from "@/features/calendar/ProjectAppointmentPanel";
 
 type Tab = "uebersicht" | "aktivitaeten" | "dokumente" | "aufgaben" | "termine" | "dateien";
 const tabs: { value: Tab; label: string; icon: typeof History }[] = [
@@ -93,7 +95,12 @@ export default function ProjectDetailPage() {
           projectService.getProjectActivities(projectId),
           projectTaskService.listProjectTasks({ projectId, limit: 100 }),
           projectTaskService.listProjectTaskAssignees(projectId),
-          projectService.getProjectAppointments(projectId),
+          appointmentService.listProjectAppointments({
+            projectId,
+            from: new Date().toISOString(),
+            to: new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString(),
+            limit: 100,
+          }),
         ]);
       if (!projectData) throw new Error("project_not_found");
       const customer = projectData.clientId ? await clientService.get(projectData.clientId) : null;
@@ -207,7 +214,24 @@ export default function ProjectDetailPage() {
           }}
         />
       )}
-      {tab === "termine" && <PreparedSection title="Termine" description={appointments.length ? `${appointments.length} kommende Termine sind diesem Projekt zugeordnet.` : "Noch keine Termine. Besichtigungen und Projekttermine können auf diesem Fundament ergänzt werden."} />}
+      {tab === "termine" && (
+        <ProjectAppointmentPanel
+          projectId={project.id}
+          appointments={appointments}
+          defaultType={
+            project.phase === "inquiry" || project.phase === "site_visit"
+              ? "site_visit"
+              : project.phase === "accepted"
+                ? "project_start"
+                : "other"
+          }
+          initialCreateOpen={searchParams.get("action") === "new"}
+          onAppointmentsChange={setAppointments}
+          onActivitiesChange={async () => {
+            setActivities(await projectService.getProjectActivities(project.id));
+          }}
+        />
+      )}
       {tab === "dateien" && <PreparedSection title="Dateien & Fotos" description="Der Projektbereich ist vorbereitet. Upload und Baustellendokumentation folgen in einem späteren Arbeitspaket." />}
     </div>
   );

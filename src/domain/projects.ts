@@ -29,6 +29,29 @@ export type ProjectPriority = (typeof PROJECT_PRIORITIES)[number];
 export const PROJECT_TASK_STATUSES = ["open", "in_progress", "completed", "cancelled"] as const;
 export type ProjectTaskStatus = (typeof PROJECT_TASK_STATUSES)[number];
 
+export const PROJECT_APPOINTMENT_TYPES = [
+  "site_visit",
+  "project_start",
+  "work_day",
+  "delivery",
+  "inspection",
+  "handover",
+  "follow_up",
+  "other",
+] as const;
+export type ProjectAppointmentType = (typeof PROJECT_APPOINTMENT_TYPES)[number];
+
+export const PROJECT_APPOINTMENT_TYPE_LABELS: Record<ProjectAppointmentType, string> = {
+  site_visit: "Besichtigung",
+  project_start: "Projektstart",
+  work_day: "Arbeitstag",
+  delivery: "Lieferung",
+  inspection: "Abnahmeprüfung",
+  handover: "Übergabe",
+  follow_up: "Nachfassen",
+  other: "Sonstiger Termin",
+};
+
 export const PROJECT_TASK_STATUS_LABELS: Record<ProjectTaskStatus, string> = {
   open: "Offen",
   in_progress: "In Arbeit",
@@ -135,19 +158,23 @@ export type ProjectTask = {
 
 export type ProjectAppointment = {
   id: string;
+  organizationId: string;
   projectId?: string | null;
+  customerId?: string | null;
   title: string;
   startsAt: string;
   endsAt: string;
-  appointmentType:
-    | "site_visit"
-    | "project_start"
-    | "work_day"
-    | "delivery"
-    | "inspection"
-    | "handover"
-    | "follow_up"
-    | "other";
+  appointmentType: ProjectAppointmentType;
+  location?: string | null;
+  note?: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectAppointmentWithProject = ProjectAppointment & {
+  projectTitle?: string | null;
+  projectNumber?: string | null;
 };
 
 export type ProjectContext = {

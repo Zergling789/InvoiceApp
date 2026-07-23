@@ -223,7 +223,7 @@ export async function dbGetProjectAppointments(projectId: string): Promise<Proje
   await dbGetCurrentUserId();
   const { data, error } = await supabase
     .from("project_appointments")
-    .select("id,project_id,title,starts_at,ends_at,appointment_type")
+    .select("id,organization_id,project_id,customer_id,title,starts_at,ends_at,appointment_type,location,note,created_by,created_at,updated_at")
     .eq("project_id", projectId)
     .gte("ends_at", new Date().toISOString())
     .order("starts_at", { ascending: true })
@@ -231,11 +231,18 @@ export async function dbGetProjectAppointments(projectId: string): Promise<Proje
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => ({
     id: row.id,
+    organizationId: row.organization_id,
     projectId: row.project_id,
+    customerId: row.customer_id,
     title: row.title,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     appointmentType: row.appointment_type as ProjectAppointment["appointmentType"],
+    location: row.location,
+    note: row.note,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }));
 }
 
