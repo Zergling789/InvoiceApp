@@ -9,12 +9,15 @@ import { renderWithProviders } from "@/test/renderWithProviders";
 const getMock = vi.fn();
 const saveMock = vi.fn();
 const removeMock = vi.fn();
+const listProjectsMock = vi.fn();
 
 vi.mock("@/app/clients/clientService", () => ({ get: (...args: unknown[]) => getMock(...args), saveClient: (...args: unknown[]) => saveMock(...args), removeClient: (...args: unknown[]) => removeMock(...args) }));
+vi.mock("@/app/projects/projectService", () => ({ listProjectsPage: (...args: unknown[]) => listProjectsMock(...args) }));
 
 describe("CustomerEditPage", () => {
   beforeEach(() => {
-    getMock.mockReset(); saveMock.mockReset(); removeMock.mockReset();
+    getMock.mockReset(); saveMock.mockReset(); removeMock.mockReset(); listProjectsMock.mockReset();
+    listProjectsMock.mockResolvedValue({ items: [], hasMore: false, nextPage: null });
     getMock.mockResolvedValue({ id: "client-1", companyName: "Acme GmbH", firstName: "Anna", lastName: "Müller", contactPerson: "Anna Müller", email: "", address: "", notes: "" });
   });
 

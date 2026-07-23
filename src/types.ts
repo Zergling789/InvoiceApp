@@ -92,14 +92,59 @@ export interface Client {
 
 export interface Project {
   id: string;
+  organizationId?: string;
   createdAt?: string;
-  clientId: string;
+  updatedAt?: string;
+  clientId?: string;
+  projectNumber?: string | null;
   name: string;
+  description?: string | null;
   budgetType: "hourly" | "fixed";
   hourlyRate: number;
   budgetTotal: number;
-  status: "active" | "completed" | "archived";
+  status: ProjectStatus;
+  phase: ProjectPhase;
+  priority: ProjectPriority;
+  projectType?: string | null;
+  source?: string | null;
+  estimatedValue?: number | null;
+  acceptedValue?: number | null;
+  startDate?: string | null;
+  targetEndDate?: string | null;
+  actualEndDate?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  country?: string | null;
+  nextActionType?: string | null;
+  nextActionAt?: string | null;
+  nextActionLabel?: string | null;
+  assignedUserId?: string | null;
+  createdBy?: string;
+  archivedAt?: string | null;
+  lastActivityAt?: string | null;
 }
+
+export type ProjectStatus = "active" | "completed" | "cancelled" | "archived";
+export type ProjectPhase =
+  | "inquiry"
+  | "qualification"
+  | "site_visit"
+  | "planning"
+  | "quote_draft"
+  | "quote_sent"
+  | "quote_follow_up"
+  | "accepted"
+  | "scheduled"
+  | "in_progress"
+  | "completion"
+  | "invoiced"
+  | "payment_pending"
+  | "completed"
+  | "lost"
+  | "cancelled";
+export type ProjectPriority = "low" | "normal" | "high" | "urgent";
 
 export interface Position {
   id: string;

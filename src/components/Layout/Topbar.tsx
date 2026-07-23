@@ -1,4 +1,4 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { LogOut, Menu, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +17,7 @@ type TopbarProps = {
 
 export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings", navItems = [] }: TopbarProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -92,7 +93,7 @@ export function Topbar({ brand = "FreelanceFlow", settingsHref = "/app/settings"
                   key={item.to}
                   to={item.to}
                   end={item.end}
-                  className={linkClass}
+                  className={({ isActive }) => linkClass({ isActive: isActive && (!item.search || location.search === item.search) })}
                   onClick={() => setMenuOpen(false)}
                 >
                   {item.icon} {item.label}

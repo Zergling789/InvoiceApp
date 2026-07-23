@@ -6,6 +6,7 @@ import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { Link } from "react-router-dom";
 import { getTaxLabel } from "@/domain/rules/tax";
 
 type InvoiceDetailViewProps = {
@@ -101,6 +102,7 @@ export function InvoiceDetailView({
               <div className="flex gap-3"><CalendarDays size={17} className="mt-0.5 text-[var(--app-muted)]" /><div><div className="text-xs text-[var(--app-muted)]">Fällig am</div><div className="text-sm font-medium">{invoice.dueDate ? formatDate(invoice.dueDate, locale) : "—"}</div></div></div>
             </div>
           </AppCard>
+          {invoice.projectId && <AppCard className="space-y-3 p-5"><div className="font-semibold">Projekt</div><Link className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-primary)] hover:underline" to={`/app/projects/${invoice.projectId}`}>Zugehöriges Projekt öffnen</Link></AppCard>}
           <AppCard className="space-y-3 p-5"><div className="flex items-center gap-2 font-semibold"><UserRound size={17} /> Kunde</div><div><div className="text-sm font-medium">{client?.companyName || "Unbekannter Kunde"}</div>{client?.contactPerson && <div className="mt-1 text-sm text-[var(--app-muted)]">{client.contactPerson}</div>}{client?.email && <div className="mt-1 break-all text-sm text-[var(--app-muted)]">{client.email}</div>}</div></AppCard>
           <AppCard className="space-y-3 p-5"><div className="flex items-center gap-2 font-semibold"><WalletCards size={17} /> Zahlung</div><div className="space-y-2 text-sm"><div className="flex justify-between gap-3"><span className="text-[var(--app-muted)]">Zahlungsziel</span><span>{invoice.paymentTermsDays ?? 0} Tage</span></div>{invoice.paymentDate && <div className="flex justify-between gap-3"><span className="text-[var(--app-muted)]">Bezahlt am</span><span>{formatDate(invoice.paymentDate, locale)}</span></div>}</div></AppCard>
           <AppCard className="space-y-3 p-5"><div className="flex items-center gap-2 font-semibold"><Building2 size={17} /> Bankverbindung</div><div className="space-y-1 text-sm text-[var(--app-muted)]"><div>{settings.bankName || "—"}</div><div className="break-all">{settings.iban || "—"}</div>{settings.bic && <div>{settings.bic}</div>}</div></AppCard>

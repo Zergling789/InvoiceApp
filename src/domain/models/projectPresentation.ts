@@ -1,16 +1,16 @@
 import type { Project } from "@/types";
 import { formatMoney } from "@/utils/money";
-
-export const PROJECT_STATUS_LABELS: Record<Project["status"], string> = {
-  active: "Laufend",
-  completed: "Abgeschlossen",
-  archived: "Archiviert",
-};
+export {
+  PROJECT_PHASE_LABELS,
+  PROJECT_PRIORITY_LABELS,
+  PROJECT_STATUS_LABELS,
+} from "@/domain/projects";
 
 export const PROJECT_STATUS_ORDER: Record<Project["status"], number> = {
   active: 0,
   completed: 1,
-  archived: 2,
+  cancelled: 2,
+  archived: 3,
 };
 
 export function formatProjectBudget(project: Project, currency = "EUR", locale = "de-DE") {
