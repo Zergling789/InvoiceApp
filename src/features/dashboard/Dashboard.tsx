@@ -12,7 +12,9 @@ import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
-import type { Client, Invoice, Offer, UserSettings } from "@/types";
+import type { Client, Invoice, Offer, Project, UserSettings } from "@/types";
+import type { ProjectActivity, ProjectAppointmentWithProject, ProjectTask } from "@/domain/projects";
+import { PROJECT_APPOINTMENT_TYPE_LABELS, PROJECT_PHASE_LABELS, PROJECT_PRIORITY_LABELS } from "@/domain/projects";
 import { formatMoney } from "@/utils/money";
 import {
   bucketOfferAge,
@@ -32,6 +34,10 @@ type DashboardData = {
   clients: Client[];
   offers: Offer[];
   invoices: Invoice[];
+  projects: Project[];
+  projectActivities: ProjectActivity[];
+  projectTasks: ProjectTask[];
+  projectAppointments: ProjectAppointmentWithProject[];
 };
 
 const MAX_ACTIONS = 7;
@@ -40,7 +46,7 @@ export default function Dashboard() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [] });
+  const [data, setData] = useState<DashboardData>({ clients: [], offers: [], invoices: [], projects: [], projectActivities: [], projectTasks: [], projectAppointments: [] });
   const [company, setCompany] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -51,7 +57,15 @@ export default function Dashboard() {
       setError(null);
       try {
         const [dashboard, settings] = await Promise.all([loadDashboardData(), fetchSettings()]);
-        setData(dashboard);
+        setData({
+          clients: dashboard.clients ?? [],
+          offers: dashboard.offers ?? [],
+          invoices: dashboard.invoices ?? [],
+          projects: dashboard.projects ?? [],
+          projectActivities: dashboard.projectActivities ?? [],
+          projectTasks: dashboard.projectTasks ?? [],
+          projectAppointments: dashboard.projectAppointments ?? [],
+        });
         setCompany(settings.companyName || null);
         setSettings(settings);
       } catch (e) {
@@ -174,7 +188,41 @@ export default function Dashboard() {
         };
       });
 
-    const actionItems = [...overdueActions, ...openInvoiceActions, ...offerFollowUpActions].slice(0, MAX_ACTIONS);
+    const projectTaskActions = data.projectTasks
+      .filter((task) => task.projectId)
+      .slice()
+      .sort((a, b) => {
+        const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
+        const byPriority = priorityRank[a.priority] - priorityRank[b.priority];
+        if (byPriority !== 0) return byPriority;
+        return (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999");
+      })
+      .map<ActionItem>((task) => {
+        const project = data.projects.find((entry) => entry.id === task.projectId);
+        const overdue = task.dueAt ? new Date(task.dueAt) < today : false;
+        return {
+          id: `project-task-${task.id}`,
+          title: task.title,
+          subtitle: project ? `Projekt ${project.name}` : "Projektaufgabe",
+          amountLabel: PROJECT_PRIORITY_LABELS[task.priority],
+          ageLabel: task.dueAt
+            ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(task.dueAt))
+            : "ohne Fälligkeit",
+          statusLabel: overdue ? "Überfällig" : task.status === "in_progress" ? "In Arbeit" : "Offen",
+          tone: overdue ? "critical" : task.priority === "urgent" ? "warning" : "neutral",
+          primaryCta: {
+            label: "Aufgabe öffnen",
+            to: `/app/projects/${task.projectId}?tab=aufgaben`,
+          },
+        };
+      });
+
+    const actionItems = [
+      ...projectTaskActions,
+      ...overdueActions,
+      ...openInvoiceActions,
+      ...offerFollowUpActions,
+    ].slice(0, MAX_ACTIONS);
 
     const offerBuckets = openOffers.reduce<Record<string, number>>((acc, offer) => {
       const ageDays = getDaysSince(getOfferReferenceDate(offer as OfferWithFollowUp), today);
@@ -275,6 +323,62 @@ export default function Dashboard() {
         <>
 
       <section className="space-y-4">
+        <SectionHeader
+          title="Aktive Projekte"
+          subtitle="Nach nachvollziehbarem Handlungsbedarf sortiert."
+          action={<Link to="/app/projects"><AppButton variant="secondary">Alle Projekte</AppButton></Link>}
+        />
+        <div className="grid gap-3 lg:grid-cols-2">
+          {data.projects.length === 0 && !loading ? <AppCard className="p-6 text-sm text-[var(--app-muted)]">Noch keine aktiven Projekte.</AppCard> : data.projects.map((project) => {
+            const customer = data.clients.find((client) => client.id === project.clientId);
+            return <Link key={project.id} to={`/app/projects/${project.id}`}><AppCard className="p-4 hover:border-[var(--app-primary)]/40"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{project.name}</div><div className="mt-1 text-sm text-[var(--app-muted)]">{customer?.companyName || customer?.contactPerson || "Noch kein Kunde"}</div></div><span className="text-xs font-semibold text-[var(--app-muted)]">{PROJECT_PRIORITY_LABELS[project.priority]}</span></div><div className="mt-3 flex items-center justify-between gap-3 text-sm"><span>{PROJECT_PHASE_LABELS[project.phase]}</span><span className="truncate text-[var(--app-muted)]">{project.nextActionLabel || "Keine nächste Aktion"}</span></div></AppCard></Link>;
+          })}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader
+          title="Nächste Termine"
+          subtitle="Die kommenden 14 Tage aus deinen Projekten."
+          action={<Link to="/app/calendar"><AppButton variant="secondary">Kalender öffnen</AppButton></Link>}
+        />
+        {data.projectAppointments.length === 0 && !loading ? (
+          <AppCard className="p-6 text-sm text-[var(--app-muted)]">
+            Keine Projekttermine in den kommenden 14 Tagen.
+          </AppCard>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {data.projectAppointments.slice(0, 6).map((appointment) => (
+              <Link
+                key={appointment.id}
+                to={
+                  appointment.projectId
+                    ? `/app/projects/${appointment.projectId}?tab=termine`
+                    : "/app/calendar"
+                }
+              >
+                <AppCard className="h-full p-4 hover:border-[var(--app-primary)]/40">
+                  <div className="text-xs font-semibold text-[var(--app-primary)]">
+                    {new Intl.DateTimeFormat("de-DE", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(appointment.startsAt))}
+                  </div>
+                  <div className="mt-2 font-semibold">{appointment.title}</div>
+                  <div className="mt-1 text-sm text-[var(--app-muted)]">
+                    {appointment.projectTitle ?? "Projekttermin"}
+                  </div>
+                  <div className="mt-3 text-xs text-[var(--app-muted)]">
+                    {PROJECT_APPOINTMENT_TYPE_LABELS[appointment.appointmentType]}
+                  </div>
+                </AppCard>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
         <SectionHeader title="Cashflow" subtitle="Dein Fokus: Geld reinholen." />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Link to="/app/documents?type=invoice&status=issued,sent,overdue" className="block rounded-[var(--app-radius-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-primary)]">
@@ -330,6 +434,13 @@ export default function Dashboard() {
             </div>
           }
         />
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader title="Neue Projektaktivität" subtitle="Die letzten nachvollziehbaren Änderungen in deinen Projekten." />
+        <AppCard className="p-5">
+          {data.projectActivities.length === 0 ? <p className="text-sm text-[var(--app-muted)]">Noch keine Projektaktivitäten.</p> : <div className="divide-y divide-[var(--app-border)]">{data.projectActivities.map((activity) => <Link key={activity.id} to={`/app/projects/${activity.projectId}?tab=aktivitaeten`} className="flex items-center justify-between gap-4 py-3 text-sm"><span className="font-medium">{activity.title}</span><time className="shrink-0 text-xs text-[var(--app-muted)]">{new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(activity.createdAt))}</time></Link>)}</div>}
+        </AppCard>
       </section>
 
       <section className="space-y-4">

@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 export type NavItem = {
   to: string;
   label: string;
   icon: ReactNode;
   end?: boolean;
+  search?: string;
 };
 
 export function Sidebar({ items }: { items: NavItem[] }) {
+  const location = useLocation();
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
       "group flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200",
@@ -25,7 +27,7 @@ export function Sidebar({ items }: { items: NavItem[] }) {
 
       <div className="space-y-1">
         {items.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
+          <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => linkClass({ isActive: isActive && (!item.search || location.search === item.search) })}>
             {item.icon} {item.label}
           </NavLink>
         ))}

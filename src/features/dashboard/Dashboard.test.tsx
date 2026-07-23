@@ -53,4 +53,80 @@ describe("Dashboard-Navigation", () => {
     await waitFor(() => expect(loadDashboardDataMock).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Cashflow")).toBeVisible();
   });
+
+  it("priorisiert offene Projektaufgaben als nachvollziehbare Aktion", async () => {
+    loadDashboardDataMock.mockResolvedValue({
+      clients: [],
+      offers: [],
+      invoices: [],
+      projects: [{
+        id: "project-1",
+        name: "Terrasse Müller",
+        phase: "in_progress",
+        priority: "high",
+      }],
+      projectActivities: [],
+      projectTasks: [{
+        id: "task-1",
+        organizationId: "org-1",
+        projectId: "project-1",
+        title: "Material bestellen",
+        status: "open",
+        priority: "urgent",
+        dueAt: "2099-08-01T08:00:00.000Z",
+        createdBy: "user-1",
+        createdAt: "2026-07-23T10:00:00.000Z",
+        updatedAt: "2026-07-23T10:00:00.000Z",
+      }],
+    });
+
+    renderWithProviders(<Dashboard />, { route: "/app" });
+
+    expect(await screen.findByText("Material bestellen")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Aufgabe öffnen" })).toHaveAttribute(
+      "href",
+      "/app/projects/project-1?tab=aufgaben",
+    );
+  });
+
+  it("zeigt die nächsten Projekttermine mit direkter Projektnavigation", async () => {
+    loadDashboardDataMock.mockResolvedValue({
+      clients: [],
+      offers: [],
+      invoices: [],
+      projects: [],
+      projectActivities: [],
+      projectTasks: [],
+      projectAppointments: [{
+        id: "appointment-1",
+        organizationId: "org-1",
+        projectId: "project-1",
+        customerId: "client-1",
+        title: "Besichtigung vor Ort",
+        startsAt: "2099-08-01T08:00:00.000Z",
+        endsAt: "2099-08-01T09:00:00.000Z",
+        appointmentType: "site_visit",
+        location: "Musterstraße 1",
+        note: null,
+        createdBy: "user-1",
+        createdAt: "2026-07-23T10:00:00.000Z",
+        updatedAt: "2026-07-23T10:00:00.000Z",
+        projectTitle: "Terrasse Müller",
+        projectNumber: "PR-2026-0001",
+      }],
+    });
+
+    renderWithProviders(<Dashboard />, { route: "/app" });
+
+    const appointmentTitle = await screen.findByText("Besichtigung vor Ort");
+    expect(appointmentTitle).toBeVisible();
+    expect(appointmentTitle.closest("a")).toHaveAttribute(
+      "href",
+      "/app/projects/project-1?tab=termine",
+    );
+    expect(screen.getByRole("link", { name: "Kalender öffnen" })).toHaveAttribute(
+      "href",
+      "/app/calendar",
+    );
+  });
 });

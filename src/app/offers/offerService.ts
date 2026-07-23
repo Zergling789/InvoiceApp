@@ -25,6 +25,8 @@ const createOfferWorkflowError = (error: { code?: string; message?: string }) =>
 };
 
 export const listOffers = (): Promise<Offer[]> => repo.listOffers();
+export const listOffersForProject = (projectId: string): Promise<Offer[]> =>
+  repo.listOffersForProject(projectId);
 export const listOffersPage = (options: DocumentPageOptions = {}) => repo.listOffersPage(options);
 export const getOffer = (id: string) => repo.getOffer(id);
 export const saveOffer = (offer: Offer) => repo.saveOffer(offer);

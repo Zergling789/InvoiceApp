@@ -8,6 +8,7 @@ import { DocumentEditor, type EditorSeed } from "@/features/documents/DocumentEd
 import * as clientService from "@/app/clients/clientService";
 import type { CreatedDocumentTarget } from "@/features/documents/createdDocumentNavigation";
 import { LoadErrorCard } from "@/components/LoadErrorCard";
+import * as projectService from "@/app/projects/projectService";
 
 const toLocalISODate = (d: Date) => {
   const year = d.getFullYear();
@@ -28,9 +29,10 @@ type OfferFormProps = {
   onClose: (force?: boolean) => void;
   onSaved?: (document: CreatedDocumentTarget) => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
+  projectId?: string | null;
 };
 
-export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
+export function OfferForm({ onClose, onSaved, onDirtyChange, projectId }: OfferFormProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
@@ -44,9 +46,10 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
       setLoading(true);
       setError(null);
       try {
-        const [clientData, settingsData] = await Promise.all([
+        const [clientData, settingsData, project] = await Promise.all([
           clientService.list(),
           fetchSettings(),
+          projectId ? projectService.getProject(projectId) : Promise.resolve(null),
         ]);
         if (!mounted) return;
         const num = await getNextDocumentNumber("offer", settingsData);
@@ -56,7 +59,11 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
           date: todayISO(),
           validUntil: addDaysISO(14),
           vatRate: Number(settingsData.defaultVatRate ?? 0),
-          introText: "Gerne unterbreite ich Ihnen folgendes Angebot:",
+          introText: project?.description
+            ? `Projekt ${project.name}\n\n${project.description}`
+            : project
+              ? `Projekt ${project.name}`
+              : "Gerne unterbreite ich Ihnen folgendes Angebot:",
           footerText: "Ich freue mich auf Ihre Rückmeldung.",
           currency: "EUR",
         };
@@ -74,7 +81,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
     return () => {
       mounted = false;
     };
-  }, [reloadToken]);
+  }, [reloadToken, projectId]);
 
   if (loading) {
     return <div className="text-sm text-gray-500 p-6">Lade Angebot...</div>;
@@ -100,6 +107,7 @@ export function OfferForm({ onClose, onSaved, onDirtyChange }: OfferFormProps) {
       seed={editorSeed}
       settings={settings}
       clients={clients}
+      initial={projectId ? { projectId } : undefined}
       onClose={onClose}
       onSaved={async () => {
         await onSaved?.({ id: editorSeed.id, type: "offer" });

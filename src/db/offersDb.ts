@@ -84,6 +84,18 @@ export async function dbListOffers(): Promise<Offer[]> {
   return ((data ?? []) as DbOfferRow[]).map(toOffer);
 }
 
+export async function dbListOffersForProject(projectId: string): Promise<Offer[]> {
+  await requireUserId();
+  const { data, error } = await supabase
+    .from("offers")
+    .select(OFFER_FIELDS)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as DbOfferRow[]).map(toOffer);
+}
+
 export async function dbListOffersPage(
   options: DocumentPageOptions = {},
 ): Promise<CursorPage<Offer>> {

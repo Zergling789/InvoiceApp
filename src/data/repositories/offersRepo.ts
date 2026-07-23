@@ -4,6 +4,7 @@ import {
   dbDeleteOffer,
   dbGetOffer,
   dbListOffers,
+  dbListOffersForProject,
   dbListOffersPage,
   dbUpsertOffer,
 } from "@/db/offersDb";
@@ -12,6 +13,10 @@ import type { CursorPage, DocumentPageOptions } from "@/db/cursorPagination";
 export async function listOffers(): Promise<Offer[]> {
   const offers = await dbListOffers();
   return offers.map(normalizeOffer);
+}
+
+export async function listOffersForProject(projectId: string): Promise<Offer[]> {
+  return (await dbListOffersForProject(projectId)).map(normalizeOffer);
 }
 
 export async function listOffersPage(
