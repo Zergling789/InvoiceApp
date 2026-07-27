@@ -1,9 +1,18 @@
 import { CalendarPlus, FilePlus2, ListPlus, ReceiptText } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
-import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
 import ProjectDetailPage from "./ProjectDetailPage";
+
+const actionBaseClass =
+  "inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-[transform,background-color,color,border-color,box-shadow] duration-200 active:scale-[0.98]";
+
+const actionClasses = {
+  primary:
+    "bg-[var(--app-primary)] text-white shadow-[0_6px_18px_rgba(0,113,227,0.2)] hover:bg-[var(--app-primary-hover)] hover:shadow-[0_8px_22px_rgba(0,113,227,0.26)]",
+  secondary:
+    "border border-[var(--app-border)] bg-[var(--app-surface-solid)] text-[var(--app-text)] shadow-sm hover:bg-white/60 dark:hover:bg-white/10",
+} as const;
 
 export default function ProjectWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -48,11 +57,13 @@ export default function ProjectWorkspacePage() {
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end">
             {actions.map(({ label, to, icon: Icon, primary }) => (
-              <Link key={label} to={to}>
-                <AppButton className="w-full justify-center" variant={primary ? "primary" : "secondary"}>
-                  <Icon size={16} />
-                  {label}
-                </AppButton>
+              <Link
+                key={label}
+                className={`${actionBaseClass} ${actionClasses[primary ? "primary" : "secondary"]}`}
+                to={to}
+              >
+                <Icon aria-hidden="true" size={16} />
+                {label}
               </Link>
             ))}
           </div>
