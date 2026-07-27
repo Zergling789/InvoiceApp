@@ -17,7 +17,7 @@ const InvoiceCreatePage = lazy(() => import("@/features/documents/create/Invoice
 const CustomerCreatePage = lazy(() => import("@/features/clients/CustomerCreatePage"));
 const CustomerEditPage = lazy(() => import("@/features/clients/CustomerEditPage"));
 const ProjectCreatePage = lazy(() => import("@/features/projects/ProjectCreatePage"));
-const ProjectDetailPage = lazy(() => import("@/features/projects/ProjectDetailPage"));
+const ProjectWorkspacePage = lazy(() => import("@/features/projects/ProjectWorkspacePage"));
 const TodosPage = lazy(() => import("@/features/todos/TodosPage"));
 const CalendarPage = lazy(() => import("@/features/calendar/CalendarPage"));
 const MorePage = lazy(() => import("@/features/more/MorePage"));
@@ -95,7 +95,7 @@ export default function App() {
           <Route path="clients" element={<Clients />} />
           <Route path="clients/:id/edit" element={<CustomerEditPage />} />
           <Route path="projects" element={<Projects />} />
-          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="projects/:projectId" element={<ProjectWorkspacePage />} />
           <Route path="offers" element={<Navigate to="/app/documents?type=offer" replace />} />
           <Route path="offers/new" element={<OfferCreatePage />} />
           <Route path="offers/:id" element={<DocumentDetailRoute forcedType="offer" />} />
