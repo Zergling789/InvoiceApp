@@ -64,6 +64,10 @@ const unwrapSingle = <T>(data: T | T[] | null): T | null => {
   return data;
 };
 
+const reportOptionalHistoryError = (scope: "document" | "project", error: unknown) => {
+  console.warn("document_delivery_history_unavailable", { scope, error });
+};
+
 export async function beginDocumentDelivery(input: {
   documentType: "offer" | "invoice";
   documentId: string;
@@ -113,26 +117,36 @@ export async function listDocumentDeliveries(input: {
   documentId: string;
   limit?: number;
 }): Promise<DocumentDelivery[]> {
-  const { data, error } = await supabase
-    .from("document_deliveries" as never)
-    .select("id,document_type,document_id,project_id,recipient,cc,bcc,subject,status,provider_message_id,error_code,error_message,sent_at,failed_at,created_at,updated_at")
-    .eq("document_type", input.documentType)
-    .eq("document_id", input.documentId)
-    .order("created_at", { ascending: false })
-    .limit(Math.max(1, Math.min(input.limit ?? 20, 100)));
+  try {
+    const { data, error } = await supabase
+      .from("document_deliveries" as never)
+      .select("id,document_type,document_id,project_id,recipient,cc,bcc,subject,status,provider_message_id,error_code,error_message,sent_at,failed_at,created_at,updated_at")
+      .eq("document_type", input.documentType)
+      .eq("document_id", input.documentId)
+      .order("created_at", { ascending: false })
+      .limit(Math.max(1, Math.min(input.limit ?? 20, 100)));
 
-  if (error) throw error;
-  return ((data ?? []) as unknown as DeliveryRow[]).map(mapDelivery);
+    if (error) throw error;
+    return ((data ?? []) as unknown as DeliveryRow[]).map(mapDelivery);
+  } catch (error) {
+    reportOptionalHistoryError("document", error);
+    return [];
+  }
 }
 
 export async function listProjectDeliveries(projectId: string, limit = 50): Promise<DocumentDelivery[]> {
-  const { data, error } = await supabase
-    .from("document_deliveries" as never)
-    .select("id,document_type,document_id,project_id,recipient,cc,bcc,subject,status,provider_message_id,error_code,error_message,sent_at,failed_at,created_at,updated_at")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false })
-    .limit(Math.max(1, Math.min(limit, 100)));
+  try {
+    const { data, error } = await supabase
+      .from("document_deliveries" as never)
+      .select("id,document_type,document_id,project_id,recipient,cc,bcc,subject,status,provider_message_id,error_code,error_message,sent_at,failed_at,created_at,updated_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(Math.max(1, Math.min(limit, 100)));
 
-  if (error) throw error;
-  return ((data ?? []) as unknown as DeliveryRow[]).map(mapDelivery);
+    if (error) throw error;
+    return ((data ?? []) as unknown as DeliveryRow[]).map(mapDelivery);
+  } catch (error) {
+    reportOptionalHistoryError("project", error);
+    return [];
+  }
 }
