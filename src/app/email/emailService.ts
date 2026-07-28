@@ -64,6 +64,28 @@ const safelyCompleteDelivery = async (input: Parameters<typeof completeDocumentD
   }
 };
 
+const safelyBeginDelivery = async (
+  payload: SendDocumentEmailPayload,
+): Promise<string | null> => {
+  try {
+    const delivery = await beginDocumentDelivery({
+      documentType: payload.documentType,
+      documentId: payload.documentId,
+      recipient: payload.to,
+      cc: payload.cc,
+      bcc: payload.bcc,
+      subject: payload.subject,
+    });
+    return delivery.id;
+  } catch (error) {
+    // The audit trail must never prevent the actual customer communication.
+    // A missing migration, temporary Supabase outage or stale client session is
+    // therefore logged for diagnostics while the email request continues.
+    console.error("document_delivery_begin_failed", error);
+    return null;
+  }
+};
+
 export async function sendDocumentEmail(
   payload: SendDocumentEmailPayload,
   options: SendDocumentEmailOptions = {},
@@ -77,15 +99,7 @@ export async function sendDocumentEmail(
   let deliveryId: string | null = null;
 
   if (shouldLogDelivery) {
-    const delivery = await beginDocumentDelivery({
-      documentType: payload.documentType,
-      documentId: payload.documentId,
-      recipient: payload.to,
-      cc: payload.cc,
-      bcc: payload.bcc,
-      subject: payload.subject,
-    });
-    deliveryId = delivery.id;
+    deliveryId = await safelyBeginDelivery(payload);
   }
 
   while (attempt < 2) {
