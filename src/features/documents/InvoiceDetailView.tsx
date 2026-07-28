@@ -1,4 +1,6 @@
-import { Building2, CalendarDays, FileText, MoreVertical, UserRound, WalletCards } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Building2, CalendarDays, FileText, MailCheck, MoreVertical, UserRound, WalletCards } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { Client, Invoice, UserSettings } from "@/types";
 import { formatDate } from "@/types";
@@ -6,8 +8,11 @@ import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
-import { Link } from "react-router-dom";
 import { getTaxLabel } from "@/domain/rules/tax";
+import {
+  listDocumentDeliveries,
+  type DocumentDelivery,
+} from "@/app/email/documentDeliveryService";
 
 type InvoiceDetailViewProps = {
   invoice: Invoice;
@@ -30,6 +35,25 @@ const numeric = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const deliveryLabel: Record<DocumentDelivery["status"], string> = {
+  processing: "Wird versendet",
+  sent: "Gesendet",
+  failed: "Fehlgeschlagen",
+  status_unknown: "Status unklar",
+  cancelled: "Abgebrochen",
+};
+
+const deliveryTone: Record<DocumentDelivery["status"], "gray" | "green" | "blue" | "yellow" | "red"> = {
+  processing: "blue",
+  sent: "green",
+  failed: "red",
+  status_unknown: "yellow",
+  cancelled: "gray",
+};
+
+const formatDeliveryDate = (value: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+
 export function InvoiceDetailView({
   invoice,
   client,
@@ -45,6 +69,29 @@ export function InvoiceDetailView({
   hasMoreActions,
   onMore,
 }: InvoiceDetailViewProps) {
+  const [deliveries, setDeliveries] = useState<DocumentDelivery[]>([]);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(true);
+  const [deliveriesFailed, setDeliveriesFailed] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setDeliveriesLoading(true);
+    setDeliveriesFailed(false);
+    listDocumentDeliveries({ documentType: "invoice", documentId: invoice.id, limit: 10 })
+      .then((items) => {
+        if (mounted) setDeliveries(items);
+      })
+      .catch(() => {
+        if (mounted) setDeliveriesFailed(true);
+      })
+      .finally(() => {
+        if (mounted) setDeliveriesLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [invoice.id, invoice.sentCount, invoice.lastSentAt]);
+
   return (
     <div className="space-y-7 px-4 pb-8 pt-5 sm:px-6 sm:pt-6 lg:px-8 lg:pb-10 lg:pt-8">
       <header className="flex flex-col gap-5 border-b border-[var(--app-border)] pb-6 lg:flex-row lg:items-end lg:justify-between">
@@ -66,7 +113,7 @@ export function InvoiceDetailView({
       </header>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <main className="min-w-0">
+        <main className="min-w-0 space-y-5">
           <AppCard className="overflow-hidden p-0">
             <div className="border-b border-[var(--app-border)] px-5 py-4 sm:px-7"><div className="flex items-center gap-2 text-sm font-semibold"><FileText size={17} /> Rechnungspositionen</div></div>
             {invoice.introText && <p className="px-5 pt-6 text-sm leading-6 text-[var(--app-muted)] sm:px-7">{invoice.introText}</p>}
@@ -91,6 +138,33 @@ export function InvoiceDetailView({
               {invoice.isSmallBusiness && invoice.smallBusinessNote && <p className="mt-4 text-xs text-[var(--app-muted)]">{invoice.smallBusinessNote}</p>}
             </div>
             {invoice.footerText && <p className="border-t border-[var(--app-border)] px-5 py-5 text-sm leading-6 text-[var(--app-muted)] sm:px-7">{invoice.footerText}</p>}
+          </AppCard>
+
+          <AppCard className="overflow-hidden p-0">
+            <div className="flex items-center justify-between border-b border-[var(--app-border)] px-5 py-4 sm:px-7">
+              <div className="flex items-center gap-2 text-sm font-semibold"><MailCheck size={17} /> Versandhistorie</div>
+              {!deliveriesLoading && <span className="text-xs text-[var(--app-muted)]">{deliveries.length} Einträge</span>}
+            </div>
+            {deliveriesLoading ? (
+              <div role="status" className="px-5 py-8 text-center text-sm text-[var(--app-muted)] sm:px-7">Versandhistorie wird geladen …</div>
+            ) : deliveriesFailed ? (
+              <div className="px-5 py-8 text-center text-sm text-[var(--app-muted)] sm:px-7">Die Versandhistorie konnte nicht geladen werden.</div>
+            ) : deliveries.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-[var(--app-muted)] sm:px-7">Diese Rechnung wurde noch nicht per E-Mail versendet.</div>
+            ) : (
+              <div className="divide-y divide-[var(--app-border)]">
+                {deliveries.map((delivery) => (
+                  <div key={delivery.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-7">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2"><span className="break-all font-medium">{delivery.recipient}</span><AppBadge color={deliveryTone[delivery.status]}>{deliveryLabel[delivery.status]}</AppBadge></div>
+                      <div className="mt-1 truncate text-sm text-[var(--app-muted)]">{delivery.subject}</div>
+                      {delivery.errorMessage && <div className="mt-2 text-sm text-red-600">{delivery.errorMessage}</div>}
+                    </div>
+                    <time className="text-xs text-[var(--app-muted)] sm:text-right">{formatDeliveryDate(delivery.sentAt ?? delivery.failedAt ?? delivery.createdAt, locale)}</time>
+                  </div>
+                ))}
+              </div>
+            )}
           </AppCard>
         </main>
 
