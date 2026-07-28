@@ -1,5 +1,9 @@
 import { apiFetch } from "@/app/api/apiClient";
 import { readApiError } from "@/app/api/apiError";
+import {
+  beginDocumentDelivery,
+  completeDocumentDelivery,
+} from "@/app/email/documentDeliveryService";
 
 export type SendDocumentEmailResult = {
   ok: true;
@@ -30,6 +34,7 @@ type SendDocumentEmailOptions = {
   timeoutMs?: number;
   apiFetchImpl?: EmailApiFetch;
   delayImpl?: (ms: number) => Promise<unknown>;
+  skipDeliveryLog?: boolean;
 };
 
 const EMAIL_REQUEST_TIMEOUT_MS = 60_000;
@@ -51,6 +56,14 @@ const createUnknownDeliveryError = () =>
 export const shouldRetryEmailSend = (_status: number, code?: string) =>
   code === "PDF_ENGINE_RESET";
 
+const safelyCompleteDelivery = async (input: Parameters<typeof completeDocumentDelivery>[0]) => {
+  try {
+    await completeDocumentDelivery(input);
+  } catch (error) {
+    console.error("document_delivery_update_failed", error);
+  }
+};
+
 export async function sendDocumentEmail(
   payload: SendDocumentEmailPayload,
   options: SendDocumentEmailOptions = {},
@@ -60,6 +73,19 @@ export async function sendDocumentEmail(
   const timeoutMs = options.timeoutMs ?? EMAIL_REQUEST_TIMEOUT_MS;
   let attempt = 0;
   let lastError: unknown = null;
+  let deliveryId: string | null = null;
+
+  if (!options.skipDeliveryLog) {
+    const delivery = await beginDocumentDelivery({
+      documentType: payload.documentType,
+      documentId: payload.documentId,
+      recipient: payload.to,
+      cc: payload.cc,
+      bcc: payload.bcc,
+      subject: payload.subject,
+    });
+    deliveryId = delivery.id;
+  }
 
   while (attempt < 2) {
     attempt += 1;
@@ -79,7 +105,23 @@ export async function sendDocumentEmail(
     } catch (error) {
       const isAbortError = error instanceof DOMException && error.name === "AbortError";
       if (controller.signal.aborted || isAbortError || error instanceof TypeError) {
+        if (deliveryId) {
+          await safelyCompleteDelivery({
+            deliveryId,
+            status: "status_unknown",
+            errorCode: "EMAIL_SEND_STATUS_UNKNOWN",
+            errorMessage: "Die Verbindung wurde während des Versands unterbrochen.",
+          });
+        }
         throw createUnknownDeliveryError();
+      }
+      if (deliveryId) {
+        await safelyCompleteDelivery({
+          deliveryId,
+          status: "failed",
+          errorCode: "EMAIL_SEND_FAILED",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
       }
       throw error;
     } finally {
@@ -87,12 +129,23 @@ export async function sendDocumentEmail(
     }
 
     if (res.ok) {
+      if (deliveryId) {
+        await safelyCompleteDelivery({ deliveryId, status: "sent" });
+      }
       return { ok: true };
     }
 
     const { code, message, requestId } = await readApiError(res);
 
     if (code === "EMAIL_NOT_CONFIGURED") {
+      if (deliveryId) {
+        await safelyCompleteDelivery({
+          deliveryId,
+          status: "failed",
+          errorCode: code,
+          errorMessage: message,
+        });
+      }
       return { ok: false, code, message };
     }
 
@@ -107,6 +160,14 @@ export async function sendDocumentEmail(
       requestId,
     );
     lastError = error;
+    if (deliveryId) {
+      await safelyCompleteDelivery({
+        deliveryId,
+        status: "failed",
+        errorCode: code,
+        errorMessage: message || error.message,
+      });
+    }
     break;
   }
 
