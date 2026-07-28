@@ -124,8 +124,11 @@ test.describe.serial("value stream: offer -> invoice", () => {
     await page.getByRole("button", { name: "Angebot senden" }).click();
     const sendDialog = page.getByRole("dialog", { name: "Angebot senden" });
     await expect(sendDialog).toBeVisible();
-    await sendDialog.getByPlaceholder("to@example.com").fill(client.email);
-    await sendDialog.getByRole("button", { name: "Senden" }).click();
+    await expect(sendDialog.getByText("PDF ist bereit.")).toBeVisible();
+    await sendDialog.getByRole("button", { name: "Empfänger festlegen" }).click();
+    await sendDialog.getByPlaceholder("kunde@example.com").fill(client.email);
+    await sendDialog.getByRole("button", { name: "Versand prüfen" }).click();
+    await sendDialog.getByRole("button", { name: "Senden", exact: true }).click();
     await expect(page.getByText("Angebot wurde versendet.")).toBeVisible();
 
     await expect(page.getByText("Gesendet", { exact: true }).first()).toBeVisible();
