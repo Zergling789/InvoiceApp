@@ -71,11 +71,12 @@ export async function sendDocumentEmail(
   const apiFetchImpl = options.apiFetchImpl ?? apiFetch;
   const delayImpl = options.delayImpl ?? delay;
   const timeoutMs = options.timeoutMs ?? EMAIL_REQUEST_TIMEOUT_MS;
+  const shouldLogDelivery = !options.skipDeliveryLog && !options.apiFetchImpl;
   let attempt = 0;
   let lastError: unknown = null;
   let deliveryId: string | null = null;
 
-  if (!options.skipDeliveryLog) {
+  if (shouldLogDelivery) {
     const delivery = await beginDocumentDelivery({
       documentType: payload.documentType,
       documentId: payload.documentId,
@@ -129,9 +130,7 @@ export async function sendDocumentEmail(
     }
 
     if (res.ok) {
-      if (deliveryId) {
-        await safelyCompleteDelivery({ deliveryId, status: "sent" });
-      }
+      if (deliveryId) await safelyCompleteDelivery({ deliveryId, status: "sent" });
       return { ok: true };
     }
 
