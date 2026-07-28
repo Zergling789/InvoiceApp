@@ -6,6 +6,7 @@ import { getSuggestedNextAction } from "./projectNextActions";
 
 const project = (phase: Project["phase"]): Project => ({
   id: "project-1",
+  clientId: "client-1",
   name: "Garten Schmidt",
   budgetType: "fixed",
   hourlyRate: 0,
