@@ -9,6 +9,8 @@ export function createEmptyProject(id: string, clientId = ""): Project {
     hourlyRate: 0,
     budgetTotal: 0,
     status: "active",
+    phase: "inquiry",
+    priority: "normal",
   };
 }
 
@@ -20,5 +22,7 @@ export function normalizeProject(project: Project): Project {
     hourlyRate: Number(project.hourlyRate ?? 0),
     budgetTotal: Number(project.budgetTotal ?? 0),
     status: project.status ?? "active",
+    phase: project.phase ?? "inquiry",
+    priority: project.priority ?? "normal",
   };
 }

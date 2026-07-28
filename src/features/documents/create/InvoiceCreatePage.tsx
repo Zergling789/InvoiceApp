@@ -17,6 +17,7 @@ export default function InvoiceCreatePage() {
   const backgroundLocation = state?.backgroundLocation;
   const returnTo = state?.returnTo;
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
+  const projectId = new URLSearchParams(location.search).get("projectId");
 
   const handleClose = ({ skipConfirm = false }: { skipConfirm?: boolean } = {}) => {
     const shouldSkipConfirm = skipConfirm || skipConfirmRef.current;
@@ -33,6 +34,11 @@ export default function InvoiceCreatePage() {
         refreshDocuments,
       };
     };
+
+    if (returnUrl) {
+      navigate(returnUrl, { replace: true, state: buildState(undefined) });
+      return;
+    }
 
     if (refreshDocuments && createdDocumentRef.current) {
       navigate("/app/documents", {
@@ -55,11 +61,6 @@ export default function InvoiceCreatePage() {
       return;
     }
 
-    if (returnUrl) {
-      navigate(returnUrl, { replace: true, state: buildState(undefined) });
-      return;
-    }
-
     if (window.history.length > 1) {
       navigate(-1);
     } else {
@@ -72,6 +73,7 @@ export default function InvoiceCreatePage() {
       <InvoiceForm
         onClose={handleClose}
         onDirtyChange={setIsDirty}
+        projectId={projectId}
         onSaved={(document) => {
           skipConfirmRef.current = true;
           refreshTokenRef.current = Date.now();

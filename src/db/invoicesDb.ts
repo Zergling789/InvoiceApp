@@ -129,6 +129,18 @@ export async function dbListInvoices(): Promise<Invoice[]> {
   return ((data ?? []) as DbInvoiceRow[]).map(toInvoice);
 }
 
+export async function dbListInvoicesForProject(projectId: string): Promise<Invoice[]> {
+  await requireUserId();
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(INVOICE_FIELDS)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as DbInvoiceRow[]).map(toInvoice);
+}
+
 export async function dbListInvoicesPage(
   options: DocumentPageOptions = {},
 ): Promise<CursorPage<Invoice>> {

@@ -28,9 +28,10 @@ type InvoiceFormProps = {
   onClose: () => void;
   onSaved?: (document: CreatedDocumentTarget) => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
+  projectId?: string | null;
 };
 
-export function InvoiceForm({ onClose, onSaved, onDirtyChange }: InvoiceFormProps) {
+export function InvoiceForm({ onClose, onSaved, onDirtyChange, projectId }: InvoiceFormProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
@@ -103,6 +104,7 @@ export function InvoiceForm({ onClose, onSaved, onDirtyChange }: InvoiceFormProp
       seed={editorSeed}
       settings={settings}
       clients={clients}
+      initial={projectId ? { projectId } : undefined}
       onClose={onClose}
       onSaved={async () => {
         await onSaved?.({ id: editorSeed.id, type: "invoice" });

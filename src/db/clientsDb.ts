@@ -15,7 +15,7 @@ type DbClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type DbClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 
 const CLIENT_FIELDS =
-  "id,user_id,company_name,contact_person,email,address,notes,customer_number,first_name,last_name,job_title,department,phone,mobile,website,street,house_number,address_addition,postal_code,city,state,country,legal_form,industry,vat_id,tax_number,registration_number,invoice_email,billing_address,payment_terms_days,currency,default_vat_rate,preferred_language,preferred_delivery_method,source,tags,last_contact_at,next_follow_up_at,updated_at,created_at" as const;
+  "id,organization_id,user_id,company_name,contact_person,email,address,notes,customer_number,first_name,last_name,job_title,department,phone,mobile,website,street,house_number,address_addition,postal_code,city,state,country,legal_form,industry,vat_id,tax_number,registration_number,invoice_email,billing_address,payment_terms_days,currency,default_vat_rate,preferred_language,preferred_delivery_method,source,tags,last_contact_at,next_follow_up_at,updated_at,created_at" as const;
 const CLIENT_SUMMARY_FIELDS = "id,company_name,contact_person,first_name,last_name" as const;
 const CLIENT_PAGE_FIELDS =
   "id,created_at,company_name,contact_person,email,address,customer_number,first_name,last_name,phone,mobile,street,house_number,postal_code,city" as const;

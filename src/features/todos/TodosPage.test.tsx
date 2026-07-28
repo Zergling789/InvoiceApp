@@ -60,4 +60,33 @@ describe("TodosPage loading states", () => {
       "/app/invoices/invoice-overdue",
     );
   });
+
+  it("shows real project tasks and links to the project task tab", async () => {
+    loadDashboardDataMock.mockResolvedValue({
+      clients: [],
+      offers: [],
+      invoices: [],
+      projects: [{ id: "project-1", name: "Terrasse Müller" }],
+      projectTasks: [{
+        id: "task-1",
+        organizationId: "org-1",
+        projectId: "project-1",
+        title: "Material bestellen",
+        status: "open",
+        priority: "high",
+        dueAt: "2099-08-01T08:00:00.000Z",
+        createdBy: "user-1",
+        createdAt: "2026-07-23T10:00:00.000Z",
+        updatedAt: "2026-07-23T10:00:00.000Z",
+      }],
+    });
+
+    renderWithProviders(<TodosPage />, { route: "/app/todos" });
+
+    expect(await screen.findByText("Material bestellen")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Aufgabe öffnen" })).toHaveAttribute(
+      "href",
+      "/app/projects/project-1?tab=aufgaben",
+    );
+  });
 });

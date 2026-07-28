@@ -5,6 +5,8 @@ import { readApiError } from "@/app/api/apiError";
 import type { DocumentPageOptions } from "@/db/cursorPagination";
 
 export const listInvoices = (): Promise<Invoice[]> => repo.listInvoices();
+export const listInvoicesForProject = (projectId: string): Promise<Invoice[]> =>
+  repo.listInvoicesForProject(projectId);
 export const listInvoicesPage = (options: DocumentPageOptions = {}) => repo.listInvoicesPage(options);
 export const getInvoice = (id: string) => repo.getInvoice(id);
 export const saveInvoice = (invoice: Invoice) => repo.saveInvoice(invoice);

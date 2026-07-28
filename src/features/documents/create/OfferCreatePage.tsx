@@ -20,6 +20,7 @@ export default function OfferCreatePage() {
   const returnUrl = new URLSearchParams(location.search).get("returnUrl");
   const isOnboarding = new URLSearchParams(location.search).get("onboarding") === "1";
   const onboardingClientId = new URLSearchParams(location.search).get("clientId");
+  const projectId = new URLSearchParams(location.search).get("projectId");
 
   const handleClose = (force?: boolean) => {
     const shouldSkipConfirm = force || skipConfirmRef.current;
@@ -75,6 +76,7 @@ export default function OfferCreatePage() {
       <OfferForm
         onClose={handleClose}
         onDirtyChange={setIsDirty}
+        projectId={projectId}
         onSaved={async (document) => {
           skipConfirmRef.current = true;
           refreshTokenRef.current = Date.now();

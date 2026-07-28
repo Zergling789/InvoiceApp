@@ -6,6 +6,7 @@ import { formatMoney } from "@/utils/money";
 import { AppBadge } from "@/ui/AppBadge";
 import { AppButton } from "@/ui/AppButton";
 import { AppCard } from "@/ui/AppCard";
+import { Link } from "react-router-dom";
 import { getTaxLabel } from "@/domain/rules/tax";
 
 type TimelineItem = { label: string; value: string };
@@ -137,6 +138,7 @@ export function OfferDetailView({
             </div>
           </AppCard>
 
+          {offer.projectId && <AppCard className="space-y-3 p-5"><div className="font-semibold">Projekt</div><Link className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-primary)] hover:underline" to={`/app/projects/${offer.projectId}`}>Zugehöriges Projekt öffnen</Link></AppCard>}
           <AppCard className="space-y-3 p-5">
             <div className="flex items-center gap-2 font-semibold"><UserRound size={17} /> Kunde</div>
             <div><div className="text-sm font-medium">{client?.companyName || "Unbekannter Kunde"}</div>{client?.contactPerson && <div className="mt-1 text-sm text-[var(--app-muted)]">{client.contactPerson}</div>}{client?.email && <div className="mt-1 break-all text-sm text-[var(--app-muted)]">{client.email}</div>}</div>

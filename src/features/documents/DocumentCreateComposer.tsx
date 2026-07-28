@@ -245,6 +245,11 @@ export function DocumentCreateComposer({
                   ? `Schritt für Schritt zu ${isInvoice ? "einer vollständigen Rechnung" : "einem vollständigen Angebot"}.`
                   : "Alle Angaben auf einer übersichtlichen Arbeitsfläche."}
               </p>
+              {data.projectId && (
+                <div className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                  Mit Projekt verknüpft
+                </div>
+              )}
             </div>
 
             {wizardEnabled && (

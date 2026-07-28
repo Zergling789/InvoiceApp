@@ -210,6 +210,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          organization_id: string
           address: string | null
           address_addition: string | null
           billing_address: string | null
@@ -252,6 +253,7 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          organization_id?: string
           address?: string | null
           address_addition?: string | null
           billing_address?: string | null
@@ -294,6 +296,7 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          organization_id?: string
           address?: string | null
           address_addition?: string | null
           billing_address?: string | null
@@ -390,6 +393,7 @@ export type Database = {
       }
       invoices: {
         Row: {
+          organization_id: string
           branding_snapshot: Json | null
           buyer_reference: string | null
           canceled_at: string | null
@@ -446,6 +450,7 @@ export type Database = {
           vat_rate: number
         }
         Insert: {
+          organization_id?: string
           branding_snapshot?: Json | null
           buyer_reference?: string | null
           canceled_at?: string | null
@@ -502,6 +507,7 @@ export type Database = {
           vat_rate?: number
         }
         Update: {
+          organization_id?: string
           branding_snapshot?: Json | null
           buyer_reference?: string | null
           canceled_at?: string | null
@@ -583,6 +589,7 @@ export type Database = {
       }
       notifications: {
         Row: {
+          organization_id: string
           action_url: string | null
           created_at: string
           entity_id: string | null
@@ -598,6 +605,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          organization_id?: string
           action_url?: string | null
           created_at?: string
           entity_id?: string | null
@@ -613,6 +621,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          organization_id?: string
           action_url?: string | null
           created_at?: string
           entity_id?: string | null
@@ -631,6 +640,7 @@ export type Database = {
       }
       offers: {
         Row: {
+          organization_id: string
           client_id: string
           created_at: string
           currency: string
@@ -655,6 +665,7 @@ export type Database = {
           vat_rate: number
         }
         Insert: {
+          organization_id?: string
           client_id: string
           created_at?: string
           currency?: string
@@ -679,6 +690,7 @@ export type Database = {
           vat_rate?: number
         }
         Update: {
+          organization_id?: string
           client_id?: string
           created_at?: string
           currency?: string
@@ -769,38 +781,110 @@ export type Database = {
       }
       projects: {
         Row: {
+          accepted_value: number | null
+          actual_end_date: string | null
+          address_line1: string | null
+          address_line2: string | null
+          archived_at: string | null
+          assigned_user_id: string | null
           budget_total: number | null
           budget_type: string
-          client_id: string
+          city: string | null
+          client_id: string | null
+          country: string | null
           created_at: string
+          created_by: string
+          description: string | null
+          estimated_value: number | null
           hourly_rate: number | null
           id: string
+          last_activity_at: string | null
           name: string
+          next_action_at: string | null
+          next_action_label: string | null
+          next_action_type: string | null
+          organization_id: string
+          phase: string
+          postal_code: string | null
+          priority: string
+          project_number: string | null
+          project_type: string | null
+          source: string | null
+          start_date: string | null
           status: string
+          target_end_date: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          accepted_value?: number | null
+          actual_end_date?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          archived_at?: string | null
+          assigned_user_id?: string | null
           budget_total?: number | null
           budget_type: string
-          client_id: string
+          city?: string | null
+          client_id?: string | null
+          country?: string | null
           created_at?: string
+          created_by: string
+          description?: string | null
+          estimated_value?: number | null
           hourly_rate?: number | null
           id?: string
+          last_activity_at?: string | null
           name: string
+          next_action_at?: string | null
+          next_action_label?: string | null
+          next_action_type?: string | null
+          organization_id?: string
+          phase?: string
+          postal_code?: string | null
+          priority?: string
+          project_number?: string | null
+          project_type?: string | null
+          source?: string | null
+          start_date?: string | null
           status: string
+          target_end_date?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          accepted_value?: number | null
+          actual_end_date?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          archived_at?: string | null
+          assigned_user_id?: string | null
           budget_total?: number | null
           budget_type?: string
-          client_id?: string
+          city?: string | null
+          client_id?: string | null
+          country?: string | null
           created_at?: string
+          created_by?: string
+          description?: string | null
+          estimated_value?: number | null
           hourly_rate?: number | null
           id?: string
+          last_activity_at?: string | null
           name?: string
+          next_action_at?: string | null
+          next_action_label?: string | null
+          next_action_type?: string | null
+          organization_id?: string
+          phase?: string
+          postal_code?: string | null
+          priority?: string
+          project_number?: string | null
+          project_type?: string | null
+          source?: string | null
+          start_date?: string | null
           status?: string
+          target_end_date?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -813,6 +897,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      organizations: {
+        Row: { id: string; name: string; created_by: string; created_at: string; updated_at: string }
+        Insert: { id: string; name: string; created_by: string; created_at?: string; updated_at?: string }
+        Update: { name?: string; updated_at?: string }
+        Relationships: []
+      }
+      organization_members: {
+        Row: { organization_id: string; user_id: string; role: string; created_at: string }
+        Insert: { organization_id: string; user_id: string; role?: string; created_at?: string }
+        Update: { role?: string }
+        Relationships: []
+      }
+      project_activities: {
+        Row: { id: string; organization_id: string; project_id: string; activity_type: string; title: string; description: string | null; entity_type: string | null; entity_id: string | null; metadata: Json; event_key: string | null; created_by: string | null; created_at: string }
+        Insert: { id?: string; organization_id: string; project_id: string; activity_type: string; title: string; description?: string | null; entity_type?: string | null; entity_id?: string | null; metadata?: Json; event_key?: string | null; created_by?: string | null; created_at?: string }
+        Update: { title?: string; description?: string | null; metadata?: Json }
+        Relationships: []
+      }
+      project_tasks: {
+        Row: { id: string; organization_id: string; project_id: string | null; customer_id: string | null; title: string; description: string | null; status: string; priority: string; due_at: string | null; assigned_user_id: string | null; completed_at: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; organization_id: string; project_id?: string | null; customer_id?: string | null; title: string; description?: string | null; status?: string; priority?: string; due_at?: string | null; assigned_user_id?: string | null; completed_at?: string | null; created_by: string; created_at?: string; updated_at?: string }
+        Update: { title?: string; description?: string | null; status?: string; priority?: string; due_at?: string | null; assigned_user_id?: string | null; completed_at?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      project_appointments: {
+        Row: { id: string; organization_id: string; project_id: string | null; customer_id: string | null; title: string; starts_at: string; ends_at: string; appointment_type: string; location: string | null; note: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; organization_id: string; project_id?: string | null; customer_id?: string | null; title: string; starts_at: string; ends_at: string; appointment_type?: string; location?: string | null; note?: string | null; created_by: string; created_at?: string; updated_at?: string }
+        Update: { title?: string; starts_at?: string; ends_at?: string; appointment_type?: string; location?: string | null; note?: string | null; updated_at?: string }
+        Relationships: []
       }
       sender_identities: {
         Row: {
@@ -1048,6 +1162,54 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_project: {
+        Args: { p_organization_id: string; p_project: Json }
+        Returns: Database["public"]["Tables"]["projects"]["Row"]
+      }
+      update_project: {
+        Args: { p_project_id: string; p_patch: Json }
+        Returns: Database["public"]["Tables"]["projects"]["Row"]
+      }
+      apply_project_transition: {
+        Args: { p_project_id: string; p_event: string; p_event_key?: string | null }
+        Returns: Database["public"]["Tables"]["projects"]["Row"]
+      }
+      create_project_task: {
+        Args: { p_project_id: string; p_task: Json }
+        Returns: Database["public"]["Tables"]["project_tasks"]["Row"]
+      }
+      update_project_task: {
+        Args: { p_task_id: string; p_patch: Json }
+        Returns: Database["public"]["Tables"]["project_tasks"]["Row"]
+      }
+      list_project_task_assignees: {
+        Args: { p_project_id: string }
+        Returns: { user_id: string; display_name: string }[]
+      }
+      create_project_appointment: {
+        Args: { p_project_id: string; p_appointment: Json }
+        Returns: Database["public"]["Tables"]["project_appointments"]["Row"]
+      }
+      update_project_appointment: {
+        Args: { p_appointment_id: string; p_patch: Json }
+        Returns: Database["public"]["Tables"]["project_appointments"]["Row"]
+      }
+      list_projects_page: {
+        Args: {
+          p_search?: string | null
+          p_phases?: string[] | null
+          p_statuses?: string[] | null
+          p_priorities?: string[] | null
+          p_customer_id?: string | null
+          p_assigned_user_id?: string | null
+          p_needs_attention?: boolean | null
+          p_include_archived?: boolean
+          p_sort?: string
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: Database["public"]["Tables"]["projects"]["Row"][]
+      }
       create_notification: {
         Args: {
           p_action_url?: string | null
