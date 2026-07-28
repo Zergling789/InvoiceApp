@@ -5,6 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import ProjectWorkspacePage from "./ProjectWorkspacePage";
 
+vi.mock("@/app/email/documentDeliveryService", () => ({
+  listProjectDeliveries: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("./ProjectDetailPage", () => ({
   default: () => <div>Projektdetails</div>,
 }));
